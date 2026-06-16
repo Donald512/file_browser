@@ -1,0 +1,20 @@
+# Ignore compiler output directories
+build/
+fileLstr/
+*.obj
+*.exe
+*.pdb
+*.ilk
+
+!src/
+!include/
+!thirdparty/
+!build.bat
+!test
+
+!.gitignore
+!build.bat
+!debug.bat
+!run.bat
+!setup.bat
+!shell.bat
