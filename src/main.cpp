@@ -1,62 +1,14 @@
-#define UNICODE
-#define _UNICODE
-#include "imgui.h"
-#include <Windows.h>
-#include <string>
-#include <strsafe.h>
-#include <tchar.h>
-#include "imgui_impl_win32.h"
-#include <d3d11.h>
-#include "imgui_impl_dx11.h"
+#include "file_browser.h"
+#include "imgui_boilerplate.h"
+// #include <assert.h>
 
-#pragma comment(lib, "user32.lib")
-
-using f32 = float;
-using u16 = uint16_t;
-using u64 = uint64_t;
-using u8 = uint8_t;
-
-struct FileItem{
-    TCHAR* name;
-    bool isFolder;
-};
-namespace ui = ImGui;
-
-struct directory_list{
-    FileItem* start_of_file_items;
-    u64 num_items;
-};
+String g_currentDir;
+directory_list* g_currentDirList = nullptr;
+static float sidebar_width = 200.0f;
+PathHistory* g_path_history;
 
 
-// Data
-static ID3D11Device*            g_pd3dDevice = nullptr;
-static ID3D11DeviceContext*     g_pd3dDeviceContext = nullptr;
-static IDXGISwapChain*          g_pSwapChain = nullptr;
-static bool                     g_SwapChainOccluded = false;
-static UINT                     g_ResizeWidth = 0, g_ResizeHeight = 0;
-static ID3D11RenderTargetView*  g_mainRenderTargetView = nullptr;
 
-// Forward declarations of helper functions by imgui
-bool CreateDeviceD3D(HWND hWnd);
-void CleanupDeviceD3D();
-void CreateRenderTarget();
-void CleanupRenderTarget();
-LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
-
-//
-directory_list* ReturnFilesInDir(const TCHAR* dirName);
-void RenderFileExplorer(directory_list* dir_list);
-HWND CreateMyOSWindow();
-bool InitializeGraphicsAPI(HWND &window);
-void InitializeImGui(HWND &window);
-void ImGui_Backend_NewFrame();
-void MyGraphicsAPI_PresentFrame();
-void FreeDirectoryList(directory_list* dir_list);
-void ShutdownImGui(HWND &window);
-
-ImVec4 g_clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-TCHAR g_currentDir[MAX_PATH] = TEXT("C:");
-directory_list* g_currentDirList = ReturnFilesInDir(g_currentDir);
 
 int main(void){
     // 1. Setup phase (Runs ONCE)
@@ -68,9 +20,11 @@ int main(void){
     ::ShowWindow(window, SW_SHOWDEFAULT);
     ::UpdateWindow(window);
 
-
     InitializeImGui(window);
-    
+  
+    createString(g_currentDir, "C:");
+    g_currentDirList = ReturnFilesInDir(g_currentDir);
+  
     // 2. The Main Loop (Runs continuously at 60+ frames per second)
     bool running = true;
     while (running) {
@@ -98,7 +52,7 @@ int main(void){
         ImGui::NewFrame();
 
         // C. Call YOUR code!
-        RenderFileExplorer(g_currentDirList);
+        RenderMainInterface(g_currentDirList);
 
         // D. Hand the instructions over to your graphics card to paint pixels
         ImGui::Render();
@@ -112,35 +66,34 @@ int main(void){
 }
 
 
-directory_list* ReturnFilesInDir(const TCHAR* dirName){   // todo IM so confused onn what text encoding i currently am
+directory_list* ReturnFilesInDir(String &dirName){   // todo IM so confused onn what text encoding i currently am
 
-    _tprintf(TEXT("%s\n"), dirName);
+    printf("%s\n", dirName.str);
     directory_list* dir_list = (directory_list*) malloc(sizeof(directory_list));
     if (!dir_list){
-        _tprintf(TEXT("Malloc failed to alloc for directory_list.\n"));
+        printf("Malloc failed to alloc for directory_list.\n");
     }
 
-    WIN32_FIND_DATA ffd;
+    WIN32_FIND_DATAW ffd;
     LARGE_INTEGER filesize;
-    TCHAR szDir[MAX_PATH];
-    size_t length_of_path;
+    u64 pathLength = dirName.length + 3;
+    wchar_t* szDir = (wchar_t*) malloc(sizeof(wchar_t) * pathLength); // for /*NULL
     HANDLE hFind = INVALID_HANDLE_VALUE;
     DWORD dwError = 0;
     u64 fileCount = 0;
 
     // Check that the input path plus 3 is not longer than MAX_PATH.
     // Three characters are for the "\*" plus NULL appended below.
-
-    StringCchLength(dirName, MAX_PATH, &length_of_path);
-    if (length_of_path > MAX_PATH - 3){
-        _tprintf(TEXT("Directory path is too long: %s\n"), dirName);
+    if (dirName.length > MAX_PATH - 3){
+        printf("Directory path is too long: %s, length: %llu\n", dirName.str, dirName.length);
         assert(0);
     }
+    wchar_t* wideDirName = Utf8ToWide(dirName.str);
+    StringCchCopyW(szDir, pathLength, wideDirName);
+    StringCchCatW(szDir, pathLength, L"\\*");
+    free(wideDirName);
 
-    StringCchCopy(szDir, MAX_PATH, dirName);
-    StringCchCat(szDir, MAX_PATH, TEXT("\\*"));
-
-    hFind = FindFirstFile(szDir, &ffd);
+    hFind = FindFirstFileW(szDir, &ffd);
     if (hFind == INVALID_HANDLE_VALUE){
         dwError = GetLastError();
         printf("%lu\n", dwError);
@@ -149,8 +102,9 @@ directory_list* ReturnFilesInDir(const TCHAR* dirName){   // todo IM so confused
     
     do{
         if (ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) continue; // its a fake folder and will break the code
+        if (!wcscmp(ffd.cFileName, L".") || !wcscmp(ffd.cFileName, L"..")) continue;    // dont want to show the . and ..
         fileCount++;
-    }   while(FindNextFile(hFind, &ffd));
+    }   while(FindNextFileW(hFind, &ffd));
     
     dwError = GetLastError();
     if (dwError != ERROR_NO_MORE_FILES){
@@ -164,49 +118,135 @@ directory_list* ReturnFilesInDir(const TCHAR* dirName){   // todo IM so confused
 
     FindClose(hFind);
 
-    hFind = FindFirstFile(szDir, &ffd);
+    hFind = FindFirstFileW(szDir, &ffd);
     u64 i = 0;
     do{
         if (ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) continue; // its a fake folder and will break the code
+        if (!wcscmp(ffd.cFileName, L".") || !wcscmp(ffd.cFileName, L"..")) continue;    // dont want to show the . and ..
         FileItem currentItem;
         u64 stringLength;
-        StringCchLength(ffd.cFileName, MAX_PATH, &stringLength);
-        TCHAR* fileName = (TCHAR*)malloc(sizeof(TCHAR) * stringLength + 1 /*For \0*/);
-        StringCchCopy(fileName, stringLength + 1, ffd.cFileName);
-        currentItem.name = fileName;
+        StringCchLengthW(ffd.cFileName, MAX_PATH, &stringLength);
+        char* fileName = WideToUtf8(ffd.cFileName);
+        String* strObj = (String*)malloc(sizeof(String));
+        createString(*strObj, fileName);
+        currentItem.name = strObj;
         currentItem.isFolder = (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
         dir_list->start_of_file_items[i] = currentItem;
+        free(fileName);
         i++;
-    }   while (FindNextFile(hFind, &ffd) != 0);
-
+    }   while (FindNextFileW(hFind, &ffd) != 0);
+    
+    free(szDir);
     FindClose(hFind);
 
     return dir_list;
 }
 
-void RenderFileExplorer(directory_list* dir_list){
+// void RenderFileExplorer(directory_list* dir_list){
     
-    // 1. Setup a main window panel
-    ImGui::SetNextWindowPos(ImVec2(0, 0));  // Snap to top left
-    ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);   // fill the canvas
+//     // 1. Setup a main window panel
+//     ImGui::SetNextWindowPos(ImVec2(0, 0));  // Snap to top left
+//     ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);   // fill the canvas
 
-    ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse;
-    if (ImGui::Begin("File Explorer"), NULL, flags){  // Starts a window with this name, returns true if window is visible and rendered 
+//     ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse;
+//     if (ImGui::Begin("File Explorer"), NULL, flags){  // Starts a window with this name, returns true if window is visible and rendered 
         
-        // Top control bar ( could add back buttons, search paths here later)
-        ImGui::Text("Directory Content:");
-        ImGui::Separator(); // Draws a horizontal line 
+//         // Top control bar ( could add back buttons, search paths here later)
+//         ImGui::Text("Directory Content:");
+//         ImGui::Separator(); // Draws a horizontal line 
 
+//         // 2. Create a Scrolling region for the files
+//         ImGui::BeginChild("FileViewRegion", ImVec2(0, 0), ImGuiChildFlags_Borders, ImGuiChildFlags_NavFlattened);  
+//         // Starts a Child Window with ID "FileViewRegion", 2nd param is size of the child region - ImVec2(0, 0) means fill all available space, ImGuiChildFlags_Borders adds a visible border around the child, 
+
+//         // Define standard item size configs
+//         const f32 iconSize = 48.0f;
+//         const f32 cellWidth = iconSize + 32.0f; // Horizontal padding 
+
+//         f32 availWidth = ImGui::GetContentRegionAvail().x;    // Calculate how much width is available currently
+
+//         // Determine how many columns can fit based on width. Minimum 1 column
+//         u16 columnsCount = availWidth / cellWidth;
+//         columnsCount = columnsCount ? columnsCount: 1;  // if columnsCount is 0, make it 1
+
+//         // 3. Create a layout grid using Tables
+//         // ImGuiTableFlags_NoSavedSettings stops ImGui from remembering column settings between runs
+//         if (ImGui::BeginTable("ExplorerGrid", columnsCount, ImGuiTableFlags_NoSavedSettings)){
+//             for (size_t i = 0; i < dir_list->num_items; i++){
+//                 ImGui::TableNextColumn();
+//                 FileItem currentItem = dir_list->start_of_file_items[i];
+
+//                 // Group makes sure the item acts as a single cohesize block for interaction
+//                 ImGui::BeginGroup();
+//                 // - DRAW THE GRAPHICS ICON -
+//                 // todo Replace the text icons with actual textures (via ImTextureID) 
+//                 ImVec2 startCursorPos = ImGui::GetCursorScreenPos();
+
+//                 if (currentItem.isFolder){
+//                     // Folder Graphic placeholder: Tinted Yellow button 
+//                     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.65f, 0.2f, 1.0f));    // Background color that RGBA color 
+//                     ImGui::Button(("[F]##" + std::to_string(i)).c_str(), ImVec2(iconSize, iconSize)); 
+//                     // CLickable square button on the screen with visible text [F], everuthing after ## is hidden from the user but used by ImGui as a unique id, .c_str() converts from std::string to string literal, imvec2(iconsize, iconsize) makes it a perfect square
+//                     ImGui::PopStyleColor(); // makes the current button colorer the default style color, so other buttons dont inherit the same color
+//                 }
+//                 else{
+//                     // File Graphic placeholder: Tinted Blue/Grey Button
+//                     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.5f, 0.7f, 1.0f));
+//                     ImGui::Button(("[#]##" + std::to_string(i)).c_str(), ImVec2(iconSize, iconSize));
+//                     ImGui::PopStyleColor();
+//                 }
+
+//                 // - DRAW TEXT BELOW ICON -
+//                 // Center alignment math for text strings within the defined column grid block
+//                 f32 textWidth = ImGui::CalcTextSize(currentItem.name->str).x;  // todo convert wide to utf8
+//                 if (textWidth < cellWidth){
+//                     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (iconSize - textWidth) * 0.5f);
+//                 }
+
+//                 // Wraps text smoothly if name exceeds column size limit
+//                 ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + cellWidth);
+//                 ImGui::Text("%s", currentItem.name->str);
+//                 ImGui::PopTextWrapPos();
+
+//                 ImGui::EndGroup();
+
+//                 // - INTERATION HANDLING -
+//                 if (ImGui::IsItemHovered()){
+//                     ImGui::SetTooltip("Type: %s", currentItem.isFolder? "Folder" : "File");
+//                 }
+//                 if (ImGui::IsItemClicked(ImGuiMouseButton_Left)){
+
+//                 }
+//                 if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && (ImGui::IsItemHovered())){
+//                     if (currentItem.isFolder){
+//                         joinDirs(g_currentDir, *currentItem.name);
+//                         FreeDirectoryList(g_currentDirList);
+//                         g_currentDirList = ReturnFilesInDir(g_currentDir);
+//                         break; // ! very very important
+                        
+//                     }
+//                 }
+//             }
+//             ImGui::EndTable();
+//         }
+//         ImGui::EndChild();
+        
+//         ImGui::End();
+//     }
+// }
+
+void RenderFileGrid(directory_list* dir_list){
         // 2. Create a Scrolling region for the files
-        ImGui::BeginChild("FileViewRegion", ImVec2(0, 0), ImGuiChildFlags_Borders, ImGuiChildFlags_NavFlattened);  
-        // Starts a Child Window with ID "FileViewRegion", 2nd param is size of the child region - ImVec2(0, 0) means fill all available space, ImGuiChildFlags_Borders adds a visible border around the child, 
+    if (ImGui::BeginChild("FileViewRegion", ImVec2(0, 0), ImGuiChildFlags_Borders, ImGuiChildFlags_NavFlattened)){
 
+        // Starts a Child Window with ID "FileViewRegion", 2nd param is size of the child region - ImVec2(0, 0) means fill all available space, ImGuiChildFlags_Borders adds a visible border around the child, 
+        
         // Define standard item size configs
         const f32 iconSize = 48.0f;
         const f32 cellWidth = iconSize + 32.0f; // Horizontal padding 
-
+        
         f32 availWidth = ImGui::GetContentRegionAvail().x;    // Calculate how much width is available currently
-
+        
         // Determine how many columns can fit based on width. Minimum 1 column
         u16 columnsCount = availWidth / cellWidth;
         columnsCount = columnsCount ? columnsCount: 1;  // if columnsCount is 0, make it 1
@@ -217,13 +257,13 @@ void RenderFileExplorer(directory_list* dir_list){
             for (size_t i = 0; i < dir_list->num_items; i++){
                 ImGui::TableNextColumn();
                 FileItem currentItem = dir_list->start_of_file_items[i];
-
+                
                 // Group makes sure the item acts as a single cohesize block for interaction
                 ImGui::BeginGroup();
                 // - DRAW THE GRAPHICS ICON -
                 // todo Replace the text icons with actual textures (via ImTextureID) 
                 ImVec2 startCursorPos = ImGui::GetCursorScreenPos();
-
+                
                 if (currentItem.isFolder){
                     // Folder Graphic placeholder: Tinted Yellow button 
                     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.65f, 0.2f, 1.0f));    // Background color that RGBA color 
@@ -237,35 +277,31 @@ void RenderFileExplorer(directory_list* dir_list){
                     ImGui::Button(("[#]##" + std::to_string(i)).c_str(), ImVec2(iconSize, iconSize));
                     ImGui::PopStyleColor();
                 }
-
+                
                 // - DRAW TEXT BELOW ICON -
                 // Center alignment math for text strings within the defined column grid block
-                char Buffer[MAX_PATH];
-                WideCharToMultiByte(CP_UTF8, 0, currentItem.name, -1, Buffer, sizeof(Buffer), NULL, NULL);
-                f32 textWidth = ImGui::CalcTextSize(Buffer).x;  // todo convert wide to utf8
+                f32 textWidth = ImGui::CalcTextSize(currentItem.name->str).x;  // todo convert wide to utf8
                 if (textWidth < cellWidth){
                     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (iconSize - textWidth) * 0.5f);
                 }
-
+                
                 // Wraps text smoothly if name exceeds column size limit
                 ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + cellWidth);
-                ImGui::Text("%s", Buffer);
+                ImGui::Text("%s", currentItem.name->str);
                 ImGui::PopTextWrapPos();
-
+                
                 ImGui::EndGroup();
-
+                
                 // - INTERATION HANDLING -
                 if (ImGui::IsItemHovered()){
                     ImGui::SetTooltip("Type: %s", currentItem.isFolder? "Folder" : "File");
                 }
                 if (ImGui::IsItemClicked(ImGuiMouseButton_Left)){
-
+                    
                 }
                 if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && (ImGui::IsItemHovered())){
                     if (currentItem.isFolder){
-                        StringCchCat(g_currentDir, MAX_PATH, TEXT("\\"));
-                        StringCchCat(g_currentDir, MAX_PATH, currentItem.name);
-
+                        joinDirs(g_currentDir, *currentItem.name);
                         FreeDirectoryList(g_currentDirList);
                         g_currentDirList = ReturnFilesInDir(g_currentDir);
                         break; // ! very very important
@@ -276,206 +312,201 @@ void RenderFileExplorer(directory_list* dir_list){
             ImGui::EndTable();
         }
         ImGui::EndChild();
-        
-        ImGui::End();
     }
 }
 
 
-HWND CreateMyOSWindow(){
-    // Make process DPI aware
-    ImGui_ImplWin32_EnableDpiAwareness();
+void RenderMainInterface(directory_list* dir_list){
+    // 1. Setup Fullscreen Window
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(viewport->WorkPos);
+    ImGui::SetNextWindowSize(viewport->WorkSize);
 
-    // Obtain main monitor scale
-    f32 main_scale = ImGui_ImplWin32_GetDpiScaleForMonitor(::MonitorFromPoint(POINT{ 0, 0 }, MONITOR_DEFAULTTOPRIMARY));
-    
-    // Create application window
-    WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, TEXT("File Browser Window"), nullptr };
-    if (::RegisterClassExW(&wc) == 0){
-        printf("Register Class failed");
-        return false;
+    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | 
+                                    ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+    if (ImGui::Begin("Main UI Workspace", nullptr, window_flags)){
+        ImGui::PopStyleVar();
+        // ==========================================
+        // TABS & WINDOW CONTROLS (Top Bar)
+        // ==========================================
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.05f, 0.05f, 0.05f, 1.0f));
+        if (ImGui::BeginChild("TopBar", ImVec2(0, 40), false)){
+            ImGui::SetCursorPos(ImVec2(10, 10)); // Indent a bit
+
+            // Mockup Tabs
+            ImGui::Button("Local Disk (C:)"); ImGui::SameLine();
+            ImGui::Button(" X ");             ImGui::SameLine(); // Close tab 
+            ImGui::Button(" + "); // New tab
+
+            // Window Controls (Right Aligned)
+            float right_edge = ImGui::GetWindowWidth();
+            ImGui::SameLine(right_edge - 100); 
+            ImGui::Button("_");     ImGui::SameLine();
+            ImGui::Button("[ ]");   ImGui::SameLine();
+            ImGui::Button("X");
+        }
+        ImGui::EndChild();
+        ImGui::PopStyleColor();
+
+        // ==========================================
+        // NAVIGATION BAR (Back, Forward, Path)
+        // ==========================================
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.1f, 0.1f, 0.1f, 1.0f));
+        if (ImGui::BeginChild("NavBar", ImVec2(0, 50), true)){
+            ImGui::SetCursorPos(ImVec2(10, 10));
+            
+            // Navigation Buttons (Replace with FontAwesome icons later)
+            if (ImGui::Button("<")) { /* Back logic */ }        ImGui::SameLine();
+            if (ImGui::Button(">")) { /* Forward logic */ }     ImGui::SameLine();
+            if (ImGui::Button("^")) {
+                goToParentDir(g_currentDir);
+                g_currentDirList = ReturnFilesInDir(g_currentDir);
+            }          ImGui::SameLine();
+            if (ImGui::Button("C")) { /* Reload logic */ }      ImGui::SameLine();
+            
+            // Address Bar Placeholder
+            ImGui::SetNextItemWidth(400);
+            char path_buffer[256] = "This PC > Local Disk (C:)";
+            ImGui::InputText("##PathBar", path_buffer, sizeof(path_buffer));
+            
+            // Space for your "monitor" and extra tools on the right
+            ImGui::SameLine();
+            ImGui::Text(" |  [ Placeholder for other tools ]");
+        }
+
+        ImGui::EndChild();
+        ImGui::PopStyleColor();
     }
 
-    // DWORD dwStyle = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
-    HWND hwnd = ::CreateWindow(wc.lpszClassName, TEXT("File Browser"), WS_OVERLAPPEDWINDOW, 100, 100, (int)(1280 * main_scale), (int)(800 * main_scale), nullptr, nullptr, wc.hInstance, nullptr);
-    
-    return hwnd;
-}
+    ImGuiTableFlags table_flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV;
+    if (ImGui::BeginTable("MainSplitter", 2, table_flags)) {
+        ImGui::TableSetupColumn("Sidebar", ImGuiTableColumnFlags_WidthFixed, sidebar_width);
+        ImGui::TableSetupColumn("Content", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableNextRow();
 
-bool InitializeGraphicsAPI(HWND &window){
-    // Initialize Direct3D
-    if (!CreateDeviceD3D(window))
-    {
-        CleanupDeviceD3D();
-        // todo ::UnregisterClassW(wc.lpszClassName, wc.hInstance);
-        return false;
+        // --- LEFT COLUMN ---
+        ImGui::TableSetColumnIndex(0);
+        // ... [Your Sidebar code] ...
+
+        // --- RIGHT COLUMN ---
+        ImGui::TableSetColumnIndex(1);
+        if (ImGui::BeginChild("ContentArea", ImVec2(0, 0), false)) {
+            
+            // THE COLOR PICKER: This actually modifies the global variable!
+            ImGui::Text("UI Settings:");
+            ImGui::ColorEdit3("Background", (float*)&g_clear_color, ImGuiColorEditFlags_NoInputs);
+            ImGui::Separator();
+
+            // NOW, call the file loop inside here
+            // Note: You need to pass dir_list to this block
+            RenderFileGrid(dir_list); 
+        }
+        ImGui::EndChild();
+        ImGui::EndTable();
     }
-    return true;
+    ImGui::End();
 }
 
-void InitializeImGui(HWND &window){
-    // Setup Dear ImGui context
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO& io = ImGui::GetIO(); (void)io;
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
 
+wchar_t* Utf8ToWide(char* utf8){
+    u64 len = MultiByteToWideChar(CP_UTF8, 0, utf8, -1, NULL, 0);
 
-    // Setup Dear ImGui style
-    ImGui::StyleColorsDark();
-    //ImGui::StyleColorsLight();
+    if (!len){
+        printf("Error in MultiByteToWideChar. Error: %lu. String: %s\n", GetLastError(), utf8);
+        return nullptr;
+    }
+    // on heap 
+    wchar_t* new_string = (wchar_t*) malloc(sizeof(wchar_t) * len);
+    MultiByteToWideChar(CP_UTF8, 0, utf8, -1, new_string, len);
 
-    // Setup scaling
-    // todo f32 main_scale is repeated in CreateMyOSWindow
-    f32 main_scale = ImGui_ImplWin32_GetDpiScaleForMonitor(::MonitorFromPoint(POINT{ 0, 0 }, MONITOR_DEFAULTTOPRIMARY));
-    ImGuiStyle& style = ImGui::GetStyle();
-    style.ScaleAllSizes(main_scale);        // Bake a fixed style scale. (until we have a solution for dynamic style scaling, changing this requires resetting Style + calling this again)
-    style.FontScaleDpi = main_scale;        // Set initial font scale. (in docking branch: using io.ConfigDpiScaleFonts=true automatically overrides this for every window depending on the current monitor)
+    return new_string;
+}
 
-    // Setup Platform/Renderer backends
-    ImGui_ImplWin32_Init(window);
-    ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
+char* WideToUtf8(wchar_t* wide){
+    u64 len = WideCharToMultiByte(CP_UTF8, 0, wide, -1, NULL, 0, NULL, NULL);
+
+    if (!len){
+        printf("Error in WideCharToMultiByte. Error: %lu. String: %ls\n", GetLastError(), wide);
+        return nullptr;
+    }
+    // on heap 
+    char* new_string = (char*) malloc(sizeof(char) * len);
+    WideCharToMultiByte(CP_UTF8, 0, wide, -1, new_string, len, 0, 0);
+
+    return new_string;
+}
+
+void createString(String &string, const char* str_literal){
+    u64 len = strlen(str_literal);
+    string.capacity = 64;
+    while (len >= string.capacity){
+        string.capacity *= 2;
+    }
+    // this is going on the heap, not ro. data
+    // So it technically is an array, technically...
+    string.str = (char*)malloc(sizeof(char) * string.capacity);
+    if (string.str == nullptr){
+        printf("malloc failed for %s. capacity: %llu, length: %llu", str_literal, string.capacity, string.length);
+        free(string.str);
+        return;
+    }
+    strcpy_s(string.str, string.capacity, str_literal);
+    string.length = len;
+}
+
+void joinDirs(String &dest, String &src){
+    u64 requiredLen = dest.length + 1 + src.length ; // Total length needs to include backslash
+    bool change = requiredLen > dest.capacity;
+    if (requiredLen >= dest.capacity){
+        while (requiredLen >= dest.capacity){
+            dest.capacity *= 2;
+        }
+        char* buffer = (char*)malloc(sizeof(char) * dest.capacity); 
+        assert((buffer != nullptr) && "malloc failed in joinDirs");
+        strcpy_s(buffer, dest.capacity, dest.str);
+        free(dest.str);
+        dest.str = buffer;
+    }
+    strcat_s(dest.str, dest.capacity, "\\");
+    strcat_s(dest.str, dest.capacity, src.str);
+
+    dest.length = requiredLen;
+
 
 }
 
-void ImGui_Backend_NewFrame(){
-    // B. Tell ImGui you are starting a new frame
-    ImGui_ImplDX11_NewFrame();
-    ImGui_ImplWin32_NewFrame();
+void goToParentDir(String &currentDir){
+    u64 length = currentDir.length;
+    // printf("%c, %c\n", currentDir.str[length-1], currentDir.str[length-2]);
+    if (currentDir.str[length-1] == ':' && currentDir.length <=3){
+        printf("At root, so returning\n");
+        return;  // at a root directory
+    }
+    // i represents position of last backslash
+    i64 i;
+    for (i = (i64) currentDir.length; i >= 0 && currentDir.str[i] != '\\'; i--);
+    ZeroMemory(currentDir.str + i, currentDir.length - i);
+    currentDir.length = i;
 }
 
-void MyGraphicsAPI_PresentFrame(){
-    // Rendering
-    // 1. Calculate the raw triangle data (Step D placeholder 1)
-    ImGui::Render();
-
-    // 2. Prep your clear color (handles alpha blending math)
-    ImVec4 clear_color = g_clear_color;
-    const float clear_color_with_alpha[4] = {clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w };
-
-    // 3. Tell your GPU to target your main window view
-    g_pd3dDeviceContext->OMSetRenderTargets(1, &g_mainRenderTargetView, nullptr);
-
-    // 4. Wipe the previous frame's pixels off the screen using your clear color
-    g_pd3dDeviceContext->ClearRenderTargetView(g_mainRenderTargetView, clear_color_with_alpha);
-
-    // 5. Hand the calculated ImGui triangles over to DirectX 11 to draw them
-    ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
-
-    HRESULT hr = g_pSwapChain->Present(1, 0); // 1 = Lock to your monitor's VSync refresh rate
-    g_SwapChainOccluded = (hr == DXGI_STATUS_OCCLUDED);
-}
+// void joinDirs(String &dest, char* src){
+//    
+// }
 
 void FreeDirectoryList(directory_list* dir_list){
     if (!dir_list) return;
     // Free every string allocated
     for (u64 i = 0; i < dir_list->num_items; i++){
+        free(dir_list->start_of_file_items[i].name->str);
         free(dir_list->start_of_file_items[i].name);
     }
     free(dir_list->start_of_file_items);
     free(dir_list);
 }
 
-void ShutdownImGui(HWND &window){
-    // Cleanup
-    ImGui_ImplDX11_Shutdown();
-    ImGui_ImplWin32_Shutdown();
-    ImGui::DestroyContext();
 
-    CleanupDeviceD3D();
-    ::DestroyWindow(window);
-    // todo ::UnregisterClassW(wc.lpszClassName, wc.hInstance);
-
-
+void initHistory(){
+    
 }
-
-// ! cl main4.cpp imgui\imgui.cpp imgui\imgui_tables.cpp imgui\imgui_widgets.cpp imgui\imgui_draw.cpp
-// !backends\imgui_impl_dx11.cpp
-
-// Helper functions
-
-bool CreateDeviceD3D(HWND hWnd){
-    // Setup swap chain
-    // This is a basic setup. Optimally could use e.g. DXGI_SWAP_EFFECT_FLIP_DISCARD and handle fullscreen mode differently. See #8979 for suggestions.
-    DXGI_SWAP_CHAIN_DESC sd;
-    ZeroMemory(&sd, sizeof(sd));
-    sd.BufferCount = 2;
-    sd.BufferDesc.Width = 0;
-    sd.BufferDesc.Height = 0;
-    sd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    sd.BufferDesc.RefreshRate.Numerator = 60;
-    sd.BufferDesc.RefreshRate.Denominator = 1;
-    sd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
-    sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    sd.OutputWindow = hWnd;
-    sd.SampleDesc.Count = 1;
-    sd.SampleDesc.Quality = 0;
-    sd.Windowed = TRUE;
-    sd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
-
-    UINT createDeviceFlags = 0;
-    //createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
-    D3D_FEATURE_LEVEL featureLevel;
-    const D3D_FEATURE_LEVEL featureLevelArray[2] = { D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_0, };
-    HRESULT res = D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, createDeviceFlags, featureLevelArray, 2, D3D11_SDK_VERSION, &sd, &g_pSwapChain, &g_pd3dDevice, &featureLevel, &g_pd3dDeviceContext);
-    if (res == DXGI_ERROR_UNSUPPORTED) // Try high-performance WARP software driver if hardware is not available.
-        res = D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, createDeviceFlags, featureLevelArray, 2, D3D11_SDK_VERSION, &sd, &g_pSwapChain, &g_pd3dDevice, &featureLevel, &g_pd3dDeviceContext);
-    if (res != S_OK)
-        return false;
-
-    CreateRenderTarget();
-    return true;
-}
-
-void CleanupDeviceD3D(){
-    CleanupRenderTarget();
-    if (g_pSwapChain) { g_pSwapChain->Release(); g_pSwapChain = nullptr; }
-    if (g_pd3dDeviceContext) { g_pd3dDeviceContext->Release(); g_pd3dDeviceContext = nullptr; }
-    if (g_pd3dDevice) { g_pd3dDevice->Release(); g_pd3dDevice = nullptr; }
-}
-
-void CreateRenderTarget(){
-    ID3D11Texture2D* pBackBuffer;
-    g_pSwapChain->GetBuffer(0, IID_PPV_ARGS(&pBackBuffer));
-    g_pd3dDevice->CreateRenderTargetView(pBackBuffer, nullptr, &g_mainRenderTargetView);
-    pBackBuffer->Release();
-}
-
-void CleanupRenderTarget()
-{
-    if (g_mainRenderTargetView) { g_mainRenderTargetView->Release(); g_mainRenderTargetView = nullptr; }
-}
-
-// todo find out what the fuck this is later
-// Forward declare message handler from imgui_impl_win32.cpp
-extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
-
-// Win32 message handler
-// You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
-// - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application, or clear/overwrite your copy of the mouse data.
-// - When io.WantCaptureKeyboard is true, do not dispatch keyboard input data to your main application, or clear/overwrite your copy of the keyboard data.
-// Generally you may always pass all inputs to dear imgui, and hide them from your application based on those two flags.
-LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
-{
-    if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))
-        return true;
-
-    switch (msg)
-    {
-    case WM_SIZE:
-        if (wParam == SIZE_MINIMIZED)
-            return 0;
-        g_ResizeWidth = (UINT)LOWORD(lParam); // Queue resize
-        g_ResizeHeight = (UINT)HIWORD(lParam);
-        return 0;
-    case WM_SYSCOMMAND:
-        if ((wParam & 0xfff0) == SC_KEYMENU) // Disable ALT application menu
-            return 0;
-        break;
-    case WM_DESTROY:
-        ::PostQuitMessage(0);
-        return 0;
-    }
-    return ::DefWindowProcW(hWnd, msg, wParam, lParam);
-}
-

@@ -37,8 +37,8 @@ if not exist %build_dir%\imgui.obj (
 :: calling the linker manually
 echo [2/2] Compiling %source_file%
 :: Compile source_file and link it with the cached .obj files
-cl /nologo /Zi /I"include" /I"%imgui_root%" /I"%imgui_root%\backends" ^
-   "%source_file%" ^
+cl /nologo /Zi /W4 /I"include" /I"%imgui_root%" /I"%imgui_root%\backends" ^
+   "%source_file%" "src\imgui_boilerplate.cpp"^
    "%build_dir%\imgui.obj" ^
    "%build_dir%\imgui_widgets.obj" ^
    "%build_dir%\imgui_draw.obj" ^

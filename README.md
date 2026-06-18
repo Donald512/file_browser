@@ -4,7 +4,7 @@
 
 ## Project Motivation
 
-I decided to make a file browser for my Windows laptop that behaves like a web browser. The goal is to create, fast, tabbed, and highly customizable *.....hopefully.....*. Also seemed like a great opportunity to learn.
+I decided to make a file browser for my Windows laptop that behaves like a web browser. The goal is to create, fast, tabbed, and highly customizable *.....hopefully* . Also seemed like a great opportunity to learn.
 
 
 ## Tech Stack
