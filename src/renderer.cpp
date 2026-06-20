@@ -1,9 +1,14 @@
 #include "file_browser.h"
 #include "imgui_boilerplate.h"
-
+#include "history_helper.h"
+#include "string_helper.h"
+#include "file_backend.h"
 
 
 static float sidebar_width = 200.0f;
+extern String g_currentDir;
+extern DirectoryList g_currentDirList;
+extern PathHistory g_pathHistory;
 
 
 void RenderFileGrid(const DirectoryList* dirList){
@@ -72,8 +77,11 @@ void RenderFileGrid(const DirectoryList* dirList){
                 }
                 if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && (ImGui::IsItemHovered())){
                     if (currentItem.isFolder){
-                        AppendSubDirectory(&g_currentDir, &currentItem.name);
+                        String newPath = CloneString(g_currentDir);
+                        AppendSubDirectory(&newPath, &currentItem.name);
                         DestroyDirectoryList(&g_currentDirList);
+                        NewBranch(newPath);     // adds a copy
+                        DestroyString(&newPath);    
                         g_currentDirList = GetDirectoryContents(g_currentDir);
                         break; // ! very very important
                         
@@ -87,7 +95,7 @@ void RenderFileGrid(const DirectoryList* dirList){
 }
 
 
-void RenderMainInterface(DirectoryList* dirList){
+void RenderMainInterface(const DirectoryList* dirList){
     // 1. Setup Fullscreen Window
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);
@@ -103,20 +111,20 @@ void RenderMainInterface(DirectoryList* dirList){
         // TABS & WINDOW CONTROLS (Top Bar)
         // ==========================================
         ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.05f, 0.05f, 0.05f, 1.0f));
-        if (ImGui::BeginChild("TopBar", ImVec2(0, 40), false)){
-            ImGui::SetCursorPos(ImVec2(10, 10)); // Indent a bit
+        // if (ImGui::BeginChild("TopBar", ImVec2(0, 40), false)){
+        //     ImGui::SetCursorPos(ImVec2(10, 10)); // Indent a bit
 
-            // Mockup Tabs
-            ImGui::Button("Local Disk (C:)"); ImGui::SameLine();
-            ImGui::Button(" X ");             ImGui::SameLine(); // Close tab 
-            ImGui::Button(" + "); // New tab
+        //     // Mockup Tabs
+        //     ImGui::Button("Local Disk (C:)"); ImGui::SameLine();
+        //     ImGui::Button(" X ");             ImGui::SameLine(); // Close tab 
+        //     ImGui::Button(" + "); // New tab
 
-            // Window Controls (Right Aligned)
-            float right_edge = ImGui::GetWindowWidth();
-            ImGui::SameLine(right_edge - 100); 
-            ImGui::Button("_");     ImGui::SameLine();
-            ImGui::Button("[ ]");   ImGui::SameLine();
-            ImGui::Button("X");
+        //     // Window Controls (Right Aligned)
+        //     float right_edge = ImGui::GetWindowWidth();
+        //     ImGui::SameLine(right_edge - 100); 
+        //     ImGui::Button("_");     ImGui::SameLine();
+        //     ImGui::Button("[ ]");   ImGui::SameLine();
+        //     ImGui::Button("X");
         }
         ImGui::EndChild();
         ImGui::PopStyleColor();
@@ -129,18 +137,36 @@ void RenderMainInterface(DirectoryList* dirList){
             ImGui::SetCursorPos(ImVec2(10, 10));
             
             // Navigation Buttons (Replace with FontAwesome icons later)
-            if (ImGui::Button("<")) { /* Back logic */ }        ImGui::SameLine();
-            if (ImGui::Button(">")) { /* Forward logic */ }     ImGui::SameLine();
+            if (ImGui::Button("<")) {
+                printf("n'azu\n");
+                if (NavigateBackward()){
+                    g_currentDirList = GetDirectoryContents(g_currentDir);
+                }
+            }        ImGui::SameLine();
+            
+            if (ImGui::Button(">")) {
+                printf("n'iru\n");
+                if (NavigateForward()){
+                    g_currentDirList = GetDirectoryContents(g_currentDir);
+                } 
+            }     ImGui::SameLine();
+            
             if (ImGui::Button("^")) {
-                PopPath(&g_currentDir);
+                printf("nne na nna\n");
+
+                String parentPath = CloneString(g_currentDir);
+                PopPath(&parentPath);
+                NewBranch(parentPath);
+                DestroyString(&parentPath);
+
                 g_currentDirList = GetDirectoryContents(g_currentDir);
             }          ImGui::SameLine();
+            
             if (ImGui::Button("C")) { /* Reload logic */ }      ImGui::SameLine();
             
             // Address Bar Placeholder
             ImGui::SetNextItemWidth(400);
-            char path_buffer[256] = "This PC > Local Disk (C:)";
-            ImGui::InputText("##PathBar", path_buffer, sizeof(path_buffer));
+            ImGui::InputText("##PathBar:", g_currentDir.own_str, g_currentDir.capacity, ImGuiInputTextFlags_ReadOnly);
             
             // Space for your "monitor" and extra tools on the right
             ImGui::SameLine();
@@ -178,4 +204,72 @@ void RenderMainInterface(DirectoryList* dirList){
         ImGui::EndTable();
     }
     ImGui::End();
+}
+
+
+void RenderAddressBar(const String& path){
+    
+    //  Buffer for enough to hold the text for each string's button
+    char* subDirName = (char*) calloc(path.length, sizeof(char));
+    u64 subDirIndex = 0;
+    
+    char* currentPath = (char*) calloc(path.length, sizeof(char));
+    u64 currentPathIndex = 0;
+
+    int uniqueId = 0;   // for imgui buttons
+
+    // Push Invisble button backgrounds
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+
+
+    for (u64 i = 0; i <= path.length; i++){ // <= to capture the last \0
+        char currentChar = path.own_str[i];
+
+    
+        if (currentChar == '\\' || currentChar == '\0'){
+            if (subDirIndex > 0){   // so we dont draw an empty string
+                subDirName[subDirIndex] = '\0';
+                currentPath[currentPathIndex] = '\0';
+
+                // Draw folder button
+                char btnLabel[256];
+                snprintf(btnLabel, sizeof(btnLabel), "%s##dir_%d", subDirName, uniqueId);
+                if (ImGui::Button(btnLabel)){
+                    String targetPath = CreateString(currentPath);
+                    NewBranch(targetPath);
+                    DestroyString(&targetPath);
+
+                    g_currentDirList = GetDirectoryContents(g_currentDir);
+                    
+                    break;
+                }
+
+                ImGui::SameLine();
+
+                // Draw > sign 
+                if (currentChar == '\\'){
+                    std::string pathSeparator = " > ##" + std::to_string(uniqueId++);
+                    if (ImGui::Button(pathSeparator.c_str())){
+                        // Dropdown logic
+                    }   
+                    ImGui::SameLine();
+
+                    // Backslash for next dir
+                    currentPath[currentPathIndex] = '\\';
+                    currentPathIndex++;
+
+                    ZeroMemory(subDirName, path.length + 1);
+                    subDirIndex = 0;
+                }
+                else {
+                    subDirName[subDirIndex++] = currentChar;
+                    currentPath[currentPathIndex++] = currentChar; 
+                }
+
+            }
+            ImGui::PopStyleColor(); 
+            free(subDirName);
+            free(currentPath);
+        }
+    }
 }

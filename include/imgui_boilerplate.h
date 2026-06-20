@@ -18,7 +18,7 @@ extern UINT                     g_ResizeWidth, g_ResizeHeight;
 extern ID3D11RenderTargetView*  g_mainRenderTargetView;
 
 
-
+HWND CreateMyOSWindow();
 bool InitializeGraphicsAPI(HWND &window);
 void InitializeImGui(HWND &window);
 void ImGui_Backend_NewFrame();
