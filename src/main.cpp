@@ -17,7 +17,7 @@ int main(void){
 
     if (!InitializeGraphicsAPI(window)) return 1;
     
-    ::ShowWindow(window, SW_SHOWDEFAULT);
+    ::ShowWindow(window, SW_SHOWMAXIMIZED);
     ::UpdateWindow(window);
 
     InitializeImGui(window);
@@ -64,3 +64,8 @@ int main(void){
     printf("Exited succefully\n");
     return 0;
 }
+
+
+/*
+    Error in the beginning, with g_pathHistory 
+*/

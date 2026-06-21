@@ -43,7 +43,7 @@ bool AppendPathToHistory(const String subDir){
     g_pathHistory.count++;
 
     // Sync global active directory
-    UpdateCurrentDir();
+    // UpdateCurrentDir();
     return true;
 }
 
@@ -57,7 +57,7 @@ bool PopPathHistoryFromIndex(u64 cursorIndex){  // inclusive
     }
     g_pathHistory.currentIndex = (i64) cursorIndex - 1;
     g_pathHistory.count = cursorIndex;
-    UpdateCurrentDir();
+    // UpdateCurrentDir();
     return true;
 }
 

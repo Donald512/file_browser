@@ -3,12 +3,116 @@
 #include "history_helper.h"
 #include "string_helper.h"
 #include "file_backend.h"
+#include "renderer.h"
 
 
 static float sidebar_width = 200.0f;
 extern String g_currentDir;
 extern DirectoryList g_currentDirList;
 extern PathHistory g_pathHistory;
+
+
+
+void RenderMainInterface(const DirectoryList* dirList){
+    // 1. Setup Fullscreen Window
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(viewport->WorkPos);
+    ImGui::SetNextWindowSize(viewport->WorkSize);
+
+    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | 
+                                    ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+    if (ImGui::Begin("Main UI Workspace", nullptr, window_flags)){
+        ImGui::PopStyleVar();
+        // ==========================================
+        // TABS & WINDOW CONTROLS (Top Bar)
+        // ==========================================
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.05f, 0.05f, 0.05f, 1.0f));
+        if (ImGui::BeginChild("TopBar", ImVec2(0, 40), false)){
+            // ImGui::SetCursorPos(ImVec2(10, 10)); // Indent a bit
+            RenderAddressBar(g_currentDir);
+        }
+        ImGui::EndChild();
+        ImGui::PopStyleColor();
+
+        // ==========================================
+        // NAVIGATION BAR (Back, Forward, Path)
+        // ==========================================
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.1f, 0.1f, 0.1f, 1.0f));
+        if (ImGui::BeginChild("NavBar", ImVec2(0, 50), true)){
+            ImGui::SetCursorPos(ImVec2(10, 10));
+            
+            // Navigation Buttons (Replace with FontAwesome icons later)
+            if (ImGui::Button("<")) {
+                printf("n'azu\n");
+                if (NavigateBackward()){
+                    g_currentDirList = GetDirectoryContents(g_currentDir);
+                }
+            }        ImGui::SameLine();
+            
+            if (ImGui::Button(">")) {
+                printf("n'iru\n");
+                if (NavigateForward()){
+                    g_currentDirList = GetDirectoryContents(g_currentDir);
+                } 
+            }     ImGui::SameLine();
+            
+            if (ImGui::Button("^")) {
+                printf("nne na nna\n");
+
+                String parentPath = CloneString(g_currentDir);
+                PopPath(&parentPath);
+                NewBranch(parentPath);
+                DestroyString(&parentPath);
+
+                g_currentDirList = GetDirectoryContents(g_currentDir);
+            }          ImGui::SameLine();
+            
+            if (ImGui::Button("C")) { /* Reload logic */ }      ImGui::SameLine();
+            
+            // Address Bar Placeholder
+            ImGui::SetNextItemWidth(400);
+            ImGui::InputText("##PathBar:", g_currentDir.own_str, g_currentDir.capacity, ImGuiInputTextFlags_ReadOnly);
+            
+            // Space for your "monitor" and extra tools on the right
+            ImGui::SameLine();
+            ImGui::Text(" |  [ Placeholder for other tools ]");
+        }
+
+        ImGui::EndChild();
+        ImGui::PopStyleColor();
+    }
+
+    ImGuiTableFlags table_flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV;
+
+    if (ImGui::BeginTable("MainSplitter", 2, table_flags)) {
+        ImGui::TableSetupColumn("Sidebar", ImGuiTableColumnFlags_WidthFixed, sidebar_width);
+        ImGui::TableSetupColumn("Content", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableNextRow();
+
+        // --- LEFT COLUMN ---
+        ImGui::TableSetColumnIndex(0);
+        // ... [Your Sidebar code] ...
+
+        // --- RIGHT COLUMN ---
+        ImGui::TableSetColumnIndex(1);
+        if (ImGui::BeginChild("ContentArea", ImVec2(0, 0), false)) {
+            
+            // THE COLOR PICKER: This actually modifies the global variable!
+            ImGui::Text("UI Settings:");
+            ImGui::ColorEdit3("Background", (float*)&g_clear_color, ImGuiColorEditFlags_NoInputs);
+            ImGui::Separator();
+
+            // NOW, call the file loop inside here
+            // Note: You need to pass dirList to this block
+            RenderFileGrid(dirList); 
+        }
+        ImGui::EndChild();
+        ImGui::EndTable();
+    }
+    ImGui::End();
+}
 
 
 void RenderFileGrid(const DirectoryList* dirList){
@@ -95,181 +199,71 @@ void RenderFileGrid(const DirectoryList* dirList){
 }
 
 
-void RenderMainInterface(const DirectoryList* dirList){
-    // 1. Setup Fullscreen Window
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(viewport->WorkPos);
-    ImGui::SetNextWindowSize(viewport->WorkSize);
-
-    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | 
-                                    ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
-
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-    if (ImGui::Begin("Main UI Workspace", nullptr, window_flags)){
-        ImGui::PopStyleVar();
-        // ==========================================
-        // TABS & WINDOW CONTROLS (Top Bar)
-        // ==========================================
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.05f, 0.05f, 0.05f, 1.0f));
-        // if (ImGui::BeginChild("TopBar", ImVec2(0, 40), false)){
-        //     ImGui::SetCursorPos(ImVec2(10, 10)); // Indent a bit
-
-        //     // Mockup Tabs
-        //     ImGui::Button("Local Disk (C:)"); ImGui::SameLine();
-        //     ImGui::Button(" X ");             ImGui::SameLine(); // Close tab 
-        //     ImGui::Button(" + "); // New tab
-
-        //     // Window Controls (Right Aligned)
-        //     float right_edge = ImGui::GetWindowWidth();
-        //     ImGui::SameLine(right_edge - 100); 
-        //     ImGui::Button("_");     ImGui::SameLine();
-        //     ImGui::Button("[ ]");   ImGui::SameLine();
-        //     ImGui::Button("X");
-        }
-        ImGui::EndChild();
-        ImGui::PopStyleColor();
-
-        // ==========================================
-        // NAVIGATION BAR (Back, Forward, Path)
-        // ==========================================
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.1f, 0.1f, 0.1f, 1.0f));
-        if (ImGui::BeginChild("NavBar", ImVec2(0, 50), true)){
-            ImGui::SetCursorPos(ImVec2(10, 10));
-            
-            // Navigation Buttons (Replace with FontAwesome icons later)
-            if (ImGui::Button("<")) {
-                printf("n'azu\n");
-                if (NavigateBackward()){
-                    g_currentDirList = GetDirectoryContents(g_currentDir);
-                }
-            }        ImGui::SameLine();
-            
-            if (ImGui::Button(">")) {
-                printf("n'iru\n");
-                if (NavigateForward()){
-                    g_currentDirList = GetDirectoryContents(g_currentDir);
-                } 
-            }     ImGui::SameLine();
-            
-            if (ImGui::Button("^")) {
-                printf("nne na nna\n");
-
-                String parentPath = CloneString(g_currentDir);
-                PopPath(&parentPath);
-                NewBranch(parentPath);
-                DestroyString(&parentPath);
-
-                g_currentDirList = GetDirectoryContents(g_currentDir);
-            }          ImGui::SameLine();
-            
-            if (ImGui::Button("C")) { /* Reload logic */ }      ImGui::SameLine();
-            
-            // Address Bar Placeholder
-            ImGui::SetNextItemWidth(400);
-            ImGui::InputText("##PathBar:", g_currentDir.own_str, g_currentDir.capacity, ImGuiInputTextFlags_ReadOnly);
-            
-            // Space for your "monitor" and extra tools on the right
-            ImGui::SameLine();
-            ImGui::Text(" |  [ Placeholder for other tools ]");
-        }
-
-        ImGui::EndChild();
-        ImGui::PopStyleColor();
-    }
-
-    ImGuiTableFlags table_flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV;
-    if (ImGui::BeginTable("MainSplitter", 2, table_flags)) {
-        ImGui::TableSetupColumn("Sidebar", ImGuiTableColumnFlags_WidthFixed, sidebar_width);
-        ImGui::TableSetupColumn("Content", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableNextRow();
-
-        // --- LEFT COLUMN ---
-        ImGui::TableSetColumnIndex(0);
-        // ... [Your Sidebar code] ...
-
-        // --- RIGHT COLUMN ---
-        ImGui::TableSetColumnIndex(1);
-        if (ImGui::BeginChild("ContentArea", ImVec2(0, 0), false)) {
-            
-            // THE COLOR PICKER: This actually modifies the global variable!
-            ImGui::Text("UI Settings:");
-            ImGui::ColorEdit3("Background", (float*)&g_clear_color, ImGuiColorEditFlags_NoInputs);
-            ImGui::Separator();
-
-            // NOW, call the file loop inside here
-            // Note: You need to pass dirList to this block
-            RenderFileGrid(dirList); 
-        }
-        ImGui::EndChild();
-        ImGui::EndTable();
-    }
-    ImGui::End();
-}
-
-
 void RenderAddressBar(const String& path){
-    
-    //  Buffer for enough to hold the text for each string's button
-    char* subDirName = (char*) calloc(path.length, sizeof(char));
+    char* subDirName = (char*) calloc(sizeof(char), path.length + 1);
     u64 subDirIndex = 0;
-    
-    char* currentPath = (char*) calloc(path.length, sizeof(char));
+
+    char* currentPath = (char*) calloc(sizeof(char), path.length + 1);
     u64 currentPathIndex = 0;
 
-    int uniqueId = 0;   // for imgui buttons
+    u16 uniqueId = 0;
 
-    // Push Invisble button backgrounds
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+    for (u64 i = 0; i <= path.length; i++){
+        // if (!subDirIndex) continue;
 
+        char c = path.own_str[i];
 
-    for (u64 i = 0; i <= path.length; i++){ // <= to capture the last \0
-        char currentChar = path.own_str[i];
+        if (c == '\\' || c == '\0'){
+            subDirName[subDirIndex] = '\0';
+            currentPath[currentPathIndex] = '\0';
 
-    
-        if (currentChar == '\\' || currentChar == '\0'){
-            if (subDirIndex > 0){   // so we dont draw an empty string
-                subDirName[subDirIndex] = '\0';
-                currentPath[currentPathIndex] = '\0';
+            
+            char btnlabel[256] = {0};
+            snprintf(btnlabel, sizeof(btnlabel), "%s##dir_%d", subDirName, uniqueId);
 
-                // Draw folder button
-                char btnLabel[256];
-                snprintf(btnLabel, sizeof(btnLabel), "%s##dir_%d", subDirName, uniqueId);
-                if (ImGui::Button(btnLabel)){
-                    String targetPath = CreateString(currentPath);
-                    NewBranch(targetPath);
-                    DestroyString(&targetPath);
+            
+            if (ImGui::Button(btnlabel)){
+                
+                String targetPath = CreateString(currentPath);
+                NewBranch(targetPath);
+                DestroyString(&targetPath);
 
-                    g_currentDirList = GetDirectoryContents(g_currentDir);
-                    
-                    break;
-                }
-
-                ImGui::SameLine();
-
-                // Draw > sign 
-                if (currentChar == '\\'){
-                    std::string pathSeparator = " > ##" + std::to_string(uniqueId++);
-                    if (ImGui::Button(pathSeparator.c_str())){
-                        // Dropdown logic
-                    }   
-                    ImGui::SameLine();
-
-                    // Backslash for next dir
-                    currentPath[currentPathIndex] = '\\';
-                    currentPathIndex++;
-
-                    ZeroMemory(subDirName, path.length + 1);
-                    subDirIndex = 0;
-                }
-                else {
-                    subDirName[subDirIndex++] = currentChar;
-                    currentPath[currentPathIndex++] = currentChar; 
-                }
-
+                g_currentDirList = GetDirectoryContents(g_currentDir);
+                
+                uniqueId++;
+                break;  // so it updates the new directory
+                
             }
-            ImGui::PopStyleColor(); 
-            free(subDirName);
-            free(currentPath);
+            ImGui::SameLine();
+            
+            if (c == '\\'){
+                char pathSep[32] = {0};
+                snprintf(pathSep, sizeof(pathSep), " > ##dir_%d", uniqueId);
+                if (ImGui::Button(pathSep)){
+                    
+                }
+                ImGui::SameLine();
+                uniqueId++;
+                
+                currentPath[currentPathIndex] = '\\';
+                currentPathIndex++;
+            }
+
+
+            ZeroMemory(subDirName, subDirIndex);
+            subDirIndex = 0;
+
+
+        }
+        else{
+            subDirName[subDirIndex] = c;
+            currentPath[currentPathIndex] = c;
+
+            currentPathIndex++;
+            subDirIndex++;
         }
     }
+
+    free(subDirName);
+    free(currentPath);
 }

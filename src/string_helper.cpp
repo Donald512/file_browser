@@ -73,7 +73,11 @@ String CloneString(const String &source){
     duplicate = source;
     // duplicate.own_str points to the same string, it needs its own pointer
     duplicate.own_str = (char*)malloc(sizeof(char) * duplicate.capacity);
-    if (duplicate.own_str == nullptr){ PrntErrIsNULL; return String{};}
+    if (duplicate.own_str == nullptr){ 
+        PrntErrIsNULL; 
+        printf("%s\n",source.own_str); 
+        return String{};
+    }
 
     strcpy_s(duplicate.own_str, duplicate.capacity, source.own_str);
     
