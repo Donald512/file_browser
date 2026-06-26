@@ -1,18 +1,22 @@
+// file_browser.h
 #pragma once
 
 #include <Windows.h>
-#include <string>
+// #include <string>
 #include <strsafe.h>
 #include <tchar.h>
 #include "imgui.h"
+#include <stdint.h>
 // #include "imgui_boilerplate.h"
 
 // todo prefix variables used by Windows Wide function by tmp_
 #pragma comment(lib, "user32.lib")
 
 using f32 = float;
+using i16 = int16_t;
 using u16 = uint16_t;
 using u64 = uint64_t;
+using i32 = int32_t;
 using i64 = int64_t;
 using u8 = uint8_t;
 
@@ -57,6 +61,7 @@ extern ImVec4 g_clear_color;
 extern String g_currentDir;
 extern DirectoryList g_currentDirList;
 extern PathHistory g_pathHistory;
+extern f32 g_DpiScale;
 
 
 

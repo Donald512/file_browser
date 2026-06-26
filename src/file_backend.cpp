@@ -1,3 +1,4 @@
+// file_backend.cpp
 #include "file_backend.h"
 #include "string_helper.h"
 
@@ -14,7 +15,7 @@ DirectoryList GetDirectoryContents(const String directoryPath){
     DirectoryList contents;
     u64 fileCount = 0;
     u64 pathSuffixLength = 3;  // for \*NULL
-    u64 searchPathLength = directoryPath.length + pathSuffixLength;
+    u64 searchPathLength;
 
 
     WIN32_FIND_DATAW ffd;
@@ -22,16 +23,21 @@ DirectoryList GetDirectoryContents(const String directoryPath){
     HANDLE hFind = INVALID_HANDLE_VALUE;
     DWORD dwError = 0;
 
-    wchar_t* wideSearchPath = Utf8ToWide(directoryPath.own_str, pathSuffixLength);
+    wchar_t* wideSearchPath = Utf8ToWide(directoryPath.own_str, pathSuffixLength, &searchPathLength);
     StringCchCatW(wideSearchPath, searchPathLength, L"\\*");
+    
     
     hFind = FindFirstFileW(wideSearchPath, &ffd);
     if (hFind == INVALID_HANDLE_VALUE){ 
         dwError = GetLastError();
         printf("%lu\n", dwError);
+        printf("Returning empty directory\n");
         free(wideSearchPath);
-        assert(0);
-    }
+
+        DirectoryList emptyContents = {0};
+        emptyContents.entries = nullptr;
+        return emptyContents;
+    }   
     
     do{
         if (ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) continue; // its a fake folder and will break the code
@@ -46,6 +52,7 @@ DirectoryList GetDirectoryContents(const String directoryPath){
         assert(0);
     }
     
+    // malloc(0) returns a valid pointer so empty folders dont trigger the nullptr check
     contents.entries = (FileItem*) malloc(sizeof(FileItem) * fileCount);
     contents.numEntries = fileCount;
     
@@ -82,6 +89,7 @@ void DestroyDirectoryList(DirectoryList* directoryContents){
         DestroyString(&directoryContents->entries[i].name); 
     }
     free(directoryContents->entries);
+    directoryContents->entries = nullptr;
     directoryContents->capacity = 0;
     directoryContents->numEntries = 0;
 }

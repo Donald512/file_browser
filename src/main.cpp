@@ -1,3 +1,5 @@
+// main.cpp
+
 #include "file_browser.h"
 #include "imgui_boilerplate.h"
 #include "string_helper.h"
@@ -9,6 +11,8 @@
 String g_currentDir;
 DirectoryList g_currentDirList;
 PathHistory g_pathHistory;
+
+
 
 int main(void){
     // 1. Setup phase (Runs ONCE)
@@ -52,7 +56,7 @@ int main(void){
         ImGui_Backend_NewFrame();
         ImGui::NewFrame();
 
-        RenderMainInterface(&g_currentDirList);
+        RenderMainInterface();
 
         ImGui::Render();
         MyGraphicsAPI_PresentFrame(); 
@@ -69,3 +73,5 @@ int main(void){
 /*
     Error in the beginning, with g_pathHistory 
 */
+
+

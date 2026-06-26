@@ -1,7 +1,8 @@
-#include "imgui_boilerplate.h"
-// Helper functions
+// imgui_boilerplate.cpp
 
-// Helper functions
+#include "imgui_boilerplate.h"
+#include "renderer.h"
+
 
 ///////////////////////
 // Global Definitions
@@ -13,6 +14,8 @@ UINT                    g_ResizeWidth = 0;   // Don't forget this one, it was in
 UINT                    g_ResizeHeight = 0;
 ID3D11RenderTargetView* g_mainRenderTargetView = nullptr;
 ImVec4 g_clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+HWND g_hwnd;
+f32 g_DpiScale = 1.0f;
 ///////////////////////
 
 HWND CreateMyOSWindow(){
@@ -21,6 +24,7 @@ HWND CreateMyOSWindow(){
 
     // Obtain main monitor scale
     f32 main_scale = ImGui_ImplWin32_GetDpiScaleForMonitor(::MonitorFromPoint(POINT{ 0, 0 }, MONITOR_DEFAULTTOPRIMARY));
+    g_DpiScale = main_scale;
     
     // Create application window
     // ! changed TEXT() to L""
@@ -33,9 +37,9 @@ HWND CreateMyOSWindow(){
     // ! changed TEXT() to L"" and used wide version
     // DWORD dwStyle = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
     // HWND hwnd = ::CreateWindowW(wc.lpszClassName, L"File Browser", WS_OVERLAPPEDWINDOW, 100, 100, (int)(1280 * main_scale), (int)(800 * main_scale), nullptr, nullptr, wc.hInstance, nullptr);
-    HWND hwnd = ::CreateWindowW(wc.lpszClassName, L"File Browser", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,CW_USEDEFAULT ,CW_USEDEFAULT,   nullptr, nullptr, wc.hInstance, nullptr);
+    g_hwnd = ::CreateWindowW(wc.lpszClassName, L"File Browser", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,CW_USEDEFAULT ,CW_USEDEFAULT,   nullptr, nullptr, wc.hInstance, nullptr);
     
-    return hwnd;
+    return g_hwnd;
 }
 
 bool InitializeGraphicsAPI(HWND &window){
@@ -56,14 +60,12 @@ void InitializeImGui(HWND &window){
     ImGuiIO& io = ImGui::GetIO(); (void)io;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
 
-
-    // Setup Dear ImGui style
-    ImGui::StyleColorsDark();
-    //ImGui::StyleColorsLight();
-
+    
     // Setup scaling
     // todo f32 main_scale is repeated in CreateMyOSWindow
     f32 main_scale = ImGui_ImplWin32_GetDpiScaleForMonitor(::MonitorFromPoint(POINT{ 0, 0 }, MONITOR_DEFAULTTOPRIMARY));
+    g_DpiScale = main_scale;
+
     ImGuiStyle& style = ImGui::GetStyle();
     style.ScaleAllSizes(main_scale);        // Bake a fixed style scale. (until we have a solution for dynamic style scaling, changing this requires resetting Style + calling this again)
     style.FontScaleDpi = main_scale;        // Set initial font scale. (in docking branch: using io.ConfigDpiScaleFonts=true automatically overrides this for every window depending on the current monitor)
@@ -72,6 +74,7 @@ void InitializeImGui(HWND &window){
     ImGui_ImplWin32_Init(window);
     ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
 
+    ApplyWindows11DarkTheme();
 }
 
 void ImGui_Backend_NewFrame(){
@@ -188,8 +191,57 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))
         return true;
 
-    switch (msg)
-    {
+    switch (msg){
+    case WM_NCCALCSIZE :{
+        if (wParam == TRUE){
+            return 0;   // the title bar is 0 
+        }
+    } break;
+    case WM_NCHITTEST :{
+
+        // 1. Get the screen mouse positions from lParam
+        POINT pt = {LOWORD(lParam), HIWORD(lParam)}; // LOWORD lparam is mouse x and HIWORD lparam is mouse y
+        ::ScreenToClient(hWnd, &pt);
+
+        // window dimensions
+        RECT rect;
+        ::GetClientRect(hWnd, &rect);
+
+        
+        f32 topBarHeight = 40.0f * g_DpiScale;
+        LONG borderThickness = (LONG) ( 8.0 * g_DpiScale);
+        
+        RECT innerRect = {borderThickness, borderThickness, rect.right - borderThickness, rect.bottom - borderThickness};
+
+        // only resize if not maximized
+        if (!::IsZoomed(hWnd)){
+            // must check diagonals first
+            if (pt.x < innerRect.left && pt.y < innerRect.top) return HTTOPLEFT;
+            else if (pt.x >= innerRect.right && pt.y < innerRect.top) return HTTOPRIGHT;
+            else if (pt.x < innerRect.left && pt.y >= innerRect.bottom) return HTBOTTOMLEFT;
+            else if (pt.x >= innerRect.right && pt.y >= innerRect.bottom) return HTBOTTOMRIGHT;
+    
+            // check straight edges
+            else if (pt.x < innerRect.left) return HTLEFT;
+            else if (pt.y < innerRect.top) return HTTOP;
+            else if (pt.x >= innerRect.right) return HTRIGHT;
+            else if (pt.y >= innerRect.bottom) return HTBOTTOM;
+        }
+        
+        if (pt.y < topBarHeight){
+
+            f32 windowWidth = (f32)(rect.right - rect.left);
+            f32 controlClusterWidth = (145.0f - 8.0f) * g_DpiScale;
+            f32 buttonStartX = windowWidth - controlClusterWidth;
+
+            if (pt.x >= buttonStartX){
+                return HTCLIENT;
+            }
+            // else tell windows this is the title bar
+            return HTCAPTION;
+        }
+        
+    } break;
     case WM_SIZE:
         if (wParam == SIZE_MINIMIZED)
             return 0;

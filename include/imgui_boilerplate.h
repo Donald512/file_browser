@@ -1,3 +1,5 @@
+// imgui_boilerplate.h
+
 #pragma once
 
 #include <Windows.h>
@@ -16,6 +18,8 @@ extern IDXGISwapChain*          g_pSwapChain;
 extern bool                     g_SwapChainOccluded;
 extern UINT                     g_ResizeWidth, g_ResizeHeight;
 extern ID3D11RenderTargetView*  g_mainRenderTargetView;
+extern HWND                     g_hwnd;
+extern bool                     g_NeedsFontRebuild;
 
 
 HWND CreateMyOSWindow();

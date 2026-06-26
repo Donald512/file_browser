@@ -1,2 +1,2 @@
 @echo off
-devenv build\main.exe
+devenv /DebugExe build\main.exe
