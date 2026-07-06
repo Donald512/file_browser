@@ -1,7 +1,9 @@
-// imgui_boilerplate.cpp
+// imgu i_boilerplate.cpp
+
 
 #include "imgui_boilerplate.h"
 #include "renderer.h"
+#include <windowsx.h>
 
 
 ///////////////////////
@@ -16,15 +18,14 @@ ID3D11RenderTargetView* g_mainRenderTargetView = nullptr;
 ImVec4 g_clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 HWND g_hwnd;
 f32 g_DpiScale = 1.0f;
+ImFont* g_MainFont = nullptr;
+ImFont* g_IconFont = nullptr;
 ///////////////////////
 
 HWND CreateMyOSWindow(){
     // Make process DPI aware
     ImGui_ImplWin32_EnableDpiAwareness();
 
-    // Obtain main monitor scale
-    f32 main_scale = ImGui_ImplWin32_GetDpiScaleForMonitor(::MonitorFromPoint(POINT{ 0, 0 }, MONITOR_DEFAULTTOPRIMARY));
-    g_DpiScale = main_scale;
     
     // Create application window
     // ! changed TEXT() to L""
@@ -57,14 +58,43 @@ void InitializeImGui(HWND &window){
     // Setup Dear ImGui context
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
-    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-
     
     // Setup scaling
-    // todo f32 main_scale is repeated in CreateMyOSWindow
-    f32 main_scale = ImGui_ImplWin32_GetDpiScaleForMonitor(::MonitorFromPoint(POINT{ 0, 0 }, MONITOR_DEFAULTTOPRIMARY));
+    f32 main_scale = ImGui_ImplWin32_GetDpiScaleForMonitor(::MonitorFromPoint(POINT{ 0, 0 }, MONITOR_DEFAULTTONEAREST));
     g_DpiScale = main_scale;
+    
+
+    // Base font (text)
+    g_MainFont = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\segoeui.ttf", 16.0f * g_DpiScale);
+
+    // Fluent Icons (buttons)
+    ImFontConfig config;
+    config.MergeMode = true;
+    config.PixelSnapH = true;
+    config.GlyphMinAdvanceX = 16.0f * g_DpiScale; // ensure icons are at least this wide
+    
+    static const ImWchar icon_ranges[] = { (ImWchar) ICON_MIN_REG, (ImWchar) ICON_MAX_REG, 0};
+    g_IconFont = io.Fonts->AddFontFromFileTTF("thirdparty\\fontstuff\\FluentSystemIcons-Regular.ttf", 10.0f * g_DpiScale, &config, icon_ranges);
+
+    // Emoji fallback
+    ImFontConfig emoji_config;
+    emoji_config.MergeMode = true;
+    emoji_config.FontDataOwnedByAtlas = false;
+
+    static const ImWchar32 emoji_ranges[] = {
+            0x2000, 0x206F,   // General Punctuation
+            0x2600, 0x26FF,   // Misc Symbols (Sun, Moon, etc)
+            0x2700, 0x27BF,   // Dingbats
+            0x1F300, 0x1F64F, // Emojis & Pictographs
+            0x1F680, 0x1F6FF, // Transport & Map
+            0x1F900, 0x1F9FF, // Supplemental Emojis
+            0
+        };
+
+    io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\seguiemj.ttf", 16.0f * g_DpiScale, &emoji_config, emoji_ranges);
+
 
     ImGuiStyle& style = ImGui::GetStyle();
     style.ScaleAllSizes(main_scale);        // Bake a fixed style scale. (until we have a solution for dynamic style scaling, changing this requires resetting Style + calling this again)
@@ -75,6 +105,46 @@ void InitializeImGui(HWND &window){
     ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
 
     ApplyWindows11DarkTheme();
+}
+
+void RebuildFontAtlas(){
+    ImGuiIO& io = ImGui::GetIO();
+    io.Fonts->Clear();
+
+    // Base font (text)
+    g_MainFont = io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\segoeui.ttf", 16.0f * g_DpiScale);
+
+    // Fluent Icons (buttons)
+    ImFontConfig config;
+    config.MergeMode = true;
+    config.PixelSnapH = true;
+    config.GlyphMinAdvanceX = 16.0f * g_DpiScale; // ensure icons are at least this wide
+    
+    static const ImWchar icon_ranges[] = { (ImWchar) ICON_MIN_REG, (ImWchar) ICON_MAX_REG, 0};
+    g_IconFont = io.Fonts->AddFontFromFileTTF("thirdparty\\fontstuff\\FluentSystemIcons-Regular.ttf", 12.0f * g_DpiScale, &config, icon_ranges);
+
+    // Emoji fallback
+    ImFontConfig emoji_config;
+    emoji_config.MergeMode = true;
+    emoji_config.FontDataOwnedByAtlas = false;
+
+    static const ImWchar32 emoji_ranges[] = {
+            0x2000, 0x206F,   // General Punctuation
+            0x2600, 0x26FF,   // Misc Symbols (Sun, Moon, etc)
+            0x2700, 0x27BF,   // Dingbats
+            0x1F300, 0x1F64F, // Emojis & Pictographs
+            0x1F680, 0x1F6FF, // Transport & Map
+            0x1F900, 0x1F9FF, // Supplemental Emojis
+            0
+        };
+
+    io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\seguiemj.ttf", 16.0f * g_DpiScale, &emoji_config, emoji_ranges);
+
+
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.ScaleAllSizes(g_DpiScale);        // Bake a fixed style scale. (until we have a solution for dynamic style scaling, changing this requires resetting Style + calling this again)
+    style.FontScaleDpi = g_DpiScale;        // Set initial font scale. (in docking branch: using io.ConfigDpiScaleFonts=true automatically overrides this for every window depending on the current monitor)
+
 }
 
 void ImGui_Backend_NewFrame(){
@@ -177,7 +247,6 @@ void CleanupRenderTarget()
     if (g_mainRenderTargetView) { g_mainRenderTargetView->Release(); g_mainRenderTargetView = nullptr; }
 }
 
-// todo find out what the fuck this is later
 // Forward declare message handler from imgui_impl_win32.cpp
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
@@ -192,15 +261,60 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         return true;
 
     switch (msg){
+    case WM_NCLBUTTONDOWN:{ // when user presses one of the caption buton regions, windows generates a WM_NCLBUTTONDOWN message, this is handle to prevent the retro white box from rendering
+        switch(wParam){
+        case HTMINBUTTON:{
+            ::PostMessage(hWnd, WM_SYSCOMMAND, SC_MINIMIZE, 0);
+            return 0; // tell windows i completely handled the message, so it doesnt render the accessibilty box
+        }
+        case HTMAXBUTTON:{
+            ::IsZoomed(hWnd) ? ::PostMessage(hWnd, WM_SYSCOMMAND, SC_RESTORE, 0) : ::PostMessage(hWnd, WM_SYSCOMMAND, SC_MAXIMIZE, 0);
+            return 0;
+        }
+        case HTCLOSE:{
+            ::PostMessage(hWnd, WM_SYSCOMMAND, SC_CLOSE, 0);
+            return 0;
+        }
+        break;
+        }
+    }   break;
     case WM_NCCALCSIZE :{
         if (wParam == TRUE){
-            return 0;   // the title bar is 0 
+            // lParam points to an NCCALCSIZE_PARAMS structure when wParam is TRUE
+            NCCALCSIZE_PARAMS* pParams = reinterpret_cast<NCCALCSIZE_PARAMS*>(lParam);
+
+            // If the window is maximized, clamp its drawing area to the monitor's exact work area
+            // This prevents Windows from pushing the top 8 pixels off the screen!
+            if (::IsZoomed(hWnd)) {
+                HMONITOR hMonitor = ::MonitorFromWindow(hWnd, MONITOR_DEFAULTTONEAREST);
+                MONITORINFO mi = { sizeof(mi) };
+                if (::GetMonitorInfoW(hMonitor, &mi)) {
+                    pParams->rgrc[0] = mi.rcWork; // rcWork respects the Windows Taskbar
+                }
+            }
+            return 0;   // Keep returning 0 to remove the default ugly title bar
         }
     } break;
+    case WM_DPICHANGED:{
+        UINT newDpi = HIWORD(wParam);
+        g_DpiScale = (f32) newDpi / 96.0f;
+
+        RECT* prcNewWindow = reinterpret_cast<RECT*>(lParam);
+        ::SetWindowPos(hWnd, nullptr, prcNewWindow->left, prcNewWindow->top,  prcNewWindow->right - prcNewWindow->left, prcNewWindow->bottom - prcNewWindow->top, SWP_NOZORDER | SWP_NOACTIVATE);
+        
+        //  Tell DX11 to release the old texture allocation handles on the GPU
+        ImGui_ImplDX11_InvalidateDeviceObjects();
+
+        // Re-bake fonts on the CPU
+        RebuildFontAtlas();
+
+        // Force DX11 to upload the brand-new scaled font sheet to the GPU
+        ImGui_ImplDX11_CreateDeviceObjects();
+    }   break;
     case WM_NCHITTEST :{
 
         // 1. Get the screen mouse positions from lParam
-        POINT pt = {LOWORD(lParam), HIWORD(lParam)}; // LOWORD lparam is mouse x and HIWORD lparam is mouse y
+        POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)}; // LOWORD lparam is mouse x and HIWORD lparam is mouse y
         ::ScreenToClient(hWnd, &pt);
 
         // window dimensions
@@ -208,7 +322,7 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         ::GetClientRect(hWnd, &rect);
 
         
-        f32 topBarHeight = 40.0f * g_DpiScale;
+        f32 topBarHeight = 32.0f * g_DpiScale;
         LONG borderThickness = (LONG) ( 8.0 * g_DpiScale);
         
         RECT innerRect = {borderThickness, borderThickness, rect.right - borderThickness, rect.bottom - borderThickness};
@@ -231,17 +345,31 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         if (pt.y < topBarHeight){
 
             f32 windowWidth = (f32)(rect.right - rect.left);
-            f32 controlClusterWidth = (145.0f - 8.0f) * g_DpiScale;
-            f32 buttonStartX = windowWidth - controlClusterWidth;
+            f32 clsBtnWidth = 46.0f;
+            f32 maxBtnWidth = 45.0f;
+            f32 minBtnWidth = 45.0f;
+            f32 controlClusterWidth = (clsBtnWidth + maxBtnWidth + minBtnWidth) * g_DpiScale;
+            f32 buttonStartX = windowWidth - controlClusterWidth;   // 136px total
+            
+            if (pt.x >= buttonStartX ){
+                f32 captionRelativePosition = pt.x - buttonStartX;
 
-            if (pt.x >= buttonStartX){
-                return HTCLIENT;
+                if (captionRelativePosition < minBtnWidth){
+                    return HTMINBUTTON;     // minimize
+                }
+                else if (captionRelativePosition < (minBtnWidth + maxBtnWidth)){
+                    return HTMAXBUTTON;     // maximize
+                }
+                else{
+                    return HTCLOSE;
+                }
             }
             // else tell windows this is the title bar
             return HTCAPTION;
         }
-        
+        return HTCLIENT;    // todo check is this is redundant
     } break;
+    
     case WM_SIZE:
         if (wParam == SIZE_MINIMIZED)
             return 0;
@@ -259,3 +387,12 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     return ::DefWindowProcW(hWnd, msg, wParam, lParam);
 }
 
+// TODO: Replace WaitMessage() with MsgWaitForMultipleObjects 
+// and a 1-second Linger Timer to fix text cursor blinking and UI fade animations.
+
+/*
+Background Threading: Loading a folder with 10,000 files without freezing the UI.
+Thumbnail Generation: Extracting icons and images for files efficiently.
+File Operations: Copy, Paste, Delete, and handling Windows permission errors gracefully.
+Navigation State: Handling drag-and-drop, tree-view expansion, and complex path parsing.
+*/

@@ -4,6 +4,9 @@
 
 DirectoryList GetDirectoryContents(const String directoryPath){
 
+    // todo: Implement FindFirstFileExW, with FindExInfoBasic and FIND_FIRST_EX_LARGE_FETCH
+
+
     printf("%s\n", directoryPath.own_str);
     // Check that the input path plus 3 is not longer than MAX_PATH.
     // Three characters are for the "\*" plus NULL appended below.
@@ -13,10 +16,8 @@ DirectoryList GetDirectoryContents(const String directoryPath){
     }
 
     DirectoryList contents;
-    u64 fileCount = 0;
     u64 pathSuffixLength = 3;  // for \*NULL
     u64 searchPathLength;
-
 
     WIN32_FIND_DATAW ffd;
     // LARGE_INTEGER filesize;
@@ -27,59 +28,54 @@ DirectoryList GetDirectoryContents(const String directoryPath){
     StringCchCatW(wideSearchPath, searchPathLength, L"\\*");
     
     
-    hFind = FindFirstFileW(wideSearchPath, &ffd);
-    if (hFind == INVALID_HANDLE_VALUE){ 
-        dwError = GetLastError();
-        printf("%lu\n", dwError);
-        printf("Returning empty directory\n");
-        free(wideSearchPath);
+    contents.capacity = 64;
+    contents.entries = (FileItem*) malloc(sizeof(FileItem) * contents.capacity);
+    if (contents.entries == nullptr){
+        PrntErrIsNULL;
+        DestroyDirectoryList(&contents);
+        return contents;
 
-        DirectoryList emptyContents = {0};
-        emptyContents.entries = nullptr;
-        return emptyContents;
-    }   
-    
-    do{
-        if (ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) continue; // its a fake folder and will break the code
-        if (!wcscmp(ffd.cFileName, L".") || !wcscmp(ffd.cFileName, L"..")) continue;    // dont want to show the . and ..
-        fileCount++;
-    }   while(FindNextFileW(hFind, &ffd));
-    
-    dwError = GetLastError();
-    if (dwError != ERROR_NO_MORE_FILES){
-        printf("%lu\n", dwError);
-        printf("%p\n", hFind);
-        assert(0);
     }
     
-    // malloc(0) returns a valid pointer so empty folders dont trigger the nullptr check
-    contents.entries = (FileItem*) malloc(sizeof(FileItem) * fileCount);
-    contents.numEntries = fileCount;
     
-    FindClose(hFind);
-    
-    hFind = FindFirstFileW(wideSearchPath, &ffd);
+    // hFind = FindFirstFileW(wideSearchPath, &ffd);
+    hFind = FindFirstFileExW(wideSearchPath, FindExInfoBasic, &ffd, FindExSearchNameMatch, nullptr,  FIND_FIRST_EX_LARGE_FETCH);
     u64 i = 0;
     do{
+        if (hFind == INVALID_HANDLE_VALUE) break;
         if (ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) continue; // its a fake folder and will break the code
         if (!wcscmp(ffd.cFileName, L".") || !wcscmp(ffd.cFileName, L"..")) continue;    // dont want to show the . and ..
 
+        if (i >= contents.capacity){
+            while (i >= contents.capacity){
+                contents.capacity *= 2;
+            }
+            contents.entries = (FileItem*) realloc(contents.entries, sizeof(FileItem) * contents.capacity);
+        }
         
         char* utf8Name = WideToUtf8(ffd.cFileName);
         
-        FileItem currentItem;
-        currentItem.name = CreateString(utf8Name);
-        currentItem.isFolder = (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+        contents.entries[i].name = CreateString(utf8Name);
+        contents.entries[i].isFolder = (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
         
-        contents.entries[i] = currentItem;    // copied by value
         
         free(utf8Name);
         i++;
     }   while (FindNextFileW(hFind, &ffd) != 0);
+    contents.numEntries = i;
     
     free(wideSearchPath);
-    FindClose(hFind);
     
+    if (hFind == INVALID_HANDLE_VALUE){ 
+        dwError = GetLastError();
+        printf("%lu\n", dwError);
+        printf("Returning empty directory\n");
+        
+        DestroyDirectoryList(&contents);
+        return contents;
+    }   
+    
+    FindClose(hFind);
     return contents;
 }
 

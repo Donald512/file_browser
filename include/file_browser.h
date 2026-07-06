@@ -8,7 +8,8 @@
 #include "imgui.h"
 #include <stdint.h>
 // #include "imgui_boilerplate.h"
-
+#include "iconFilled.h"
+#include "iconRegular.h"
 // todo prefix variables used by Windows Wide function by tmp_
 #pragma comment(lib, "user32.lib")
 
@@ -62,6 +63,4 @@ extern String g_currentDir;
 extern DirectoryList g_currentDirList;
 extern PathHistory g_pathHistory;
 extern f32 g_DpiScale;
-
-
 

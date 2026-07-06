@@ -1,3 +1,4 @@
+
 // renderer.cpp
 
 #include "file_browser.h"
@@ -8,13 +9,13 @@
 #include "renderer.h"
 
 
-static float sidebar_width = 200.0f;
+static float g_sidebarWidth = 200.0f;
 extern String g_currentDir;
 extern DirectoryList g_currentDirList;
 extern PathHistory g_pathHistory;
 
 const f32 BASE_BAR_HEIGHT = 42.0f;
-
+HICON g_leftBreadcrumbBarIcon = nullptr;
 
 void RenderMainSplit(const DirectoryList* dirList){
     f32 availableHeight = ImGui::GetContentRegionAvail().y; // leftover vertical space for the panels
@@ -44,34 +45,42 @@ void RenderMainInterface(){
         // ==========================================
         // TABS & WINDOW CONTROLS (Top Bar)
         // ==========================================
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.1725f, 0.1725f, 0.1725f, 1.00f));  // Push the dark color JUST for the Title Bar area
         ImGuiWindowFlags topBarFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
         if (ImGui::BeginChild("TopBar", ImVec2(0, 80.0f * g_DpiScale), ImGuiChildFlags_None, topBarFlags)){
-            
 
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.08f, 0.08f, 0.08f, 1.00f));  // Push the dark color JUST for the Title Bar area
-            if (ImGui::BeginChild("TitleBarArea", ImVec2(0, 32.0f * g_DpiScale), ImGuiChildFlags_None, topBarFlags)){  // 32 is the height of the title bar area
+            // todo, check which color below to use
+            // ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.1098f, 0.1098f, 0.1098f, 1.00f));  // Push the dark color JUST for the Title Bar area
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.1255f, 0.1255f, 0.1255f, 1.00f));  // Push the dark color JUST for the Title Bar area
+            f32 titleBarHeight = ::IsZoomed(g_hwnd) ? (32.0f * g_DpiScale) : (40.0f * g_DpiScale);
+            if (ImGui::BeginChild("TitleBarArea", ImVec2(0, titleBarHeight), ImGuiChildFlags_None, topBarFlags)){  // 32 is the height of the title bar area
                 RenderTitleBar();
             }   ImGui::EndChild();
             ImGui::PopStyleColor();
             
-            // 32 is the height of the title bar area
-            // 8 is the vertical distance/padding between the title bar and the address bar
-            ImGui::SetCursorPos(ImVec2(10 * g_DpiScale, (32.0f + 8.0f ) * g_DpiScale));   
-            RenderNavBar();
 
+            
+            ImGui::SetCursorPos(ImVec2(0, 32 * g_DpiScale ));   // the navigation is immune to title bar height change
+            f32 navBarWidth = 198 * g_DpiScale;
+            f32 navBarHeight = 48 * g_DpiScale;
+            if (ImGui::BeginChild("NavBarArea", ImVec2(navBarWidth, navBarHeight), ImGuiChildFlags_None, topBarFlags)){
+                RenderNavBar();
+            }   ImGui::EndChild();
+            
             ImGui::SetCursorPos(ImVec2(201.0f * g_DpiScale, (32.0f + 8.0f ) * g_DpiScale)); // the nav bar takes 201 width, then the rest splits between address and search bar
-
+            
             RenderAddressBar(g_currentDir);
         }
         ImGui::EndChild();
-
-
+        ImGui::PopStyleColor();
+        
+        
 
         // =================================
         // MAIN SPLIT: SIDEBAR AND FILE GRID
         // =================================
         RenderMainSplit(&g_currentDirList);
-
+        
     }
     ImGui::End();
 }
@@ -173,8 +182,10 @@ void RenderAddressBar(const String& path){
     static bool editMode = false;   
     static char pathBuffer[260] = {0};  // todo change to a larger number like 1024, or 32767 here and in GetDirectoryContents
 
+    ImGui::SetCursorPos(ImVec2(199 * g_DpiScale /*Nav bar takes up 198*g_DpiScale*/, 40 * g_DpiScale /*caption bar is 32, plus 8 padding*/ ));
     f32 barHeight = 32.0f * g_DpiScale;
     f32 barWidth = ImGui::GetContentRegionAvail().x * 0.62f;    // take up 62.5% of the leftover width
+
 
     // ImVec2 startPos = ImVec2(201.0f * g_DpiScale, (32.0f + 8.0f) * g_DpiScale) ;
     // startPos is the local coordinate inside the window, used for placing ImGui Buttons
@@ -189,12 +200,13 @@ void RenderAddressBar(const String& path){
     drawList->AddRectFilled(absolutePos, maxBounds, ImGui::GetColorU32(ImGuiCol_FrameBg), ImGui::GetStyle().FrameRounding);
     drawList->AddRect(absolutePos, maxBounds, ImGui::GetColorU32(ImGuiCol_Border));
 
-    // ===================================================================
-    // universal formula for centering an item in a container is (ContainerHeight - ItemHeight)/2
+
     if (editMode){
         // mathematically center the text input cursor
         f32 inputPaddingY = (barHeight - ImGui::GetFontSize()) * 0.5f;
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, inputPaddingY));
+
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f)); // Forces razor-sharp centered glyph alignment
+        // ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, inputPaddingY));
         ImGui::SetNextItemWidth(barWidth);
 
         // Instantly focus the text box so that the user can start typing immediately
@@ -232,7 +244,6 @@ void RenderAddressBar(const String& path){
     }
     else {
 
-        
         char subDirName[260]; 
         u64 subDirIndex = 0;
         
@@ -246,7 +257,9 @@ void RenderAddressBar(const String& path){
         
         // Center the internal buttons/folder/breadcrumbs vertically inside the container
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f * g_DpiScale);
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f * g_DpiScale, 2.0f * g_DpiScale));
+        // ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f * g_DpiScale, 2.0f * g_DpiScale));
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f)); // Forces razor-sharp centered glyph alignment
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
 
         f32 buttonHeight = ImGui::GetFrameHeight();
         f32 offsetY = (barHeight - buttonHeight) * 0.5f; // (container - item) / 2
@@ -255,7 +268,7 @@ void RenderAddressBar(const String& path){
         // group everything so ImGui Treats the breadcrumb bar as one 
         ImGui::BeginGroup();
 
-        for (u64 i = 0; i <= path.length; i++){
+        for (u64 i = 0; i <= path.length && i < sizeof(currentPath); i++){
             char c = path.own_str[i];
                 
             // when a slash or the end of the string is reached, a folder is complete 
@@ -348,6 +361,7 @@ void RenderAddressBar(const String& path){
 
         ImGui::PopStyleVar(); // clear rounding
         ImGui::PopStyleVar(); // clear padding
+        ImGui::PopStyleVar(); // clear zero outline
 
         // click detection for empty space background
         if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)){
@@ -365,7 +379,8 @@ void RenderAddressBar(const String& path){
 }
 
 
-void ApplyWindows11DarkTheme(){
+
+void ApplyWindows11DarkTheme(){ // todo why is this still here?
     ImGuiStyle& style = ImGui::GetStyle();
     ImVec4* colors = style.Colors;
 
@@ -424,38 +439,63 @@ void ApplyWindows11DarkTheme(){
 }
 
 
+
 void RenderNavBar(){
 
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f); // sharp squares
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);   // Hard-remove any outline borders
-    if (ImGui::Button("<")) {
+    f32 navBtnSize = 32.0f * g_DpiScale;
+    f32 navRowHeight = 48.0f * g_DpiScale;
+    f32 marginSpace = 16.0f * g_DpiScale;
+    f32 navSepSpace = navBtnSize + marginSpace;
+    f32 centerY = (navRowHeight - navBtnSize) * 0.5f;
+
+
+    // ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, navBtnSize * 0.5f); // 50% rounding
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding,  4.0f * g_DpiScale); 
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);   // remove any outline borders
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));   // Autocenters text inside button, but we need to center button ourselves
+    
+    f32 currentX = 8.0f;
+    ImGui::SetCursorPos(ImVec2(currentX, centerY));
+    bool disableBack = !CanNavigateBackward();
+    if (disableBack) ImGui::BeginDisabled(true);
+    if (ImGui::Button(ICON_REG_ARROW_LEFT "##nav_backward", ImVec2(navBtnSize, navBtnSize))) {
         printf("n'azu\n");
         if (NavigateBackward()){
             g_currentDirList = GetDirectoryContents(g_currentDir);
         }
     }        ImGui::SameLine();
+    if (disableBack) ImGui::EndDisabled();
     
-    if (ImGui::Button(">")) {
+    currentX += navSepSpace;
+    ImGui::SetCursorPos(ImVec2(currentX, centerY));
+    bool disableForward = !CanNavigateForward();
+    if (disableForward) ImGui::BeginDisabled(true);
+    if (ImGui::Button(ICON_REG_ARROW_RIGHT "##nav_forward", ImVec2(navBtnSize, navBtnSize))) {
         printf("n'iru\n");
         if (NavigateForward()){
             g_currentDirList = GetDirectoryContents(g_currentDir);
         } 
     }     ImGui::SameLine();
+    if (disableForward) ImGui::EndDisabled();
     
-    if (ImGui::Button("^")) {
+    currentX += navSepSpace;
+    ImGui::SetCursorPos(ImVec2(currentX, centerY));
+    if (ImGui::Button(ICON_REG_ARROW_UP "##nav_parent", ImVec2(navBtnSize, navBtnSize))) {
         printf("nne na nna\n");
-
+        
         String parentPath = CloneString(g_currentDir);
         PopPath(&parentPath);
         NewBranch(parentPath);
         DestroyString(&parentPath);
-
+        
         g_currentDirList = GetDirectoryContents(g_currentDir);
     }          ImGui::SameLine();
     
-    if (ImGui::Button("C")) { /* Reload logic */ };
+    currentX += navSepSpace;
+    ImGui::SetCursorPos(ImVec2(currentX, centerY));
+    if (ImGui::Button(ICON_REG_ARROW_CLOCKWISE "##refresh", ImVec2(navBtnSize, navBtnSize))) { /* Reload logic */ };
 
-    ImGui::PopStyleVar(2);
+    ImGui::PopStyleVar(3);
 }
 
 void RenderSideBar(f32 availableHeight){
@@ -463,7 +503,7 @@ void RenderSideBar(f32 availableHeight){
     // Push the slightly darker color specifically for the sidebar panel
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyle().Colors[ImGuiCol_ChildBg]);
 
-    if (ImGui::BeginChild("Sidebar", ImVec2(sidebar_width, availableHeight), ImGuiChildFlags_Borders)){
+    if (ImGui::BeginChild("Sidebar", ImVec2(g_sidebarWidth, availableHeight), ImGuiChildFlags_Borders)){
 
         // Authentic Windows 11 Sidebar content spacing
         ImGui::Spacing();
@@ -471,17 +511,17 @@ void RenderSideBar(f32 availableHeight){
         ImGui::Separator();
 
         // Selectable items
-        if (ImGui::Selectable("  ⭐ Favourites")) { /* Navigation logic */ }
-        if (ImGui::Selectable("  📥 Downloads"))  { /* Navigation logic */ }
-        if (ImGui::Selectable("  📄 Documents"))  { /* Navigation logic */ }
+        if (ImGui::Selectable(ICON_REG_STAR " Favourites")) { /* Navigation logic */ }
+        if (ImGui::Selectable(ICON_REG_ARROW_DOWNLOAD " Downloads"))  { /* Navigation logic */ }
+        if (ImGui::Selectable(ICON_REG_DOCUMENT " Documents"))  { /* Navigation logic */ }
 
         ImGui::Spacing();
         ImGui::Spacing();
         ImGui::TextDisabled("  This PC");
         ImGui::Separator();
 
-        if (ImGui::Selectable("  🖥️ Desktop")) { /* Navigation logic */ }
-        if (ImGui::Selectable("  💽 Local Disk (C:)")) {
+        if (ImGui::Selectable(ICON_REG_DESKTOP " Desktop")) { /* Navigation logic */ }
+        if (ImGui::Selectable(ICON_REG_DESKTOP " Local Disk (C:)")) {
             // Navigate to root C:
             String cDrive = CreateString("C:");
             NewBranch(cDrive);
@@ -497,44 +537,45 @@ void RenderSideBar(f32 availableHeight){
 void RenderTitleBar(){
     f32 windowWidth = ImGui::GetWindowWidth();
 
+    // 145 is the distance from the vertical bar to the end of the screen
+    // minimize and maximize buttons are 45 wide x 32 tall, but close button is 46 to account for the 1 px margin
+    // title bar Height is 32, but i will set the button height to 30
     f32 controlsWidth = 145 * g_DpiScale;
     f32 controlsStartX = windowWidth - controlsWidth;
     
-    f32 controlButtonWidth = 45.0f * g_DpiScale;
-    f32 controlButtonHeight = 32.0f * g_DpiScale;
-    f32 closeStartX = windowWidth - controlButtonWidth;
-    f32 maximizeStartX = windowWidth - 2 * controlButtonWidth;
-    f32 minimizeStartX = windowWidth - 3 * controlButtonWidth;
+    f32 captionButtonWidth = 45.0f * g_DpiScale;
+    f32 closeButtonWidth = 46.0f * g_DpiScale;
+    // f32 capBtnHeight = 32.0f * g_DpiScale;
+    f32 capBtnHeight = 30.0f * g_DpiScale;
+
+    f32 closeStartX = windowWidth - closeButtonWidth;
+    f32 maximizeStartX = windowWidth - (closeButtonWidth + captionButtonWidth);
+    f32 minimizeStartX = windowWidth - (closeButtonWidth + 2*captionButtonWidth);
 
 
-    ImGui::SetCursorPos(ImVec2(controlsStartX, 16.0f));
+    ImGui::SetCursorPos(ImVec2(controlsStartX, 0.0f));
     ImGui::TextDisabled("|");
         
     
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f); // sharp squares
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);   // Hard-remove any outline borders
-    
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f)); // Forces razor-sharp centered glyph alignment 
+
     ImGui::SetCursorPos(ImVec2(minimizeStartX, 0.0f));    // Should prolly be in the middle of the button
-    if(ImGui::Button(" - ##win_min", ImVec2(controlButtonWidth, controlButtonHeight))){
-        // minimize window
-        ::ShowWindow(g_hwnd, SW_MINIMIZE);
-    }
+    ImGui::Button(ICON_REG_SUBTRACT "##win_min", ImVec2(captionButtonWidth, capBtnHeight));
 
     ImGui::SetCursorPos(ImVec2(maximizeStartX, 0.0f));    // Should prolly be in the middle of the button
-    if(ImGui::Button(" [ ] ##win_max", ImVec2(controlButtonWidth, controlButtonHeight))){
-        // restore window
-        if (::IsZoomed(g_hwnd)) ::ShowWindow(g_hwnd, SW_RESTORE);
-        else ::ShowWindow(g_hwnd, SW_MAXIMIZE);
-    }
+    const char* maximizeGlyph = ::IsZoomed(g_hwnd) ? ICON_REG_SQUARE_MULTIPLE "##win_max" : ICON_REG_MAXIMIZE "##win_max";
+    ImGui::Button(maximizeGlyph, ImVec2(captionButtonWidth, capBtnHeight)); // let windows handle the logic, these buttons are just visual filler, so that we dont lose snap layouts feature
 
     // to give hover-red highlight
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.90f, 0.11f, 0.14f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.70f, 0.09f, 0.11f, 1.0f)); // Darker red on click
 
     ImGui::SetCursorPos(ImVec2(closeStartX, 0.0f));    // Should prolly be in the middle of the button
-    if(ImGui::Button("X ##win_close", ImVec2(controlButtonWidth, controlButtonHeight))){
-        ::PostQuitMessage(0);
-    }
-    ImGui::PopStyleColor(2);
-    ImGui::PopStyleVar(2);
+    ImGui::Button(ICON_REG_DISMISS "##win_close", ImVec2(captionButtonWidth, capBtnHeight));
+    
+    ImGui::PopStyleColor(2);    // for close button
+    
+    ImGui::PopStyleVar(3);  // rounding, bordersize, padding
 }

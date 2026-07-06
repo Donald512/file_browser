@@ -3,7 +3,6 @@
 #include "string_helper.h"
 
 
-
 PathHistory InitHistory(){
     PathHistory output;
 
@@ -62,9 +61,12 @@ bool PopPathHistoryFromIndex(u64 cursorIndex){  // inclusive
     return true;
 }
 
+inline bool CanNavigateBackward(){
+    return g_pathHistory.currentIndex > 0;
+}
 
 bool NavigateBackward(){
-    if (g_pathHistory.currentIndex > 0){
+    if (CanNavigateBackward()){
         g_pathHistory.currentIndex--;
     }
     else{
@@ -75,8 +77,12 @@ bool NavigateBackward(){
     return true;
 }
 
+inline bool CanNavigateForward(){
+    return g_pathHistory.currentIndex + 1 < (i64) g_pathHistory.count;
+}
+
 bool NavigateForward(){
-    if (g_pathHistory.currentIndex + 1 < (i64) g_pathHistory.count){
+    if (CanNavigateForward()){
         g_pathHistory.currentIndex++;
     }
     else{

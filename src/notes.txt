@@ -1,0 +1,517 @@
+An HWND is a 32-bit or 64-bit integer index inside a private look-up table managed by the Windows kernel, win32k.sys. Tells the OS which data block of memory belongs to something
+in HWND CreateMyOSWindow(), the block of memory is the window we create in the function
+Since its allocated by the OS, it has to be freed by calling DestroyWindow() 
+
+ImGui_ImplWin32_EnableDpiAwareness() makes system calls to set per-monitor DPI awareness
+
+WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"File Browser Window", nullptr };
+    sizeof(wc) is a version check
+    Using one Device context accross all windows of a class can introduce multithreading bugs (CS_CLASSDC) should be (CS_OWNDC)
+    WndProc is a function pointer, a 64-bit jump address that the windows kernel calls every time a mouse moves, or key is pressed
+    The "File Browser Window" is just a name used by the OS, to layout the configurations of the window. This string is hashed into a 16-bit unsigned integer, called an Atom, preventing the OS from 
+    repeatedly parsing the string every time its used
+
+A Device context is an object that describes where and how you are allowed to draw 
+
+Direct3D is Windows Graphics API for graphics, allows us to control the graphics drivers for Nvidia, AMD, Intel, without writing specific code for each, like SDL for graphics drivers 
+
+GPU Rendering works like this, 2 buffers, Front buffer and back buffer, while the monitor displays the front buffer, the GPU/CPU writes to the pBackBuffer
+The swap chain switches the front and back buffer each frame
+V-sync controls when the swap happens, it is blocking, so the loop runs as fast as the monitor's frame rate allows
+Monitors scan the front buffer from top to bottom, so if the monitor displayed half of the front buffer in frame one, and the swap chain switches them, it continues from half to down of frame 2
+    causing screen tearing 
+
+ImGui::CreateContext(); creates a state in the backend, containing font, styles, windows, etc, multiple contexts can be created, in that case, this function also returns a pointer to specify which context 
+    to make changes or refer to
+ImGuiIO& io = ImGui::GetIO();   returns the io of the currently active ImGui context 
+the io stands for input/output, like the control panel of the imgui context
+
+
+static void BuildFonts(ImFontAtlas* atlas, f32 dpiScale)
+The atlas contains a gpu texture of each character. like a bitmap of each character, but its not as prone to ugly scaling, because the gpu blends the pixels smoothly
+
+
+
+====================================================================================================================
+DirectoryList GetDirectoryContents(const String directoryPath){
+
+    // todo: Implement FindFirstFileExW, with FindExInfoBasic and FIND_FIRST_EX_LARGE_FETCH
+
+
+    printf("%s\n", directoryPath.data);
+    // Check that the input path plus 3 is not longer than MAX_PATH.
+    // Three characters are for the "\*" plus NULL appended below.
+    if (directoryPath.length > MAX_PATH - 3){
+        printf("Directory path is too long: %s, length: %llu\n", directoryPath.data, directoryPath.length);
+        assert(0);
+    }
+
+    DirectoryList contents;
+    u64 pathSuffixLength = 3;  // for \*NULL
+    u64 searchPathLength;
+
+    WIN32_FIND_DATAW ffd;
+    // LARGE_INTEGER filesize;
+    HANDLE hFind = INVALID_HANDLE_VALUE;
+    DWORD dwError = 0;
+
+    wchar_t* wideSearchPath = Utf8ToWide(directoryPath.data, pathSuffixLength, &searchPathLength);
+    StringCchCatW(wideSearchPath, searchPathLength, L"\\*");
+    
+    
+    contents.capacity = 64;
+    contents.entries = (FileItem*) malloc(sizeof(FileItem) * contents.capacity);
+    if (contents.entries == nullptr){
+        PrntErrIsNULL;
+        DestroyDirectoryList(&contents);
+        return contents;
+
+    }
+    
+    
+    // hFind = FindFirstFileW(wideSearchPath, &ffd);
+    hFind = FindFirstFileExW(wideSearchPath, FindExInfoBasic, &ffd, FindExSearchNameMatch, nullptr,  FIND_FIRST_EX_LARGE_FETCH);
+    u64 i = 0;
+    do{
+        if (hFind == INVALID_HANDLE_VALUE) break;
+        if (ffd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) continue; // its a fake folder and will break the code
+        if (!wcscmp(ffd.cFileName, L".") || !wcscmp(ffd.cFileName, L"..")) continue;    // dont want to show the . and ..
+
+        if (i >= contents.capacity){
+            while (i >= contents.capacity){
+                contents.capacity *= 2;
+            }
+            contents.entries = (FileItem*) realloc(contents.entries, sizeof(FileItem) * contents.capacity);
+        }
+        
+        char* utf8Name = WideToUtf8(ffd.cFileName);
+        
+        contents.entries[i].name = CreateString(utf8Name);
+        contents.entries[i].isFolder = (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+        contents.entries[i].backendType = BACKEND_PHYSICAL;
+        contents.entries[i].physical.fileSize = ((u64)ffd.nFileSizeHigh << 32) | ffd.nFileSizeLow ; // storage
+        contents.entries[i].physical.creationTime = ffd.ftCreationTime; 
+        contents.entries[i].physical.lastWriteTime = ffd.ftLastWriteTime; 
+        
+        
+        free(utf8Name);
+        i++;
+    }   while (FindNextFileW(hFind, &ffd) != 0);
+    contents.numEntries = i;
+    
+    free(wideSearchPath);
+    
+    if (hFind == INVALID_HANDLE_VALUE){ 
+        dwError = GetLastError();
+        printf("%lu\n", dwError);
+        printf("Returning empty directory\n");
+        
+        DestroyDirectoryList(&contents);
+        return contents;
+    }   
+    
+    FindClose(hFind);
+    return contents;
+}
+
+void DestroyDirectoryList(DirectoryList* directoryContents){
+    if (directoryContents == nullptr) {PrntErrIsNULL; return;} 
+    for (u64 i = 0; i < directoryContents->numEntries; i++){
+        DestroyString(&directoryContents->entries[i].name); 
+        if (directoryContents->entries[i].backendType == BACKEND_VIRTUAL){
+            CoTaskMemFree(directoryContents->entries[i].virtualItem.pidl);
+            directoryContents->entries[i].virtualItem.pParent->Release();
+        }
+    }
+    free(directoryContents->entries);
+    directoryContents->entries = nullptr;
+    directoryContents->capacity = 0;
+    directoryContents->numEntries = 0;
+}
+
+
+DirectoryList LoadThisPC(){
+
+
+    // Get PIDL of "This PC"
+    LPITEMIDLIST pidlThisPC = nullptr;
+    HRESULT hr = SHGetKnownFolderIDList(FOLDERID_ComputerFolder, 0, NULL, &pidlThisPC);
+
+    DirectoryList storageVolumes;
+
+    if (SUCCEEDED(hr)){
+        // Turn the ID into an IShellFolder object
+        IShellFolder* pDesktop = nullptr;
+        SHGetDesktopFolder(&pDesktop);
+
+        IShellFolder* pThisPC = nullptr;
+        pDesktop->BindToObject(pidlThisPC, NULL, IID_IShellFolder, (void**)&pThisPC);
+    
+        IEnumIDList* pEnum = nullptr;
+
+        if (SUCCEEDED(pThisPC->EnumObjects(NULL, SHCONTF_FOLDERS | SHCONTF_NONFOLDERS, &pEnum))){
+
+            LPITEMIDLIST childPidl = nullptr;
+            ULONG fetched = 0;
+            
+
+            storageVolumes.capacity = 4;
+            storageVolumes.entries = (FileItem*) malloc(sizeof(FileItem) * storageVolumes.capacity);
+            if (storageVolumes.entries == nullptr){
+                PrntErrIsNULL;
+                return storageVolumes;
+            }
+
+            // loop through every drive/item inside "This PC"
+            u64 i = 0;
+            while (pEnum->Next(1, &childPidl, &fetched) == S_OK){
+
+                if (i >= storageVolumes.capacity){
+                    while (storageVolumes.capacity <= i){
+                        storageVolumes.capacity *= 2;
+                    }
+        
+                    storageVolumes.entries = (FileItem*) realloc(storageVolumes.entries, sizeof(FileItem) * storageVolumes.capacity );
+                    if (storageVolumes.entries == nullptr){
+                        DestroyDirectoryList(&storageVolumes);
+                        return storageVolumes;
+                        PrntErrIsNULL;
+                    }
+                }
+                // Get the Display Name (e.g. "Local Disk (C:)")
+                STRRET strDispName;
+                pThisPC->GetDisplayNameOf(childPidl, SHGDN_NORMAL, &strDispName);
+
+                wchar_t displayName[MAX_PATH] = {0};
+                StrRetToBufW(&strDispName, childPidl, displayName, MAX_PATH);
+
+                char* utf8Name = WideToUtf8(displayName);
+                if (utf8Name == nullptr){
+                    PrntErrIsNULL;
+                    DestroyDirectoryList(&storageVolumes);  
+                    return storageVolumes;
+                    // should prollly use a goto
+                }
+
+                storageVolumes.entries[i].name = CreateString(utf8Name);
+                storageVolumes.entries[i].isFolder = true;
+                storageVolumes.entries[i].backendType = BACKEND_VIRTUAL;   // most likely physical? but the C drive is physical 
+                storageVolumes.entries[i].virtualItem.pidl = childPidl ;  
+                pThisPC->AddRef();
+                storageVolumes.entries[i].virtualItem.pParent = pThisPC;
+
+
+                free(utf8Name);
+                i++;
+            }
+            pEnum->Release();
+            storageVolumes.numEntries = i;
+        }
+        pThisPC->Release();
+        pDesktop->Release();
+        CoTaskMemFree(pidlThisPC);
+    }
+    return storageVolumes;
+}
+
+BreadcrumbList ExtractBreadcrumbsFromAbsolutePidl(LPCITEMIDLIST absolutePidl){
+    u64 breadcrumbItr = 0;
+    BreadcrumbList breadcrumbs = {0};
+
+    // Start with the top level Desktop folder
+    IShellFolder* pParentFolder = nullptr;
+    SHGetDesktopFolder(&pParentFolder);
+
+    LPCITEMIDLIST pCurrentHop = absolutePidl;
+
+    // Create an accumulator PIDL to track the path down the tree
+    PIDLIST_ABSOLUTE pAccumulatedPidl = nullptr;
+
+    breadcrumbs.capacity = 16; // ion know seems good enough
+    breadcrumbs.breadcrumbs = (BreadcrumbItem*) malloc(sizeof(BreadcrumbItem) * breadcrumbs.capacity);
+    if (breadcrumbs.breadcrumbs == nullptr){
+        PrntErrIsNULL;
+        DestroyBreadcrumbList(&breadcrumbs); // todo implement function
+        return breadcrumbs;
+    }
+
+    while(pCurrentHop && pCurrentHop->mkid.cb > 0){
+
+        if (breadcrumbItr >= breadcrumbs.capacity){
+            while(breadcrumbItr >= breadcrumbs.capacity){
+                breadcrumbs.capacity *= 2;
+            }
+            breadcrumbs.breadcrumbs = (BreadcrumbItem*) realloc(breadcrumbs.breadcrumbs, sizeof(BreadcrumbItem) * breadcrumbs.capacity);
+            
+            if (breadcrumbs.breadcrumbs == nullptr){
+                PrntErrIsNULL;
+                DestroyBreadcrumbList(&breadcrumbs);
+                return breadcrumbs;
+            }
+
+        }
+
+        // Isolate this single hop item
+        LPITEMIDLIST pSingleItemPidl = ILCloneFirst(pCurrentHop);
+
+        PIDLIST_ABSOLUTE pNewAccumulated = ILCombine(pAccumulatedPidl, pSingleItemPidl);
+
+        if (pAccumulatedPidl){
+            ILFree(pAccumulatedPidl);
+        }
+        pAccumulatedPidl = pNewAccumulated;
+
+
+        // Get the proper display Name;
+        STRRET strName;
+        if (SUCCEEDED(pParentFolder->GetDisplayNameOf(pSingleItemPidl, SHGDN_NORMAL, &strName))){
+            char* utf8Name = nullptr;   // will this fail for emojis?
+            if (strName.uType == STRRET_WSTR){  // what is this
+                utf8Name = WideToUtf8(strName.pOleStr);
+                CoTaskMemFree(strName.pOleStr);
+            }
+            // what are other STRRET types, whats this for
+
+            if (utf8Name != nullptr){
+                breadcrumbs.breadcrumbs[breadcrumbItr].niceName = CreateString(utf8Name);
+            }
+            free(utf8Name);
+        }
+        // where to get the absolute pidl from
+
+        ULONG attributes = SFGAO_HASSUBFOLDER;
+        pParentFolder->GetAttributesOf(1, (LPCITEMIDLIST*)&pSingleItemPidl, &attributes);
+        breadcrumbs.breadcrumbs[breadcrumbItr].hasSubFolders = (attributes & SFGAO_HASSUBFOLDER) != 0;
+        breadcrumbs.breadcrumbs[breadcrumbItr].absolutePidl = ILClone(pAccumulatedPidl);
+        
+        
+        breadcrumbItr++;
+        // ! REMEMBER TO ALLOCATE BREADcRUMB PATH
+        // todo, get the absolute pidl
+        
+        // move down the treee. update parent folder interface to point to the next item
+        IShellFolder* pNextFolder = nullptr;
+        if (SUCCEEDED(pParentFolder -> BindToObject(pSingleItemPidl, NULL, IID_IShellFolder, (void**)&pNextFolder))){
+            pParentFolder->Release();
+            pParentFolder = pNextFolder;    // this folder is now the parent of the next
+        }
+        else{
+            ILFree(pSingleItemPidl);
+            break;
+        }
+
+        ILFree(pSingleItemPidl);
+        pCurrentHop = ILGetNext(pCurrentHop); 
+
+    }
+    if (pAccumulatedPidl){
+        wchar_t wFullPath[MAX_PATH];
+        if (SHGetPathFromIDListW(pAccumulatedPidl, wFullPath)){
+            char* utf8FullPath = WideToUtf8(wFullPath);
+            breadcrumbs.fullPath = CreateString(utf8FullPath);
+            free(utf8FullPath);
+        }
+        else{
+            // It's a virtual folder! (e.g., "This PC")
+            // Fetch the top-level desktop folder again to request the virtual display name
+            IShellFolder* pDesktop = nullptr;
+            if (SUCCEEDED(SHGetDesktopFolder(&pDesktop))) {
+                STRRET strVirtualName;
+                // SHGDN_FORADDRESSBAR gives you the clean UI string ("This PC")
+                if (SUCCEEDED(pDesktop->GetDisplayNameOf(pAccumulatedPidl, SHGDN_FORADDRESSBAR, &strVirtualName))) {
+                    wchar_t* wFullVirtualPath = nullptr;
+                    if (SUCCEEDED(StrRetToStrW(&strVirtualName, pAccumulatedPidl, &wFullVirtualPath))) {
+                        char* utf8FullPath = WideToUtf8(wFullVirtualPath);
+                        breadcrumbs.fullPath = CreateString(utf8FullPath);
+                        free(utf8FullPath);
+                        CoTaskMemFree(wFullVirtualPath);
+                    }
+                }
+                pDesktop->Release();
+            }
+        }
+    }
+    if (pParentFolder){
+        pParentFolder->Release();
+    }
+    breadcrumbs.count = breadcrumbItr;
+    return breadcrumbs;
+}
+
+// todo am i cooked
+
+void DestroyBreadcrumbList(BreadcrumbList* breadcrumbPath){
+    // todo use ILFree when u understnad why, prolly never tho
+    for (u64 i = 0; i < breadcrumbPath->count; i++){
+        DestroyString(&breadcrumbPath->breadcrumbs[i].displayName);
+        CoTaskMemFree(breadcrumbPath->breadcrumbs[i].absolutePidl);
+        breadcrumbPath->breadcrumbs[i].absolutePidl = nullptr;
+    }
+    free(breadcrumbPath->breadcrumbs);
+    ZeroMemory((void*) breadcrumbPath, sizeof(BreadcrumbList));
+}
+====================================================================================================================
+
+
+
+====================================================================================================================
+
+void RenderTitleBar(){
+    f32 windowWidth = ImGui::GetWindowWidth();
+
+    // title bar Height is 32, but i will set the button height to 30
+    f32 controlsWidth = Render::captionControlsWidth * g_DpiScale;
+    f32 controlsStartX = windowWidth - controlsWidth;
+    
+    f32 captionButtonWidth = Render::captionBtnWidth * g_DpiScale;
+    f32 closeButtonWidth = Render::closeBtnWidth * g_DpiScale;
+    // f32 capBtnHeight = 32.0f * g_DpiScale;
+    f32 capBtnHeight = 30.0f * g_DpiScale;
+
+    f32 closeStartX = windowWidth - closeButtonWidth;
+    f32 maximizeStartX = windowWidth - (closeButtonWidth + captionButtonWidth);
+    f32 minimizeStartX = windowWidth - (closeButtonWidth + 2*captionButtonWidth);
+
+
+    ImGui::SetCursorPos(ImVec2(controlsStartX, 0.0f));
+    ImGui::TextDisabled("|");
+        
+    
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f); // sharp squares
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);   // Hard-remove any outline borders
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f)); // Forces razor-sharp centered glyph alignment 
+    ImGui::PushFont(g_IconFont);    // switch to 10px Icon Font
+
+    ImGui::SetCursorPos(ImVec2(minimizeStartX, 0.0f));    // Should prolly be in the middle of the button
+    ImGui::Button(ICON_REG_SUBTRACT "##win_min", ImVec2(captionButtonWidth, capBtnHeight));
+
+    ImGui::SetCursorPos(ImVec2(maximizeStartX, 0.0f));    // Should prolly be in the middle of the button
+    const char* maximizeGlyph = ::IsZoomed(g_hwnd) ? ICON_REG_SQUARE_MULTIPLE "##win_max" : ICON_REG_MAXIMIZE "##win_max";
+    ImGui::Button(maximizeGlyph, ImVec2(captionButtonWidth, capBtnHeight)); // let windows handle the logic, these buttons are just visual filler, so that we dont lose snap layouts feature
+
+    // to give hover-red highlight
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.90f, 0.11f, 0.14f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.70f, 0.09f, 0.11f, 1.0f)); // Darker red on click
+
+    ImGui::SetCursorPos(ImVec2(closeStartX, 0.0f));    // Should prolly be in the middle of the button
+    ImGui::Button(ICON_REG_DISMISS "##win_close", ImVec2(captionButtonWidth, capBtnHeight));
+    
+    ImGui::PopStyleColor(2);    // for close button
+    
+    ImGui::PopFont();
+    ImGui::PopStyleVar(3);  // rounding, bordersize, padding
+}
+
+
+void RenderFileGrid(const DirectoryList* dirList, f32 availableHeight){
+    // RIGHT COLUMN (MAIN CONTENT) ---
+    // Width 0 tells ImGui to fill the remaining horizontal screen space
+    // 2. Create a Scrolling region for the files
+    if (ImGui::BeginChild("FileViewRegion", ImVec2(0, availableHeight), ImGuiChildFlags_Borders, ImGuiChildFlags_NavFlattened)){
+
+        // Starts a Child Window with ID "FileViewRegion", 2nd param is size of the child region - ImVec2(0, 0) means fill all available space, ImGuiChildFlags_Borders adds a visible border around the child, 
+        
+        // Define standard item size configs
+        const f32 iconSize = 48.0f;
+        const f32 cellWidth = iconSize + 32.0f; // Horizontal padding 
+        
+        f32 availWidth = ImGui::GetContentRegionAvail().x;    // Calculate how much width is available currently
+        
+        // Determine how many columns can fit based on width. Minimum 1 column
+        u16 columnsCount = (u16) (availWidth / cellWidth);
+        columnsCount = columnsCount ? columnsCount: 1;  // if columnsCount is 0, make it 1
+
+        // 3. Create a layout grid using Tables
+        // ImGuiTableFlags_NoSavedSettings stops ImGui from remembering column settings between runs
+        if (ImGui::BeginTable("ExplorerGrid", columnsCount, ImGuiTableFlags_NoSavedSettings)){
+            for (size_t i = 0; i < dirList->numEntries; i++){
+                ImGui::TableNextColumn();
+                FileItem currentItem = dirList->entries[i];
+                
+                // Group makes sure the item acts as a single cohesize block for interaction
+                ImGui::BeginGroup();
+                // - DRAW THE GRAPHICS ICON -
+                // todo Replace the text icons with actual textures (via ImTextureID) 
+                ImVec2 startCursorPos = ImGui::GetCursorScreenPos();
+                
+                if (currentItem.isFolder){
+                    // Folder Graphic placeholder: Tinted Yellow button 
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.65f, 0.2f, 1.0f));    // Background color that RGBA color 
+
+                    char folderId[32];
+                    snprintf(folderId, sizeof(folderId), "[F]##%zu", i);
+                    ImGui::Button(folderId, ImVec2(iconSize, iconSize)); 
+                    // CLickable square button on the screen with visible text [F], everuthing after ## is hidden from the user but used by ImGui as a unique id, .c_str() converts from std::string to string literal, imvec2(iconsize, iconsize) makes it a perfect square
+                    ImGui::PopStyleColor(); // makes the current button colorer the default style color, so other buttons dont inherit the same color
+                }
+                else{
+                    // File Graphic placeholder: Tinted Blue/Grey Button
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.5f, 0.7f, 1.0f));
+
+                    char fileId[32];
+                    snprintf(fileId, sizeof(fileId), "[#]##%zu", i);
+                    ImGui::Button(fileId, ImVec2(iconSize, iconSize));
+                    ImGui::PopStyleColor();
+                }
+                
+                // - DRAW TEXT BELOW ICON -
+                // Center alignment math for text strings within the defined column grid block
+                f32 textWidth = ImGui::CalcTextSize(currentItem.name.data).x; 
+                if (textWidth < cellWidth){
+                    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (iconSize - textWidth) * 0.5f);
+                }
+                
+                // Wraps text smoothly if name exceeds column size limit
+                ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + cellWidth);
+                ImGui::Text("%s", currentItem.name.data);
+                ImGui::PopTextWrapPos();
+                
+                ImGui::EndGroup();
+                
+                // - INTERATION HANDLING -
+                if (ImGui::IsItemHovered()){
+                    ImGui::SetTooltip("Type: %s", currentItem.isFolder? "Folder" : "File");
+                }
+                if (ImGui::IsItemClicked(ImGuiMouseButton_Left)){
+                    
+                }
+                if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && (ImGui::IsItemHovered())){
+                    if (currentItem.isFolder){
+                        String newPath = CloneString(g_currentDir);
+                        AppendSubDirectory(&newPath, &currentItem.name);
+                        DestroyDirectoryList(&g_currentDirList);
+                        NewBranch(newPath);     // adds a copy
+                        DestroyString(&newPath);    
+                        g_currentDirList = GetDirectoryContents(g_currentDir);
+                        break; // ! very very important
+                        
+                    }
+                }
+            }
+        }
+        ImGui::EndTable();
+    }
+    ImGui::EndChild();
+}
+
+
+====================================================================================================================
+
+PathHistory InitHistory(){
+    PathHistory output;
+
+    output.capacity = 64;
+    
+    output.count = 0;
+    output.currentIndex = -1;
+    
+    output.visitedPaths = (String*) malloc(sizeof(String) * output.capacity);
+    if (output.visitedPaths == nullptr){
+        PrntErrIsNULL;
+        return PathHistory{};
+    }
+
+    return output;
+
+}
+
