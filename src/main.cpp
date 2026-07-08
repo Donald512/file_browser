@@ -1,35 +1,36 @@
 // main.cpp
 
-#include "file_browser.h"
+#include "core.h"
 #include "imgui_boilerplate.h"
-#include "string_helper.h"
-#include "history_helper.h"
-#include "file_backend.h"
-#include "renderer.h"
-
-
-String g_currentDir;
-DirectoryList g_currentDirList;
-PathHistory g_pathHistory;
-
 
 
 int main(void){
-    // 1. Setup phase (Runs ONCE)
-    HWND window = CreateMyOSWindow(); 
-    if (!window) return 1;
+    AppContext ctx{};
+    // 1. Setup phase
+    Utils::InitCOM();
+    History::Init(ctx);
+    // Get PIDL for "This PC"
+    PIDLIST_ABSOLUTE startPidl;
+    SHGetKnownFolderIDList(FOLDERID_ComputerFolder, 0, NULL, &startPidl);
 
-    if (!InitializeGraphicsAPI(window)) return 1;
+    if (Navigation::NavigateTo(ctx, startPidl)){
+        History::Append(ctx, ctx.currentFolderPidl);    // currentItem.pidl is freed in NavigateTo
+    }
     
-    ::ShowWindow(window, SW_SHOWMAXIMIZED);
-    ::UpdateWindow(window);
+    WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"File Browser Window", nullptr };
 
-    InitializeImGui(window);
+    if (!CreateMyOSWindow(ctx, wc)) return 1;
+
+    if (!InitializeGraphicsAPI(ctx, wc)) return 1;
+    
+    ::ShowWindow(ctx.hwnd, SW_SHOWMAXIMIZED);
+    ::UpdateWindow(ctx.hwnd); // irrelevant
+
+    InitializeImGui(ctx);
   
-    g_currentDir = CreateString("C:");
-    g_currentDirList = GetDirectoryContents(g_currentDir);
-    g_pathHistory = InitHistory();
-    NewBranch(g_currentDir);
+    // todo completely migrate from ImGui::Text to Direct2D + DirectWrite
+
+
 
     bool running = true;
     while (running) {
@@ -42,110 +43,49 @@ int main(void){
             if (msg.message == WM_QUIT) running = false;
         }
 
-        g_SwapChainOccluded = false;
+        ctx.swapChainOccluded = false;
 
         // Handle window resize (we don't resize directly in the WM_SIZE handler)
-        if (g_ResizeWidth != 0 && g_ResizeHeight != 0)
-        {
-            CleanupRenderTarget();
-            g_pSwapChain->ResizeBuffers(0, g_ResizeWidth, g_ResizeHeight, DXGI_FORMAT_UNKNOWN, 0);
-            g_ResizeWidth = g_ResizeHeight = 0;
-            CreateRenderTarget();
+        if (ctx.resizeWidth != 0 && ctx.resizeHeight != 0){
+            CleanupRenderTarget(ctx);
+            ctx.swapChain->ResizeBuffers(0, ctx.resizeWidth, ctx.resizeHeight, DXGI_FORMAT_UNKNOWN, 0);
+            ctx.resizeWidth = ctx.resizeHeight = 0;
+            CreateRenderTarget(ctx);
         }
 
         ImGui_Backend_NewFrame();
         ImGui::NewFrame();
 
-        RenderMainInterface();
+        UI::Render(ctx);
 
         ImGui::Render();
-        MyGraphicsAPI_PresentFrame(); 
+  
+        MyGraphicsAPI_PresentFrame(ctx); 
     }
 
     // 3. Cleanup phase (Runs ONCE when exiting)
-    DestroyDirectoryList(&g_currentDirList);
-    ShutdownImGui(window);
+    History::Destroy(ctx);
+    Backend::FreeDirectoryArray(ctx.currentDirArray);
+    Backend::FreeBreadcrumbs(ctx.currentBreadcrumbs);
+    Utils::FreePidl(ctx.popupCachePidl);
+    Backend::FreeLightShellItemArray(ctx.popupCacheList);
+
+    ::UnregisterClassW(wc.lpszClassName, wc.hInstance);
+    ShutdownImGui(ctx, wc);
     printf("Exited succefully\n");
     return 0;
 }
 
+/*  ImGuiListClipper for only previewing visible items
+    Main thread should only give 60+ frames to ImGui, never touch a pdf file, open a video, or run an expensive SHGetFileInfoW
+    UI thread pushes a job request to the crew, while other background threads handle preview
 
-/*
-    Error in the beginning, with g_pathHistory 
+    - Fast search ideas
+    Radix Tree / Prefix Tree (Trie)
+    By default, explicitly exclude directories like AppData\Local\Temp, system caches, and OS binaries from the deep search index.
+    LMDB or a flat SQLite database, and map it into memory (mmap).
+
 */
 
 
-    void Render(AppContext& ctx){
-        // Get NavBar width
-        // 3 pixel padding from left wall, 198 pixels of nav bar, address bar starts immediately
-        // 8 pixel padding between Address bar and search bar and 11 pixel padding from search bar to right wall
-        // Address bar then takes 0.706 of the remaining space (Window Width - (3 + 198 + 8 + 11))
-        // Search bar takes 0.294 of the remaining space
-        f32 windowWidth = ImGui::GetWindowWidth();
-        f32 remainingWidth = windowWidth - ((ToolBarLayout::LeftPadding + NavBar::Width + ToolBarLayout::AddressToSearchGap + ToolBarLayout::RightPadding) * ctx.dpiScale);
-        f32 addressWidth = remainingWidth * ToolBarLayout::AddressRatio;
-        
-        f32 startX = BarStartX * ctx.dpiScale;
-        f32 startY = (TopBar::Height + ((NavBar::Height - Height)/2)) * ctx.dpiScale; // center with nav bar
-        ImGui::SetCursorPos(ImVec2(startX, startY));
 
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f * ctx.dpiScale);
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.16f, 0.16f, 0.16f, 1.0f)); // FrameBg color
-
-        if (!ImGui::BeginChild("AddressBar", ImVec2(addressWidth, Height * ctx.dpiScale), ImGuiChildFlags_None, TopBar::Flags)){
-            ImGui::PopStyleColor();
-            ImGui::PopStyleVar(2);
-            ImGui::EndChild();
-            return;
-        }
-        ImGui::PopStyleColor();
-        ImGui::PopStyleVar(2);
-
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f, 4.0f));
-
-        char buffer[MAX_PATH] = {0}; 
-        for (u64 i = 0; i < ctx.currentBreadcrumbs.count; i++){
-            BreadcrumbItem& crumb = ctx.currentBreadcrumbs.breadcrumbs[i];
-
-            // Draw Folder button
-            const char* safeName = crumb.displayName.data ? crumb.displayName.data : "Unknown";
-            snprintf(buffer, sizeof(buffer), "%s##bcrumb_%lld", safeName, i);
-            if (ImGui::Button(buffer)){
-                Navigation::NavigateTo(ctx, crumb.pidl);
-            }
-            ImGui::SameLine(0.0f, 8.0f);
-
-            if (i < ctx.currentBreadcrumbs.count - 1 || (i == ctx.currentBreadcrumbs.count - 1 && ctx.currentBreadcrumbs.hasSubFolders)){
-                const char arrowSign = ImGui::IsPopupOpen(buffer) ? 'v' : '>'; // do i use real icons or nah
-                snprintf(buffer, sizeof(buffer), "%c##bcrumb_arrow_%lld", arrowSign, i);   // use a new buffer or nah
-                if (ImGui::Button(buffer)){
-                    ImGui::OpenPopup(buffer);
-                }
-
-                ImVec2 btnRect = ImGui::GetItemRectMax();
-                ImGui::SetNextWindowPos(ImVec2(btnRect.x, btnRect.y + 2.0f));
-
-                if (ImGui::BeginPopup(buffer)){
-                    // cache the directory contents so we dont fetch every frame
-                    if (ctx.popupCachePidl != crumb.pidl){
-                        Backend::FreeLightShellItemArray(ctx.popupCacheList);
-                        ctx.popupCacheList = Backend::GetDirectoryContents(ctx.currentBreadcrumbs.breadcrumbs[i].pidl);
-                        ctx.popupCachePidl = crumb.pidl;
-                    }
-
-                    for (u64 j = 0; j < ctx.popupCacheList.numEntries; j++){
-                        if (ImGui::Selectable(ctx.popupCacheList.entries[j].name.data)){
-                            Navigation::NavigateTo(ctx, ctx.popupCacheList.entries[j].pidl);
-                            ImGui::CloseCurrentPopup();
-                            break;
-                        }
-                    }
-                    ImGui::EndPopup();
-                }
-                ImGui::SameLine(0.0f, 8.0f);
-            }
-        }
-        ImGui::PopStyleVar();   // FramePadding
-        ImGui::EndChild();
-    } 

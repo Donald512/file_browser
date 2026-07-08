@@ -23,7 +23,7 @@ echo Checking Dependences in %build_dir%
 :: Compile ImGui if the object files don't exist 
 if not exist %build_dir%\imgui.obj (
     echo [1/2] Compiling ImGui core libraries...
-    cl /nologo /c /Z7 /I"include" /I"%imgui_root%" /I"%imgui_root%\backends" /I"%font_stuff%"^
+    cl /nologo /c /Z7 /std:c++17 /I"include" /I"%imgui_root%" /I"%imgui_root%\backends" /I"%font_stuff%"^
        "%imgui_root%\imgui.cpp" ^
        "%imgui_root%\imgui_widgets.cpp" ^
        "%imgui_root%\imgui_draw.cpp" ^
@@ -38,9 +38,9 @@ if not exist %build_dir%\imgui.obj (
 :: calling the linker manually
 echo [2/2] Compiling %source_file%
 :: Compile source_file and link it with the cached .obj files
-cl /nologo /Z7 /W4 /I"include" /I"%imgui_root%" /I"%imgui_root%\backends" /I"%font_stuff%"^
-   "%source_file%" "src\imgui_boilerplate.cpp" "src\string_helper.cpp"^
-   "src\file_backend.cpp" "src\history_helper.cpp" "src\renderer.cpp"^
+cl /nologo /Z7 /W4 /std:c++17 /I"include" /I"%imgui_root%" /I"%imgui_root%\backends" /I"%font_stuff%"^
+   "%source_file%" "src\imgui_boilerplate.cpp" "src\backend.cpp" "src\string.cpp"^
+   "src\renderer.cpp" "src\utils.cpp" "src\navigation.cpp" "src\history.cpp"^
    "%build_dir%\imgui.obj" ^
    "%build_dir%\imgui_widgets.obj" ^
    "%build_dir%\imgui_draw.obj" ^

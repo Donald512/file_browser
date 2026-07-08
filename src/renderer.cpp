@@ -1,581 +1,375 @@
-
 // renderer.cpp
 
-#include "file_browser.h"
-#include "imgui_boilerplate.h"
-#include "history_helper.h"
-#include "string_helper.h"
-#include "file_backend.h"
-#include "renderer.h"
+#include "core.h"
 
+namespace UI{
+    void Render(AppContext& ctx){
 
-static float g_sidebarWidth = 200.0f;
-extern String g_currentDir;
-extern DirectoryList g_currentDirList;
-extern PathHistory g_pathHistory;
+        // Make the root ImGui window fill the entire Windows window.
+        const ImGuiViewport* viewport = ImGui::GetMainViewport();   
+        ImGui::SetNextWindowPos(viewport->WorkPos);
+        ImGui::SetNextWindowSize(viewport->WorkSize);
 
-const f32 BASE_BAR_HEIGHT = 42.0f;
-HICON g_leftBreadcrumbBarIcon = nullptr;
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, Style::NoPadding);
+        if (ImGui::Begin("Main UI Workspace", nullptr, WindowFlags)){
+            ImGui::PopStyleVar();
 
-void RenderMainSplit(const DirectoryList* dirList){
-    f32 availableHeight = ImGui::GetContentRegionAvail().y; // leftover vertical space for the panels
-    // LEFT COLUMN (Sidebar) ---
-    RenderSideBar(availableHeight);
-    ImGui::SameLine();    //  This tells ImGui to put the file grid nect to the sidebar 
-    // RIGHT COLUMN (File Table) ---
-    RenderFileGrid(dirList, availableHeight);
-        
+            TopBar::Render(ctx);
+            ToolBar::Render(ctx);
+            FileView::Render(ctx);
+
+            ImGui::End();
+        }
+    }
 }
 
-
-
-void RenderMainInterface(){
-    // 1. Setup Fullscreen Window
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(viewport->WorkPos);
-    ImGui::SetNextWindowSize(viewport->WorkSize);
-
-    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | 
-                                    ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
-
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-    if (ImGui::Begin("Main UI Workspace", nullptr, window_flags)){
-        ImGui::PopStyleVar();
-        
-        // ==========================================
-        // TABS & WINDOW CONTROLS (Top Bar)
-        // ==========================================
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.1725f, 0.1725f, 0.1725f, 1.00f));  // Push the dark color JUST for the Title Bar area
-        ImGuiWindowFlags topBarFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
-        if (ImGui::BeginChild("TopBar", ImVec2(0, 80.0f * g_DpiScale), ImGuiChildFlags_None, topBarFlags)){
-
-            // todo, check which color below to use
-            // ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.1098f, 0.1098f, 0.1098f, 1.00f));  // Push the dark color JUST for the Title Bar area
-            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.1255f, 0.1255f, 0.1255f, 1.00f));  // Push the dark color JUST for the Title Bar area
-            f32 titleBarHeight = ::IsZoomed(g_hwnd) ? (32.0f * g_DpiScale) : (40.0f * g_DpiScale);
-            if (ImGui::BeginChild("TitleBarArea", ImVec2(0, titleBarHeight), ImGuiChildFlags_None, topBarFlags)){  // 32 is the height of the title bar area
-                RenderTitleBar();
-            }   ImGui::EndChild();
+namespace TopBar{
+    namespace Colors = UI::Colors;
+    namespace Style = UI::Style;
+    
+    void Render(AppContext& ctx){
+        f32 height = ::IsZoomed(ctx.hwnd) ? (Height * ctx.dpiScale) : (40.0f * ctx.dpiScale);
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, Colors::TopBarBackground);
+        if (!ImGui::BeginChild("TopBar", ImVec2(0, height), ImGuiChildFlags_None, Flags)){
             ImGui::PopStyleColor();
-            
+            ImGui::EndChild();
+            return;
+        }
+        ImGui::PopStyleColor();
 
+        f32 windowWidth = ImGui::GetWindowWidth();
+        f32 captionBtnsWidth = TotalBtnsWidth * ctx.dpiScale;
+        f32 captionBtnsStartX = windowWidth - captionBtnsWidth;
+
+        f32 btnWidth = BtnWidth * ctx.dpiScale;
+        f32 closeBtnWidth = CloseBtnWidth * ctx.dpiScale;
+
+        f32 closeStartX = windowWidth - closeBtnWidth;
+        f32 maximizeStartX = closeStartX - btnWidth;
+        f32 minimizeStartX = maximizeStartX - btnWidth;
+  
+        ImGui::SetCursorPos(ImVec2(captionBtnsStartX, 0.0f));
+        ImGui::TextDisabled("|");
+        
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Style::NoRounding); // sharp squares
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, Style::NoBorder);   // Hard-remove any outline borders
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, Style::NoPadding); // Forces razor-sharp centered glyph alignment 
+
+        ImGui::SetCursorPos(ImVec2(minimizeStartX, 0.0f));   
+        ImGui::Button(ICON_REG_SUBTRACT "##win_min", ImVec2(btnWidth, BtnHeight));
+
+        // NOTE: Windows handles the actual maximize behavior so Snap Layouts continue to work.
+        // These buttons are purely visual and forward the interaction to the native title bar.
+        ImGui::SetCursorPos(ImVec2(maximizeStartX, 0.0f)); 
+        const char* maximizeGlyph = ::IsZoomed(ctx.hwnd) ? ICON_REG_SQUARE_MULTIPLE "##win_max" : ICON_REG_MAXIMIZE "##win_max";
+        ImGui::Button(maximizeGlyph, ImVec2(btnWidth, BtnHeight));
+
+        // to give hover-red highlight
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.90f, 0.11f, 0.14f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.70f, 0.09f, 0.11f, 1.0f)); // Darker red on click
+
+        ImGui::SetCursorPos(ImVec2(closeStartX, 0.0f)); 
+        ImGui::Button(ICON_REG_DISMISS "##win_close", ImVec2(btnWidth, BtnHeight));
+       
+        ImGui::PopStyleColor(2);    // for close button 
+        ImGui::PopStyleVar(3);  // rounding, bordersize, padding
+
+        ImGui::EndChild();
+    }
+}
+
+namespace ToolBar{
+    void Render(AppContext& ctx){
+        f32 height = Height * ctx.dpiScale;
+        f32 leftPadding =  LeftPadding * ctx.dpiScale;
+
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(leftPadding, 0.0f));
+        if (!ImGui::BeginChild("ToolBar", ImVec2(0, height), ImGuiChildFlags_None, Flags)){
+            ImGui::PopStyleVar();
+            ImGui::EndChild();
+            return;
+        }
+        ImGui::PopStyleVar();
+
+        NavBar::Render(ctx);
+        ImGui::SameLine();
+
+        AddressBar::Render(ctx);
+
+        ImGui::EndChild();
+    }   
+}
+
+namespace NavBar{
+    namespace Style = UI::Style;
+    
+    void Render(AppContext& ctx){
+        f32 verticalPadding = (ToolBar::Height - Height) * 0.5f * ctx.dpiScale; // most likely 0, wonder what the compiler does to this
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, verticalPadding));
+
+        if (!ImGui::BeginChild("NavBar", ImVec2(Width * ctx.dpiScale, Height * ctx.dpiScale), ImGuiChildFlags_None, TopBar::Flags)){
+            ImGui::PopStyleVar();
+            ImGui::EndChild();
+            return;
+        }
+        ImGui::PopStyleVar();
+
+        f32 btnSize = BtnSize * ctx.dpiScale;
+        f32 margin = XPadding * ctx.dpiScale;
+        f32 navSepSpace = btnSize + margin;
+
+        // ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, navBtnSize * 0.5f); // 50% rounding
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding,  4.0f * ctx.dpiScale); 
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, Style::NoBorder);   // remove any outline borders
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,Style::NoPadding);   // Autocenters text inside button, but we need to center button ourselves
+
+
+        ImGui::BeginDisabled(!Navigation::CanGoBack(ctx));
+        if (ImGui::Button(ICON_REG_ARROW_LEFT "##nav_backward", ImVec2(btnSize, btnSize))) { 
+            Navigation::GoBack(ctx);
+        }   ImGui::SameLine(0, margin);
+        ImGui::EndDisabled();
+
+        ImGui::BeginDisabled(!Navigation::CanGoForward(ctx));
+        if (ImGui::Button(ICON_REG_ARROW_RIGHT "##nav_forward", ImVec2(btnSize, btnSize))) {
+            Navigation::GoForward(ctx);
+        }   ImGui::SameLine(0, margin);
+        ImGui::EndDisabled();
+
+        ImGui::BeginDisabled(!Navigation::CanGoParent(ctx));
+        if (ImGui::Button(ICON_REG_ARROW_UP "##nav_parent", ImVec2(btnSize, btnSize))) {
+            Navigation::GoParent(ctx);
+        }   ImGui::SameLine(0, margin);
+        ImGui::EndDisabled();
+
+
+        if (ImGui::Button(ICON_REG_ARROW_CLOCKWISE "##refresh", ImVec2(btnSize, btnSize))) { 
+            Backend::EnumerateDirectory(ctx, ctx.currentFolderPidl);
+        };
+
+        ImGui::PopStyleVar(3);
+        ImGui::EndChild();
+    }
+
+} // namespace NavBar
+
+namespace AddressBar{
+    namespace ToolBarLayout = UI::Style::ToolBarLayout;
+
+    static bool s_isEditing = false;
+    static bool s_justOpened = false;
+    static char s_pathInputBuffer[1024] = {0};
+
+    static void RenderPathEditor(AppContext& ctx){
+        // Center text input cursor
+        f32 inputPaddingY = (Height * ctx.dpiScale - ImGui::GetFontSize()) * 0.5f;
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f * ctx.dpiScale, inputPaddingY));
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+
+        if (s_justOpened){
+            ImGui::SetKeyboardFocusHere();
+            s_justOpened = false;
+        }
+
+        ImGuiInputTextFlags flags = ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll;
+        if (ImGui::InputText("##address_bar_path_input", s_pathInputBuffer, sizeof(s_pathInputBuffer), flags)){
+            wchar_t* widePath = Str::Utf8ToWide(s_pathInputBuffer);
+            PIDLIST_ABSOLUTE targetPidl = Backend::CreatePidlFromPath(widePath);
             
-            ImGui::SetCursorPos(ImVec2(0, 32 * g_DpiScale ));   // the navigation is immune to title bar height change
-            f32 navBarWidth = 198 * g_DpiScale;
-            f32 navBarHeight = 48 * g_DpiScale;
-            if (ImGui::BeginChild("NavBarArea", ImVec2(navBarWidth, navBarHeight), ImGuiChildFlags_None, topBarFlags)){
-                RenderNavBar();
-            }   ImGui::EndChild();
-            
-            ImGui::SetCursorPos(ImVec2(201.0f * g_DpiScale, (32.0f + 8.0f ) * g_DpiScale)); // the nav bar takes 201 width, then the rest splits between address and search bar
-            
-            RenderAddressBar(g_currentDir);
+            if (Navigation::NavigateTo(ctx, targetPidl)){
+                History::Append(ctx, ctx.currentFolderPidl);
+            }
+            Utils::FreePidl(targetPidl);
+            free(widePath);
+
+            s_isEditing = false;
+        }
+
+        // End editing if user clicks elsewhere
+        if (ImGui::IsItemDeactivated() && !ImGui::IsItemActivated()){
+            s_isEditing = false;
+        }
+        ImGui::PopStyleVar();   // FramePadding
+    }    
+
+    static void RenderBreadcrumbs(AppContext& ctx){
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f * ctx.dpiScale, 4.0f * ctx.dpiScale));
+
+        char folderBuffer[MAX_PATH] = {0}; 
+        char arrowBuffer[MAX_PATH] = {0};
+        for (u64 i = 0; i < ctx.currentBreadcrumbs.count; i++){
+            BreadcrumbItem& crumb = ctx.currentBreadcrumbs.breadcrumbs[i];
+
+            const char* safeName = crumb.displayName.data ? crumb.displayName.data : "Unknown";
+            snprintf(folderBuffer, sizeof(folderBuffer), "%s##bcrumb_%lld", safeName, i);
+            if (ImGui::Button(folderBuffer)){
+                if (Navigation::NavigateTo(ctx, crumb.pidl)){
+                    History::Append(ctx, ctx.currentFolderPidl);
+                }
+            }
+
+            if (i < ctx.currentBreadcrumbs.count - 1 || (i == ctx.currentBreadcrumbs.count - 1 && ctx.currentBreadcrumbs.hasSubFolders)){
+                ImGui::SameLine(0.0f, 8.0f * ctx.dpiScale);
+
+                const char* arrowSign = ImGui::IsPopupOpen(arrowBuffer) ? ICON_REG_CHEVRON_DOWN : ICON_REG_CHEVRON_RIGHT; 
+                snprintf(arrowBuffer, sizeof(arrowBuffer), "%s##bcrumb_arrow_%lld", arrowSign, i);   // use a new arrowBuffer or nah
+
+                if (ImGui::Button(arrowBuffer)){
+                    ImGui::OpenPopup(arrowBuffer);
+                }
+
+                ImVec2 btnRect = ImGui::GetItemRectMax();
+                ImGui::SetNextWindowPos(ImVec2(btnRect.x, btnRect.y + 2.0f));
+
+                if (ImGui::BeginPopup(arrowBuffer)){
+                    // cache the directory contents so we dont fetch every frame
+                    if (!ILIsEqual(ctx.popupCachePidl, crumb.pidl)){
+                        Backend::FreeLightShellItemArray(ctx.popupCacheList);
+                        Utils::FreePidl(ctx.popupCachePidl);
+                        ctx.popupCacheList = Backend::GetDirectoryContents(crumb.pidl);
+                        ctx.popupCachePidl = ILClone(crumb.pidl);
+                    }
+
+                    for (u64 j = 0; j < ctx.popupCacheList.numEntries; j++){
+                        if (ImGui::Selectable(ctx.popupCacheList.entries[j].name.data)){
+                            if (Navigation::NavigateTo(ctx, ctx.popupCacheList.entries[j].pidl)){
+                                History::Append(ctx, ctx.currentFolderPidl);
+                            }
+                            ImGui::CloseCurrentPopup();
+                            break;
+                        }
+                    }
+                    ImGui::EndPopup();
+                }
+            }
+            ImGui::SameLine(0.0f, 8.0f * ctx.dpiScale);
+        }
+        ImGui::PopStyleVar();   // FramePadding
+    }
+
+    void Render(AppContext& ctx){
+        f32 windowWidth = ImGui::GetWindowWidth();
+        f32 remainingWidth = windowWidth - ((ToolBarLayout::LeftPadding + NavBar::Width + ToolBarLayout::AddressToSearchGap + ToolBarLayout::RightPadding) * ctx.dpiScale);
+        f32 addressWidth = remainingWidth * ToolBarLayout::AddressRatio;
+        
+        f32 verticalPadding = (Height - AddressBar::Height) * 0.5f * ctx.dpiScale;
+
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f * ctx.dpiScale);
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.16f, 0.16f, 0.16f, 1.0f)); // FrameBg color
+        
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, verticalPadding));
+        if (!ImGui::BeginChild("AddressBar", ImVec2(addressWidth, Height * ctx.dpiScale), ImGuiChildFlags_None, TopBar::Flags)){
+            ImGui::PopStyleColor();
+            ImGui::PopStyleVar(3);
+            ImGui::EndChild();
+            return;
+        }
+        ImGui::PopStyleColor();
+        ImGui::PopStyleVar(3);
+
+        if (s_isEditing){
+            RenderPathEditor(ctx);
+        }
+        else{
+            RenderBreadcrumbs(ctx);
+        }
+
+        // Empty Space Click Detection
+        ImVec2 min = ImGui::GetWindowPos();
+        ImVec2 max = ImVec2(min.x + addressWidth, min.y + Height * ctx.dpiScale);
+
+        if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && ImGui::IsMouseHoveringRect(min, max)){
+            if (!ImGui::IsAnyItemActive() && !ImGui::IsAnyItemHovered()){
+                s_isEditing = true;
+
+                s_justOpened = true;
+                if (ctx.currentBreadcrumbs.fullPath.data){
+                    strncpy_s(s_pathInputBuffer, sizeof(s_pathInputBuffer), ctx.currentBreadcrumbs.fullPath.data, _TRUNCATE);
+                }
+                else{
+                    s_pathInputBuffer[0] = '\0';
+                }
+            }
         }
         ImGui::EndChild();
-        ImGui::PopStyleColor();
-        
-        
-
-        // =================================
-        // MAIN SPLIT: SIDEBAR AND FILE GRID
-        // =================================
-        RenderMainSplit(&g_currentDirList);
-        
     }
-    ImGui::End();
+
+
 }
 
-
-void RenderFileGrid(const DirectoryList* dirList, f32 availableHeight){
-    // RIGHT COLUMN (MAIN CONTENT) ---
-    // Width 0 tells ImGui to fill the remaining horizontal screen space
-    // 2. Create a Scrolling region for the files
-    if (ImGui::BeginChild("FileViewRegion", ImVec2(0, availableHeight), ImGuiChildFlags_Borders, ImGuiChildFlags_NavFlattened)){
-
-        // Starts a Child Window with ID "FileViewRegion", 2nd param is size of the child region - ImVec2(0, 0) means fill all available space, ImGuiChildFlags_Borders adds a visible border around the child, 
-        
-        // Define standard item size configs
-        const f32 iconSize = 48.0f;
-        const f32 cellWidth = iconSize + 32.0f; // Horizontal padding 
+namespace FileView{
+    namespace Colors = UI::Colors;
+    namespace Style = UI::Style;
+    
+    void Render(AppContext& ctx){        
+        if (!ImGui::BeginChild("FileView", Style::AutoFillRemnantWindow, ImGuiChildFlags_Borders, ImGuiChildFlags_NavFlattened)){
+            ImGui::EndChild();
+            return;
+        }
         
         f32 availWidth = ImGui::GetContentRegionAvail().x;    // Calculate how much width is available currently
-        
+        f32 iconSize = IconSize * ctx.dpiScale;
+        f32 cellWidth  = (IconSize + XPadding) * ctx.dpiScale;
+
         // Determine how many columns can fit based on width. Minimum 1 column
         u16 columnsCount = (u16) (availWidth / cellWidth);
         columnsCount = columnsCount ? columnsCount: 1;  // if columnsCount is 0, make it 1
 
-        // 3. Create a layout grid using Tables
-        // ImGuiTableFlags_NoSavedSettings stops ImGui from remembering column settings between runs
-        if (ImGui::BeginTable("ExplorerGrid", columnsCount, ImGuiTableFlags_NoSavedSettings)){
-            for (size_t i = 0; i < dirList->numEntries; i++){
-                ImGui::TableNextColumn();
-                FileItem currentItem = dirList->entries[i];
-                
-                // Group makes sure the item acts as a single cohesize block for interaction
-                ImGui::BeginGroup();
-                // - DRAW THE GRAPHICS ICON -
-                // todo Replace the text icons with actual textures (via ImTextureID) 
-                ImVec2 startCursorPos = ImGui::GetCursorScreenPos();
-                
-                if (currentItem.isFolder){
-                    // Folder Graphic placeholder: Tinted Yellow button 
-                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.65f, 0.2f, 1.0f));    // Background color that RGBA color 
 
+        if (ImGui::BeginTable("ExplorerGrid", columnsCount, ImGuiTableFlags_NoSavedSettings)){
+            for (u64 i = 0; i < ctx.currentDirArray.numEntries; i++){
+                ImGui::TableNextColumn();
+                Backend::ShellItem& currentItem = ctx.currentDirArray.entries[i];
+                bool isFolder = currentItem.attributes & SFGAO_FOLDER;
+                
+                ImGui::BeginGroup();
+                
+                if (isFolder){
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.65f, 0.2f, 1.0f)); 
                     char folderId[32];
                     snprintf(folderId, sizeof(folderId), "[F]##%zu", i);
                     ImGui::Button(folderId, ImVec2(iconSize, iconSize)); 
-                    // CLickable square button on the screen with visible text [F], everuthing after ## is hidden from the user but used by ImGui as a unique id, .c_str() converts from std::string to string literal, imvec2(iconsize, iconsize) makes it a perfect square
                     ImGui::PopStyleColor(); // makes the current button colorer the default style color, so other buttons dont inherit the same color
                 }
                 else{
-                    // File Graphic placeholder: Tinted Blue/Grey Button
                     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.5f, 0.7f, 1.0f));
-
                     char fileId[32];
                     snprintf(fileId, sizeof(fileId), "[#]##%zu", i);
                     ImGui::Button(fileId, ImVec2(iconSize, iconSize));
                     ImGui::PopStyleColor();
                 }
-                
-                // - DRAW TEXT BELOW ICON -
-                // Center alignment math for text strings within the defined column grid block
-                f32 textWidth = ImGui::CalcTextSize(currentItem.name.own_str).x; 
+
+                f32 textWidth = ImGui::CalcTextSize(currentItem.name.data).x; 
                 if (textWidth < cellWidth){
-                    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (iconSize - textWidth) * 0.5f);
+                    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (cellWidth - textWidth) * 0.5f);
                 }
                 
                 // Wraps text smoothly if name exceeds column size limit
                 ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + cellWidth);
-                ImGui::Text("%s", currentItem.name.own_str);
+                ImGui::Text("%s", currentItem.name.data);
                 ImGui::PopTextWrapPos();
                 
                 ImGui::EndGroup();
-                
+            
                 // - INTERATION HANDLING -
                 if (ImGui::IsItemHovered()){
-                    ImGui::SetTooltip("Type: %s", currentItem.isFolder? "Folder" : "File");
+                    ImGui::SetTooltip("Type: %s", isFolder ? "Folder" : "File");
                 }
                 if (ImGui::IsItemClicked(ImGuiMouseButton_Left)){
-                    
+                    // Make in focus, and selected, so that enter can work on it                       
                 }
                 if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && (ImGui::IsItemHovered())){
-                    if (currentItem.isFolder){
-                        String newPath = CloneString(g_currentDir);
-                        AppendSubDirectory(&newPath, &currentItem.name);
-                        DestroyDirectoryList(&g_currentDirList);
-                        NewBranch(newPath);     // adds a copy
-                        DestroyString(&newPath);    
-                        g_currentDirList = GetDirectoryContents(g_currentDir);
-                        break; // ! very very important
-                        
-                    }
-                }
-            }
-        }
-        ImGui::EndTable();
-    }
-    ImGui::EndChild();
-}
-
-
-void RenderAddressBar(const String& path){
-    static bool editMode = false;   
-    static char pathBuffer[260] = {0};  // todo change to a larger number like 1024, or 32767 here and in GetDirectoryContents
-
-    ImGui::SetCursorPos(ImVec2(199 * g_DpiScale /*Nav bar takes up 198*g_DpiScale*/, 40 * g_DpiScale /*caption bar is 32, plus 8 padding*/ ));
-    f32 barHeight = 32.0f * g_DpiScale;
-    f32 barWidth = ImGui::GetContentRegionAvail().x * 0.62f;    // take up 62.5% of the leftover width
-
-
-    // ImVec2 startPos = ImVec2(201.0f * g_DpiScale, (32.0f + 8.0f) * g_DpiScale) ;
-    // startPos is the local coordinate inside the window, used for placing ImGui Buttons
-    // startPos is the coordinate on the monitor, used for manually drawing shapes
-    ImVec2 startPos = ImGui::GetCursorPos() ;
-    ImVec2 absolutePos = ImGui::GetCursorScreenPos();    // this returns the actual, absolute monitor pixel, not local to the window it currently is
-
-    // use DrawList to paint a grey rectanfle behind
-    ImDrawList* drawList = ImGui::GetWindowDrawList();
-    ImVec2 maxBounds = ImVec2(absolutePos.x + barWidth, absolutePos.y + barHeight);
-    
-    drawList->AddRectFilled(absolutePos, maxBounds, ImGui::GetColorU32(ImGuiCol_FrameBg), ImGui::GetStyle().FrameRounding);
-    drawList->AddRect(absolutePos, maxBounds, ImGui::GetColorU32(ImGuiCol_Border));
-
-
-    if (editMode){
-        // mathematically center the text input cursor
-        f32 inputPaddingY = (barHeight - ImGui::GetFontSize()) * 0.5f;
-
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f)); // Forces razor-sharp centered glyph alignment
-        // ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, inputPaddingY));
-        ImGui::SetNextItemWidth(barWidth);
-
-        // Instantly focus the text box so that the user can start typing immediately
-        if (!ImGui::IsAnyItemActive()){
-            ImGui::SetKeyboardFocusHere();  // todo switch to justOpened bool flag, check what happens when i try to click in the box after clicking before
-        }
-
-        
-        if (ImGui::InputText("##path_input", pathBuffer, sizeof(pathBuffer), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll)){
-            String targetPath = CreateString(pathBuffer);
-            DirectoryList dirList = GetDirectoryContents(targetPath);
-
-            // if the folder exists, navigate to it
-            if (dirList.entries != nullptr){
-                NewBranch(targetPath);
-                DestroyDirectoryList(&g_currentDirList);
-
-                g_currentDirList = dirList; // transfer ownership to global directory list
-                
-                dirList.entries = nullptr;
-                dirList.numEntries = 0;
-            }
-
-            DestroyString(&targetPath);
-            DestroyDirectoryList(&dirList); // this is safe because if navigation succeeded, it dirList.entries = nullptr, preventing a dangling pointer
-            editMode = false;   // turn back into breadcrumbs
-        }
-
-        // If user clicks anywhere outside the input field
-        if (ImGui::IsItemDeactivated() && !ImGui::IsItemActivated()){
-            editMode = false;
-        }
-
-        ImGui::PopStyleVar();
-    }
-    else {
-
-        char subDirName[260]; 
-        u64 subDirIndex = 0;
-        
-        char currentPath[260];
-        u64 currentPathIndex = 0;
-
-        static char lastPopupPath[260] = {0};
-        static DirectoryList cachedSubDirList = {0};
-        
-        u16 uniqueId = 0;
-        
-        // Center the internal buttons/folder/breadcrumbs vertically inside the container
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f * g_DpiScale);
-        // ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f * g_DpiScale, 2.0f * g_DpiScale));
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f)); // Forces razor-sharp centered glyph alignment
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
-
-        f32 buttonHeight = ImGui::GetFrameHeight();
-        f32 offsetY = (barHeight - buttonHeight) * 0.5f; // (container - item) / 2
-        ImGui::SetCursorPos(ImVec2(startPos.x + 6.0f * g_DpiScale, startPos.y + offsetY));    // where tf do all these numbbers spawn from
-        
-        // group everything so ImGui Treats the breadcrumb bar as one 
-        ImGui::BeginGroup();
-
-        for (u64 i = 0; i <= path.length && i < sizeof(currentPath); i++){
-            char c = path.own_str[i];
-                
-            // when a slash or the end of the string is reached, a folder is complete 
-            if (c == '\\' || c == '\0'){
-                subDirName[subDirIndex] = '\0';
-                currentPath[currentPathIndex] = '\0';
-
-                char btnlabel[256] = {0};
-                snprintf(btnlabel, sizeof(btnlabel), "%s##dir_%d", subDirName, uniqueId);
-                
-                if (ImGui::Button(btnlabel)){
-                    
-                    String targetPath = CreateString(currentPath);
-                    NewBranch(targetPath);
-                    DestroyString(&targetPath);
-                    
-                    g_currentDirList = GetDirectoryContents(g_currentDir);
-                    uniqueId++;
-                    break;  // so it updates the new directory
-                    
-                }
-                ImGui::SameLine();  // keeps the next item on same row 
-                
-                if (c == '\\'){
-                    char dropDownId[64] = {0};
-                    snprintf(dropDownId, sizeof(dropDownId), "dir_dropdown_%d", uniqueId);
-                    const char* arrowSign = ImGui::IsPopupOpen(dropDownId) ? " v " : " > ";
-                    
-                    // buffer for the > and v sign 
-                    char pathSep[32] = {0};
-                    snprintf(pathSep, sizeof(pathSep), "%s##dir_%d", arrowSign, uniqueId);
-                    
-                    if (ImGui::Button(pathSep)){
-                        ImGui::OpenPopup(dropDownId);                    
-                    }
-                    
-                    // get bottom right coordinates of button that was just drawn
-                    ImVec2 buttonBottomRight = ImGui::GetItemRectMax();
-                    ImVec2 customPopupPos = ImVec2(buttonBottomRight.x, buttonBottomRight.y + 2.0f);
-                    ImGui::SetNextWindowPos(customPopupPos);    // this just makes the popup, not appear where the cursor is, brings it below, so the user can see the > change to v
-                    
-                    ImGui::SameLine();
-                    
-                    if (ImGui::BeginPopup(dropDownId)){
-
-                        if (strcmp(currentPath, lastPopupPath) != 0){
-                            DestroyDirectoryList(&cachedSubDirList);
-
-                            String folderPath = CreateString(currentPath); 
-                            cachedSubDirList = GetDirectoryContents(folderPath);
-                            DestroyString(&folderPath);
-
-                            strncpy_s(lastPopupPath, currentPath, sizeof(lastPopupPath) - 1);
-                            lastPopupPath[sizeof(lastPopupPath) - 1] = '\0';
+                    if (isFolder){
+                        if (Navigation::NavigateTo(ctx, currentItem.pidl)){
+                            History::Append(ctx, ctx.currentFolderPidl);    // currentItem.pidl is freed in NavigateTo
                         }
-
-                        for (u64 j = 0; j < cachedSubDirList.numEntries; j++){
-                            if (cachedSubDirList.entries[j].isFolder){
-                                const char* folderName = cachedSubDirList.entries[j].name.own_str;
-                                
-                                if (ImGui::Selectable(folderName)){  // Draw each folder entry as a clickable item in the dropdown list
-                                    String targetPath = CreateString(currentPath);
-                                    AppendSubDirectory(&targetPath, &cachedSubDirList.entries[j].name /* this is just the name, none of the parent stuff, so it has to be joined, to create the full path*/);
-                                    NewBranch(targetPath);
-                                    DestroyString(&targetPath);
-                                    
-                                    g_currentDirList = GetDirectoryContents(g_currentDir);                                
-                                    ImGui::CloseCurrentPopup(); // close popup cos an item was chosen 
-                                }
-                            }
-                        }
-                        ImGui::EndPopup();
+                        break;
                     }
-                    
-                    uniqueId++;
-                    currentPath[currentPathIndex] = '\\';
-                    currentPathIndex++;
                 }
-                subDirIndex = 0;
             }
-            else{
-                subDirName[subDirIndex] = c;
-                currentPath[currentPathIndex] = c;
-                currentPathIndex++;
-                subDirIndex++;
-            }
+            ImGui::EndTable();
         }
-        
-        ImGui::EndGroup();
-
-        ImGui::PopStyleVar(); // clear rounding
-        ImGui::PopStyleVar(); // clear padding
-        ImGui::PopStyleVar(); // clear zero outline
-
-        // click detection for empty space background
-        if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)){
-            ImVec2 mousePos = ImGui::GetMousePos();
-            if (ImGui::IsMouseHoveringRect(absolutePos, maxBounds)){
-                // if they clicked the container but missed a breadcrumb button
-                if (!ImGui::IsAnyItemActive() && !ImGui::IsAnyItemHovered()){
-                    editMode = true;
-                    snprintf(pathBuffer, sizeof(pathBuffer), "%s", path.own_str);
-                }
-            } 
-        }
-        // ImGui::SetCursorPos(ImVec2(startPos.x, startPos.y +barHeight));
+        ImGui::EndChild();
     }
-}
-
-
-
-void ApplyWindows11DarkTheme(){ // todo why is this still here?
-    ImGuiStyle& style = ImGui::GetStyle();
-    ImVec4* colors = style.Colors;
-
-    // - - - Windown and Panel Layout Properties 
-    style.WindowRounding    = 7.0f;  // Windows 11 signature slightly rounded corners
-    style.FrameRounding     = 4.0f;
-    style.PopupRounding     = 6.0f;
-    style.ChildRounding     = 4.0f;
-    style.WindowBorderSize  = 1.0f;  // Thin borders separating panels
-    style.ChildBorderSize   = 1.0f;
-    style.FrameBorderSize   = 1.0f;
-    style.ItemSpacing       = ImVec2(8.0f, 6.0f);
-
-    // --- 2. The Exact Windows 11 Color Tokens ---
-    // Top-level app background (Mica / Acrylic dark slate)
-    colors[ImGuiCol_WindowBg]             = ImVec4(0.12f, 0.12f, 0.12f, 1.00f); // #1E1E1E
-    
-    // Left Sidebar / Navigation Pane (Slightly darker for depth)
-    colors[ImGuiCol_ChildBg]              = ImVec4(0.10f, 0.10f, 0.10f, 1.00f); // #1A1A1A
-    
-    // Popups, Dropdowns, and Dialogs
-    colors[ImGuiCol_PopupBg]              = ImVec4(0.14f, 0.14f, 0.14f, 0.98f); // #242424
-
-    // Subtle divider lines and panel borders
-    colors[ImGuiCol_Border]               = ImVec4(0.18f, 0.18f, 0.18f, 1.00f); // #2E2E2E
-    colors[ImGuiCol_BorderShadow]         = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-
-    // Text (Off-white / Light grey)
-    colors[ImGuiCol_Text]                 = ImVec4(0.90f, 0.90f, 0.90f, 1.00f); // #E6E6E6
-    colors[ImGuiCol_TextDisabled]         = ImVec4(0.50f, 0.50f, 0.50f, 1.00f); // #808080
-
-    // --- 3. Interactive States (Buttons, Selectables, Hovers) ---
-    // The classic Windows Accent Blue (#0078D4 or updated Win11 #005A9E variant)
-    ImVec4 winAccentBlue = ImVec4(0.00f, 0.45f, 0.83f, 1.00f); 
-    
-    // Normal button / background elements
-    colors[ImGuiCol_FrameBg]              = ImVec4(0.16f, 0.16f, 0.16f, 1.00f); // #292929
-    colors[ImGuiCol_FrameBgHovered]       = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
-    colors[ImGuiCol_FrameBgActive]        = ImVec4(0.24f, 0.24f, 0.24f, 1.00f);
-
-    // Folder selectables and Header rows (Light highlight on hover)
-    colors[ImGuiCol_Header]               = ImVec4(0.18f, 0.18f, 0.18f, 1.00f); // #2E2E2E
-    colors[ImGuiCol_HeaderHovered]        = ImVec4(0.22f, 0.22f, 0.22f, 1.00f); // #383838
-    colors[ImGuiCol_HeaderActive]         = winAccentBlue;
-
-    // Address Bar Buttons & standard clickables
-    colors[ImGuiCol_Button]               = ImVec4(0.14f, 0.14f, 0.14f, 0.00f); // Invisible by default like Win11 toolbars
-    colors[ImGuiCol_ButtonHovered]        = ImVec4(0.22f, 0.22f, 0.22f, 1.00f); // Light grey on hover
-    colors[ImGuiCol_ButtonActive]         = ImVec4(0.26f, 0.26f, 0.26f, 1.00f);
-
-    // Scrollbars
-    colors[ImGuiCol_ScrollbarBg]          = ImVec4(0.10f, 0.10f, 0.10f, 0.00f);
-    colors[ImGuiCol_ScrollbarGrab]         = ImVec4(0.30f, 0.30f, 0.30f, 1.00f);
-    colors[ImGuiCol_ScrollbarGrabHovered]  = ImVec4(0.40f, 0.40f, 0.40f, 1.00f);
-    colors[ImGuiCol_ScrollbarGrabActive]   = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
-}
-
-
-
-void RenderNavBar(){
-
-    f32 navBtnSize = 32.0f * g_DpiScale;
-    f32 navRowHeight = 48.0f * g_DpiScale;
-    f32 marginSpace = 16.0f * g_DpiScale;
-    f32 navSepSpace = navBtnSize + marginSpace;
-    f32 centerY = (navRowHeight - navBtnSize) * 0.5f;
-
-
-    // ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, navBtnSize * 0.5f); // 50% rounding
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding,  4.0f * g_DpiScale); 
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);   // remove any outline borders
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));   // Autocenters text inside button, but we need to center button ourselves
-    
-    f32 currentX = 8.0f;
-    ImGui::SetCursorPos(ImVec2(currentX, centerY));
-    bool disableBack = !CanNavigateBackward();
-    if (disableBack) ImGui::BeginDisabled(true);
-    if (ImGui::Button(ICON_REG_ARROW_LEFT "##nav_backward", ImVec2(navBtnSize, navBtnSize))) {
-        printf("n'azu\n");
-        if (NavigateBackward()){
-            g_currentDirList = GetDirectoryContents(g_currentDir);
-        }
-    }        ImGui::SameLine();
-    if (disableBack) ImGui::EndDisabled();
-    
-    currentX += navSepSpace;
-    ImGui::SetCursorPos(ImVec2(currentX, centerY));
-    bool disableForward = !CanNavigateForward();
-    if (disableForward) ImGui::BeginDisabled(true);
-    if (ImGui::Button(ICON_REG_ARROW_RIGHT "##nav_forward", ImVec2(navBtnSize, navBtnSize))) {
-        printf("n'iru\n");
-        if (NavigateForward()){
-            g_currentDirList = GetDirectoryContents(g_currentDir);
-        } 
-    }     ImGui::SameLine();
-    if (disableForward) ImGui::EndDisabled();
-    
-    currentX += navSepSpace;
-    ImGui::SetCursorPos(ImVec2(currentX, centerY));
-    if (ImGui::Button(ICON_REG_ARROW_UP "##nav_parent", ImVec2(navBtnSize, navBtnSize))) {
-        printf("nne na nna\n");
-        
-        String parentPath = CloneString(g_currentDir);
-        PopPath(&parentPath);
-        NewBranch(parentPath);
-        DestroyString(&parentPath);
-        
-        g_currentDirList = GetDirectoryContents(g_currentDir);
-    }          ImGui::SameLine();
-    
-    currentX += navSepSpace;
-    ImGui::SetCursorPos(ImVec2(currentX, centerY));
-    if (ImGui::Button(ICON_REG_ARROW_CLOCKWISE "##refresh", ImVec2(navBtnSize, navBtnSize))) { /* Reload logic */ };
-
-    ImGui::PopStyleVar(3);
-}
-
-void RenderSideBar(f32 availableHeight){
-
-    // Push the slightly darker color specifically for the sidebar panel
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyle().Colors[ImGuiCol_ChildBg]);
-
-    if (ImGui::BeginChild("Sidebar", ImVec2(g_sidebarWidth, availableHeight), ImGuiChildFlags_Borders)){
-
-        // Authentic Windows 11 Sidebar content spacing
-        ImGui::Spacing();
-        ImGui::TextDisabled(" Quick Access");
-        ImGui::Separator();
-
-        // Selectable items
-        if (ImGui::Selectable(ICON_REG_STAR " Favourites")) { /* Navigation logic */ }
-        if (ImGui::Selectable(ICON_REG_ARROW_DOWNLOAD " Downloads"))  { /* Navigation logic */ }
-        if (ImGui::Selectable(ICON_REG_DOCUMENT " Documents"))  { /* Navigation logic */ }
-
-        ImGui::Spacing();
-        ImGui::Spacing();
-        ImGui::TextDisabled("  This PC");
-        ImGui::Separator();
-
-        if (ImGui::Selectable(ICON_REG_DESKTOP " Desktop")) { /* Navigation logic */ }
-        if (ImGui::Selectable(ICON_REG_DESKTOP " Local Disk (C:)")) {
-            // Navigate to root C:
-            String cDrive = CreateString("C:");
-            NewBranch(cDrive);
-            DestroyString(&cDrive);
-            g_currentDirList = GetDirectoryContents(g_currentDir);
-        }
-    } 
-    ImGui::PopStyleColor();
-    ImGui::EndChild();
-
-}
-
-void RenderTitleBar(){
-    f32 windowWidth = ImGui::GetWindowWidth();
-
-    // 145 is the distance from the vertical bar to the end of the screen
-    // minimize and maximize buttons are 45 wide x 32 tall, but close button is 46 to account for the 1 px margin
-    // title bar Height is 32, but i will set the button height to 30
-    f32 controlsWidth = 145 * g_DpiScale;
-    f32 controlsStartX = windowWidth - controlsWidth;
-    
-    f32 captionButtonWidth = 45.0f * g_DpiScale;
-    f32 closeButtonWidth = 46.0f * g_DpiScale;
-    // f32 capBtnHeight = 32.0f * g_DpiScale;
-    f32 capBtnHeight = 30.0f * g_DpiScale;
-
-    f32 closeStartX = windowWidth - closeButtonWidth;
-    f32 maximizeStartX = windowWidth - (closeButtonWidth + captionButtonWidth);
-    f32 minimizeStartX = windowWidth - (closeButtonWidth + 2*captionButtonWidth);
-
-
-    ImGui::SetCursorPos(ImVec2(controlsStartX, 0.0f));
-    ImGui::TextDisabled("|");
-        
-    
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 0.0f); // sharp squares
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);   // Hard-remove any outline borders
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f)); // Forces razor-sharp centered glyph alignment 
-
-    ImGui::SetCursorPos(ImVec2(minimizeStartX, 0.0f));    // Should prolly be in the middle of the button
-    ImGui::Button(ICON_REG_SUBTRACT "##win_min", ImVec2(captionButtonWidth, capBtnHeight));
-
-    ImGui::SetCursorPos(ImVec2(maximizeStartX, 0.0f));    // Should prolly be in the middle of the button
-    const char* maximizeGlyph = ::IsZoomed(g_hwnd) ? ICON_REG_SQUARE_MULTIPLE "##win_max" : ICON_REG_MAXIMIZE "##win_max";
-    ImGui::Button(maximizeGlyph, ImVec2(captionButtonWidth, capBtnHeight)); // let windows handle the logic, these buttons are just visual filler, so that we dont lose snap layouts feature
-
-    // to give hover-red highlight
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.90f, 0.11f, 0.14f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.70f, 0.09f, 0.11f, 1.0f)); // Darker red on click
-
-    ImGui::SetCursorPos(ImVec2(closeStartX, 0.0f));    // Should prolly be in the middle of the button
-    ImGui::Button(ICON_REG_DISMISS "##win_close", ImVec2(captionButtonWidth, capBtnHeight));
-    
-    ImGui::PopStyleColor(2);    // for close button
-    
-    ImGui::PopStyleVar(3);  // rounding, bordersize, padding
 }

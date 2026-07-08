@@ -1,110 +1,40 @@
 // history_helper.cpp
-#include "history_helper.h"
-#include "string_helper.h"
+#include "core.h"
 
 
-PathHistory InitHistory(){
-    PathHistory output;
-
-    output.capacity = 64;
-    
-    output.count = 0;
-    output.currentIndex = -1;
-    
-    output.visitedPaths = (String*) malloc(sizeof(String) * output.capacity);
-    if (output.visitedPaths == nullptr){
-        PrntErrIsNULL;
-        return PathHistory{};
+namespace History{
+    void Init(AppContext& ctx){
+        ctx.history.capacity =  32;
+        ctx.history.count = 0;
+        ctx.history.currentIndex  = -1;
+        ctx.history.visitedPidls = (PIDLIST_ABSOLUTE*) malloc(sizeof(PIDLIST_ABSOLUTE) * ctx.history.capacity);
     }
+    
+    bool Append(AppContext& ctx, PIDLIST_ABSOLUTE targetPidl){
 
-    return output;
+        if (!ctx.history.capacity) return false;
 
-}
-
-bool AppendPathToHistory(const String subDir){
-    u64 newCount = g_pathHistory.count + 1;
-
-    if (!g_pathHistory.capacity) {PrntErrInvalid; return false;}
-    if (newCount >= g_pathHistory.capacity){
-        while (newCount >= g_pathHistory.capacity){
-            g_pathHistory.capacity *= 2;
+        if (ctx.history.count + 1 >= ctx.history.capacity){
+            ctx.history.capacity *= 2;
+            ctx.history.visitedPidls = (PIDLIST_ABSOLUTE*) realloc( ctx.history.visitedPidls, sizeof(PIDLIST_ABSOLUTE) * ctx.history.capacity);
         }
 
-        String* buffer = (String*) realloc(g_pathHistory.visitedPaths, sizeof(String) * g_pathHistory.capacity);
-        if (buffer == nullptr){ PrntErrIsNULL; return false;}
+        ctx.history.currentIndex++;
+        ctx.history.visitedPidls[ctx.history.currentIndex] = ILClone(targetPidl);
+        ctx.history.count++;
 
-        g_pathHistory.visitedPaths = buffer;
-    }
-    
-
-    g_pathHistory.currentIndex++;
-    // Deep copy is mandatory here. A plain assignment copies the raw char* pointer
-    g_pathHistory.visitedPaths[g_pathHistory.currentIndex] = CloneString(subDir); 
-    g_pathHistory.count++;
-
-    // Sync global active directory
-    // UpdateCurrentDir();
-    return true;
-}
-
-
-bool PopPathHistoryFromIndex(u64 cursorIndex){  // inclusive
-    // Only has to destroy the strings, not Zero them, or else they would leak
-    if (cursorIndex > g_pathHistory.count){ PrntErrInvalid; return false;   }    // todo check if > or >= 
-
-    for (u64 i = cursorIndex; i < g_pathHistory.count ; i++){
-        DestroyString(&g_pathHistory.visitedPaths[i]);
-    }
-    g_pathHistory.currentIndex = (i64) cursorIndex - 1;
-    g_pathHistory.count = cursorIndex;
-    // UpdateCurrentDir();
-    return true;
-}
-
-inline bool CanNavigateBackward(){
-    return g_pathHistory.currentIndex > 0;
-}
-
-bool NavigateBackward(){
-    if (CanNavigateBackward()){
-        g_pathHistory.currentIndex--;
-    }
-    else{
-        PrntErrInvalid;
-        return false;
-    }
-    UpdateCurrentDir();
-    return true;
-}
-
-inline bool CanNavigateForward(){
-    return g_pathHistory.currentIndex + 1 < (i64) g_pathHistory.count;
-}
-
-bool NavigateForward(){
-    if (CanNavigateForward()){
-        g_pathHistory.currentIndex++;
-    }
-    else{
-        PrntErrInvalid;
-        return false;
-    }
-    UpdateCurrentDir();
-    return true;
-}
-
-bool NewBranch(const String subDir){
-    if (PopPathHistoryFromIndex(g_pathHistory.currentIndex + 1) && AppendPathToHistory(subDir)){
-        UpdateCurrentDir();
         return true;
     }
-    return false;
+
+
+
+    void Destroy(AppContext& ctx){
+        for (u64 i = 0; i < ctx.history.count; i++){
+            Utils::FreePidl(ctx.history.visitedPidls[i]);
+        }
+        ctx.history.visitedPidls = nullptr;
+        ctx.history.capacity = 0; 
+        ctx.history.count = 0; 
+    }
 }
 
-
-
-void UpdateCurrentDir(){
-    DestroyString(&g_currentDir);
-    g_currentDir = CloneString (g_pathHistory.visitedPaths[g_pathHistory.currentIndex]);
-
-}
