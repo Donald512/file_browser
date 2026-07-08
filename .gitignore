@@ -6,11 +6,7 @@ fileLstr/
 *.pdb
 *.ilk
 src/notes.txt
-src/file_backend.h
-src/file_browser.h
-src/history_helper.h
-src/renderer.h
-src/string_helper.h
+include/old/
 
 !src/
 !include/
