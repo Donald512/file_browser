@@ -5,6 +5,12 @@ fileLstr/
 *.exe
 *.pdb
 *.ilk
+src/notes.txt
+src/file_backend.h
+src/file_browser.h
+src/history_helper.h
+src/renderer.h
+src/string_helper.h
 
 !src/
 !include/
@@ -18,3 +24,4 @@ fileLstr/
 !run.bat
 !setup.bat
 !shell.bat
+
