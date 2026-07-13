@@ -85,7 +85,39 @@ int main(void){
     By default, explicitly exclude directories like AppData\Local\Temp, system caches, and OS binaries from the deep search index.
     LMDB or a flat SQLite database, and map it into memory (mmap).
 
+    Decouple "data is ready" from "frame draws" — render whatever's currently known immediately, backfill icons/thumbnails asynchronously as they arrive instead of waiting.
+
+    Shell extensions:
+        Extension
+        Average response
+        Failure rate
+        Timeouts
+    If one extension constantly takes 2.8 seconds, mark it:
+        Slow
+        Disable?
+        Always load
+        Never load
+        Ask me
+        
+    Ability to completely ignore extensions if a user is savvy enough
+
+    Give every task a budget
+        Icon: 100 ms budget.
+        Thumbnail: 500 ms budget. 
+        Metadata: 300 ms budget.
+    If it misses: Stop. Use placeholder. Put at the end of queue.
+
+    
+    Performance Mode
+        Maximum compatibility (default)
+        Balanced
+        Maximum speed
+    Then an Advanced page for people who care:
+        Ignore network metadata
+        Disable slow shell extensions
+        Thumbnail generation limit
+        Thumbnail cache size
+        Network timeout
+        Maximum concurrent workers
+    So that Grandma never sees it.
 */
-
-
-

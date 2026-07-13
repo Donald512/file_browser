@@ -318,53 +318,73 @@ namespace FileView{
 
 
         if (ImGui::BeginTable("ExplorerGrid", columnsCount, ImGuiTableFlags_NoSavedSettings)){
-            for (u64 i = 0; i < ctx.currentDirArray.numEntries; i++){
-                ImGui::TableNextColumn();
-                Backend::ShellItem& currentItem = ctx.currentDirArray.entries[i];
-                bool isFolder = currentItem.attributes & SFGAO_FOLDER;
-                
-                ImGui::BeginGroup();
-                
-                if (isFolder){
-                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.65f, 0.2f, 1.0f)); 
-                    char folderId[32];
-                    snprintf(folderId, sizeof(folderId), "[F]##%zu", i);
-                    ImGui::Button(folderId, ImVec2(iconSize, iconSize)); 
-                    ImGui::PopStyleColor(); // makes the current button colorer the default style color, so other buttons dont inherit the same color
-                }
-                else{
-                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.5f, 0.7f, 1.0f));
-                    char fileId[32];
-                    snprintf(fileId, sizeof(fileId), "[#]##%zu", i);
-                    ImGui::Button(fileId, ImVec2(iconSize, iconSize));
-                    ImGui::PopStyleColor();
-                }
+            Backend::DirectoryArray& dirs = ctx.currentDirArray;
 
-                f32 textWidth = ImGui::CalcTextSize(currentItem.name.data).x; 
-                if (textWidth < cellWidth){
-                    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (cellWidth - textWidth) * 0.5f);
-                }
-                
-                // Wraps text smoothly if name exceeds column size limit
-                ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + cellWidth);
-                ImGui::Text("%s", currentItem.name.data);
-                ImGui::PopTextWrapPos();
-                
-                ImGui::EndGroup();
+            u16 totalRows = (u16) (dirs.numEntries + columnsCount - 1)/columnsCount; // the + columnsCount - 1/ columnsCount is there to celiling the result
+            ImGuiListClipper clipper;
+            clipper.Begin(totalRows);
             
-                // - INTERATION HANDLING -
-                if (ImGui::IsItemHovered()){
-                    ImGui::SetTooltip("Type: %s", isFolder ? "Folder" : "File");
-                }
-                if (ImGui::IsItemClicked(ImGuiMouseButton_Left)){
-                    // Make in focus, and selected, so that enter can work on it                       
-                }
-                if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && (ImGui::IsItemHovered())){
-                    if (isFolder){
-                        if (Navigation::NavigateTo(ctx, currentItem.pidl)){
-                            History::Append(ctx, ctx.currentFolderPidl);    // currentItem.pidl is freed in NavigateTo
+            // instead of looping through, entries, we loop through visible rows
+            while (clipper.Step()){
+                for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++){  // DisplayStart is the first row, DisplayEnd is exclusive
+                    u64 startItemIdx = (u64) row * columnsCount;
+                    u64 endItemIdex = startItemIdx + columnsCount;
+                    endItemIdex = (endItemIdex < dirs.numEntries) ? endItemIdex : dirs.numEntries;  // get the min, important for last row
+
+                    for (u64 i = startItemIdx; i < endItemIdex; i++){
+                        ImGui::TableNextColumn();
+                        
+                        Backend::ShellItem& currentItem = dirs.entries[i];
+                        bool isFolder = currentItem.attributes & SFGAO_FOLDER;
+                        
+                        ImGui::BeginGroup();
+                        if (isFolder){
+                            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.65f, 0.2f, 1.0f)); 
+                            char folderId[32];
+                            snprintf(folderId, sizeof(folderId), "[F]##%zu", i);
+                            ImGui::Button(folderId, ImVec2(iconSize, iconSize)); 
+                            ImGui::PopStyleColor(); // makes the current button colorer the default style color, so other buttons dont inherit the same color
                         }
-                        break;
+                        else{
+                            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.5f, 0.7f, 1.0f));
+                            char fileId[32];
+                            snprintf(fileId, sizeof(fileId), "[#]##%zu", i);
+                            ImGui::Button(fileId, ImVec2(iconSize, iconSize));
+                            ImGui::PopStyleColor();
+                        }
+                        
+                        f32 textWidth = ImGui::CalcTextSize(currentItem.name.data).x; 
+                        if (textWidth < cellWidth){
+                            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (cellWidth - textWidth) * 0.5f);
+                        }
+
+                        // Wraps text smoothly if name exceeds column size limit
+                        ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + cellWidth);
+                        ImGui::Text("%s", currentItem.name.data);
+                        ImGui::PopTextWrapPos();
+                        
+                        ImGui::EndGroup();
+                    
+                        // - INTERATION HANDLING -
+                        if (ImGui::IsItemHovered()){
+                            ImGui::SetTooltip("Type: %s", isFolder ? "Folder" : "File");
+                        }
+                        if (ImGui::IsItemClicked(ImGuiMouseButton_Left)){
+                            // Make in focus, and selected, so that enter can work on it                       
+                        }
+                        if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && (ImGui::IsItemHovered())){
+                            if (isFolder){
+                                if (Navigation::NavigateTo(ctx, currentItem.pidl)){
+                                    History::Append(ctx, ctx.currentFolderPidl);    // currentItem.pidl is freed in NavigateTo
+                                    ImGui::EndTable();
+                                    ImGui::EndChild();
+                                    return;
+                                }
+                            }
+                            else{
+                                Backend::ExecuteFile(currentItem.pidl);
+                            }
+                        }
                     }
                 }
             }
@@ -372,4 +392,5 @@ namespace FileView{
         }
         ImGui::EndChild();
     }
+    
 }

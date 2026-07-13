@@ -373,6 +373,24 @@ namespace Backend{
         return nullptr; 
     }
 
+    bool ExecuteFile(PIDLIST_ABSOLUTE pidl){    // opens the file with the default app
+        if (!pidl) return false;
+
+        SHELLEXECUTEINFOW sei = {};
+        sei.cbSize = sizeof(sei);
+        sei.fMask = SEE_MASK_IDLIST | SEE_MASK_ASYNCOK;
+        sei.lpIDList = pidl;
+        sei.nShow = SW_SHOWNORMAL;
+
+        if (!::ShellExecuteExW(&sei)){
+            // todo handle error, eg Access Denied, or No app associated
+            DWORD err = GetLastError();
+            printf("Failed to launch item. Error: %lu\n", err);
+            return false;
+        }
+        return true;
+    }
+
 } // namespace Backend
 
 

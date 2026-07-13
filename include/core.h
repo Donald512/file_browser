@@ -106,6 +106,7 @@ namespace Backend{
     Str::String GetTypeablePath(PIDLIST_ABSOLUTE targetPidl);
     bool PidlHasSubFolders(PCIDLIST_ABSOLUTE targetPidl);
     PIDLIST_ABSOLUTE CreatePidlFromPath(const wchar_t* widePath);
+    bool ExecuteFile(PIDLIST_ABSOLUTE pidl);    // opens the file with the default app
     
 }
 
