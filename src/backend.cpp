@@ -35,6 +35,7 @@ namespace Backend{
         }
 
         ctx.currentDirArray.capacity = 64;
+        ctx.currentDirArray.selectedIndex = -1;
         ctx.currentDirArray.entries = (ShellItem*) malloc(sizeof(ShellItem) * ctx.currentDirArray.capacity);
 
         LPITEMIDLIST childPidl = nullptr;   // buffer for PIDLs
@@ -78,6 +79,7 @@ namespace Backend{
         array.entries = nullptr;
         array.numEntries = 0;
         array.capacity = 0;
+        array.selectedIndex = -1;
 
     } 
 

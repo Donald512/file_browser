@@ -336,23 +336,57 @@ namespace FileView{
                         
                         Backend::ShellItem& currentItem = dirs.entries[i];
                         bool isFolder = currentItem.attributes & SFGAO_FOLDER;
-                        
+                        bool isSelected = (ctx.currentDirArray.selectedIndex == (i64)i);
+
+                        ImGui::PushID((int)i);
+
+                        ImVec2 startPos = ImGui::GetCursorPos();    // 1. save where we are to draw an invisible bounding box first
+
+                        if (ImGui::Selectable("##file_selectedbox", isSelected, ImGuiSelectableFlags_AllowDoubleClick, ImVec2(cellWidth, iconSize + ImGui::GetTextLineHeightWithSpacing() * 2))){
+                            ctx.currentDirArray.selectedIndex = i;
+                        }
+                                            
+                        // 2. - INTERATION HANDLING -
+                        // Hovering
+                        if (ImGui::IsItemHovered()){
+                            ImGui::SetTooltip("Type: %s", isFolder ? "Folder" : "File");
+                        }
+                        // clicking
+                        if (ImGui::IsItemClicked(ImGuiMouseButton_Left)){
+                            dirs.selectedIndex = i;                    
+                        }
+                        // Double click or enter key
+                        if ((ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && ImGui::IsItemHovered()) || (isSelected && ImGui::IsKeyPressed(ImGuiKey_Enter ))){
+                            if (isFolder){
+                                if (Navigation::NavigateTo(ctx, currentItem.pidl)){
+                                    History::Append(ctx, ctx.currentFolderPidl);    // currentItem.pidl is freed in NavigateTo'
+                                    ImGui::PopID();
+                                    clipper.End();
+                                    ImGui::EndTable();
+                                    ImGui::EndChild();
+                                    return;
+                                }
+                            }
+                            else{
+                                Backend::ExecuteFile(currentItem.pidl);
+                            }
+                        }
+                        // 3. Move cursor back to start so we can draw visuals on top of the selectable
+                        ImGui::SetCursorPos(startPos);
                         ImGui::BeginGroup();
-                        if (isFolder){
-                            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.65f, 0.2f, 1.0f)); 
-                            char folderId[32];
-                            snprintf(folderId, sizeof(folderId), "[F]##%zu", i);
-                            ImGui::Button(folderId, ImVec2(iconSize, iconSize)); 
-                            ImGui::PopStyleColor(); // makes the current button colorer the default style color, so other buttons dont inherit the same color
-                        }
-                        else{
-                            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.5f, 0.7f, 1.0f));
-                            char fileId[32];
-                            snprintf(fileId, sizeof(fileId), "[#]##%zu", i);
-                            ImGui::Button(fileId, ImVec2(iconSize, iconSize));
-                            ImGui::PopStyleColor();
-                        }
+
+                        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (cellWidth - iconSize) * 0.5f);
+
+                        // Draw a colored box as placeholder using ImDrawList, so it doesnt steal clicks like Button()
+                        ImVec2 p_min = ImGui::GetCursorScreenPos();
+                        ImVec2 p_max = ImVec2(p_min.x + iconSize, p_min.y + iconSize);
+                        ImU32 iconColor = isFolder ? IM_COL32(204, 165, 51, 255) : IM_COL32(76, 127, 178, 255);
+                        ImGui::GetWindowDrawList()->AddRectFilled(p_min, p_max, iconColor, 4.0f); // 4.0f is corner rounding
                         
+                        // Push the layout cursor past our custom drawn box
+                        ImGui::Dummy(ImVec2(iconSize, iconSize));
+                        
+                        // center text
                         f32 textWidth = ImGui::CalcTextSize(currentItem.name.data).x; 
                         if (textWidth < cellWidth){
                             ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (cellWidth - textWidth) * 0.5f);
@@ -364,27 +398,7 @@ namespace FileView{
                         ImGui::PopTextWrapPos();
                         
                         ImGui::EndGroup();
-                    
-                        // - INTERATION HANDLING -
-                        if (ImGui::IsItemHovered()){
-                            ImGui::SetTooltip("Type: %s", isFolder ? "Folder" : "File");
-                        }
-                        if (ImGui::IsItemClicked(ImGuiMouseButton_Left)){
-                            // Make in focus, and selected, so that enter can work on it                       
-                        }
-                        if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && (ImGui::IsItemHovered())){
-                            if (isFolder){
-                                if (Navigation::NavigateTo(ctx, currentItem.pidl)){
-                                    History::Append(ctx, ctx.currentFolderPidl);    // currentItem.pidl is freed in NavigateTo
-                                    ImGui::EndTable();
-                                    ImGui::EndChild();
-                                    return;
-                                }
-                            }
-                            else{
-                                Backend::ExecuteFile(currentItem.pidl);
-                            }
-                        }
+                        ImGui::PopID();
                     }
                 }
             }

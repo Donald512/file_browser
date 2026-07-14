@@ -86,6 +86,8 @@ namespace Backend{
         ShellItem* entries;  // array of ShellItems
         u64 numEntries;
         u64 capacity;
+        
+        i64 selectedIndex = -1;
     };
 
     struct LightShellItemArray{
@@ -249,4 +251,4 @@ namespace FileView{
     void Render(AppContext& ctx);
 }
 
-
+	 
