@@ -333,6 +333,8 @@ namespace FileView{
 
                     for (u64 i = startItemIdx; i < endItemIdex; i++){
                         ImGui::TableNextColumn();
+
+                        f32 realCellWidth = ImGui::GetContentRegionAvail().x;
                         
                         Backend::ShellItem& currentItem = dirs.entries[i];
                         bool isFolder = currentItem.attributes & SFGAO_FOLDER;
@@ -375,7 +377,9 @@ namespace FileView{
                         ImGui::SetCursorPos(startPos);
                         ImGui::BeginGroup();
 
-                        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (cellWidth - iconSize) * 0.5f);
+                        f32 columnStartX = ImGui::GetCursorPosX();
+                        f32 centeredIconX = columnStartX + (realCellWidth - iconSize) * 0.5f;
+                        ImGui::SetCursorPosX(centeredIconX);
 
                         // Draw a colored box as placeholder using ImDrawList, so it doesnt steal clicks like Button()
                         ImVec2 p_min = ImGui::GetCursorScreenPos();
@@ -388,12 +392,15 @@ namespace FileView{
                         
                         // center text
                         f32 textWidth = ImGui::CalcTextSize(currentItem.name.data).x; 
-                        if (textWidth < cellWidth){
-                            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (cellWidth - textWidth) * 0.5f);
+                        if (textWidth < realCellWidth){
+                            ImGui::SetCursorPosX(columnStartX + (realCellWidth - textWidth) * 0.5f);
+                        }
+                        else{
+                            ImGui::SetCursorPosX(columnStartX);
                         }
 
                         // Wraps text smoothly if name exceeds column size limit
-                        ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + cellWidth);
+                        ImGui::PushTextWrapPos(columnStartX + realCellWidth);
                         ImGui::Text("%s", currentItem.name.data);
                         ImGui::PopTextWrapPos();
                         
@@ -408,3 +415,4 @@ namespace FileView{
     }
     
 }
+
