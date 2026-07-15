@@ -22,6 +22,7 @@ int main(void){
     if (!CreateMyOSWindow(ctx, wc)) return 1;
 
     if (!InitializeGraphicsAPI(ctx, wc)) return 1;
+    Icons::InitIconCache(ctx);  // has to happen after initializing ctx.d3dDevice, else, it is 0
     
     ::ShowWindow(ctx.hwnd, SW_SHOWMAXIMIZED);
     ::UpdateWindow(ctx.hwnd); // irrelevant
@@ -53,6 +54,7 @@ int main(void){
             CreateRenderTarget(ctx);
         }
 
+        ctx.iconCache.currentFrame++;
         ImGui_Backend_NewFrame();
         ImGui::NewFrame();
 
@@ -64,6 +66,7 @@ int main(void){
     }
 
     // 3. Cleanup phase (Runs ONCE when exiting)
+    Icons::DestroyIconCache(ctx.iconCache);
     History::Destroy(ctx);
     Backend::FreeDirectoryArray(ctx.currentDirArray);
     Backend::FreeBreadcrumbs(ctx.currentBreadcrumbs);

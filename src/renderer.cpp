@@ -382,10 +382,16 @@ namespace FileView{
                         ImGui::SetCursorPosX(centeredIconX);
 
                         // Draw a colored box as placeholder using ImDrawList, so it doesnt steal clicks like Button()
-                        ImVec2 p_min = ImGui::GetCursorScreenPos();
-                        ImVec2 p_max = ImVec2(p_min.x + iconSize, p_min.y + iconSize);
-                        ImU32 iconColor = isFolder ? IM_COL32(204, 165, 51, 255) : IM_COL32(76, 127, 178, 255);
-                        ImGui::GetWindowDrawList()->AddRectFilled(p_min, p_max, iconColor, 4.0f); // 4.0f is corner rounding
+                        ImTextureID icon = Icons::GetIconTexture(ctx, currentItem.iconCacheKey);
+                        if (icon){
+                            ImGui::Image(icon, ImVec2(iconSize, iconSize));
+                        }
+                        else{
+                            ImVec2 p_min = ImGui::GetCursorScreenPos();
+                            ImVec2 p_max = ImVec2(p_min.x + iconSize, p_min.y + iconSize);
+                            ImU32 iconColor = isFolder ? IM_COL32(204, 165, 51, 255) : IM_COL32(76, 127, 178, 255);
+                            ImGui::GetWindowDrawList()->AddRectFilled(p_min, p_max, iconColor, 4.0f); // 4.0f is corner rounding
+                        }
                         
                         // Push the layout cursor past our custom drawn box
                         ImGui::Dummy(ImVec2(iconSize, iconSize));

@@ -59,6 +59,7 @@ namespace Backend{
             entry.attributes = SFGAO_FOLDER | SFGAO_CANRENAME | SFGAO_CANDELETE;  // todo add SFGAO_HASPROPSHEET
             pTargetFolder->GetAttributesOf(1, (LPCITEMIDLIST*)&childPidl, &entry.attributes);
             entry.pidl = ILCombine(targetPidl, childPidl);
+            entry.iconCacheKey = Icons::GetIconIndex(entry.pidl);
 
             CoTaskMemFree(childPidl);   
             ctx.currentDirArray.numEntries++;

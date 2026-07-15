@@ -10,21 +10,30 @@
 #include "iconFilled.h"
 #include "iconRegular.h"
 #include <ShlObj.h>
+#include <commoncontrols.h>
 #include <d3d11.h>
 #include <KnownFolders.h>
 #include <Shlwapi.h>
 // #include "imgui_boilerplate.h"
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <queue>
+#include <functional>
+#include <vector>
+
 
 // todo prefix variables used by Windows Wide function by tmp_
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "Ole32.lib")
-
+#pragma comment(lib, "comctl32.lib")
 
 using f32 = float;
 using i16 = int16_t;
 using u16 = uint16_t;
 using u64 = uint64_t;
+using u32 = uint32_t;
 using i32 = int32_t;
 using i64 = int64_t;
 using u8 = uint8_t;
@@ -74,6 +83,7 @@ namespace Backend{
         u64 fileSize = 0;   // 8
         FILETIME lastWriteTime; // 8
         SFGAOF attributes = 0;  // 4
+        u64 iconCacheKey = 0;
     };
 
     struct LightShellItem{   // just a stripped down version of ShellItem
@@ -120,6 +130,55 @@ struct PathHistory {
 };
 
 
+namespace Threading{
+    struct Job{
+        u64 generation; // this corresponds to which batch the job belongs to, for handling expired or no longer needed jobs
+        std::function<void()> task;     // the actual task to do
+    };
+
+    struct ThreadPool{
+        std::vector<std::thread> workers;   // the workers
+        std::queue<Job> queue;  
+        // A FIFO data structure of Jobs, supporting only adding new jobs at the end (push), removing a job from the start (pop) and only lets you see the first and the last job in the queue
+
+        std::mutex queueMutex;  // a mutex that allows only one thread to have access to the queue at each time, preventing two threads from doing the same job 
+        std::condition_variable alarmClock; // this is in charge of waking workers when the queue is unlocked
+        std::atomic<bool> terminate = false; // this is gonna be a flag that ends the while loop when the app is ending. its a while loop because threads have to keep doing jobs even after they are finished 
+    };
+
+    void Init(AppContext& ctx, u32 numThreads = 4);
+    void Enqueue(AppContext& ctx, u64 generation, std::function<void()> task);
+    void Destroy(AppContext& ctx);
+
+}
+
+namespace Icons{
+    struct CachedIcon{
+        u64 key = 0;
+        ImTextureID texture = 0;
+        u32 lastUsedFrame = 0;  // for LRU eviction (Least recently used)
+    };
+
+    struct IconCache{
+        CachedIcon* entries = nullptr;
+        u64 count = 0;
+        u64 capacity = 0;   // 128 or 256 
+        u32 currentFrame = 0;
+
+        HIMAGELIST hSystemImageList = nullptr;
+        // D3D11 resources for texture creation
+        ID3D11Device* d3dDevice = nullptr;
+        ID3D11DeviceContext* d3dContext = nullptr;
+    };
+
+    void InitIconCache(AppContext& ctx);
+    void DestroyIconCache(IconCache& cache);
+    ImTextureID HIconToTexture(IconCache& cache, HICON hIcon);
+    u64 GetIconIndex(PIDLIST_ABSOLUTE pidl);
+    ImTextureID GetIconTexture(AppContext& ctx, u64 key);
+    u64 EvictLeastRecentlyUsed(IconCache& cache);
+}
+
 
 // Global state container
 struct AppContext{
@@ -148,6 +207,12 @@ struct AppContext{
 
     PIDLIST_ABSOLUTE popupCachePidl = nullptr;
     Backend::LightShellItemArray popupCacheList{};
+
+    // Threading State
+    Threading::ThreadPool threadPool;   // initializes jobs, workers, and queue, with mutex and stuff
+    std::atomic<u64> currentNavGeneration = 0;  // atomic guarantes that reads and writes are data race free 
+
+    Icons::IconCache iconCache{};
 };
 
 namespace Utils{
@@ -246,9 +311,7 @@ namespace AddressBar{
 }
 
 namespace FileView{
-    constexpr f32 IconSize    = 48.0f;
+    inline f32 IconSize    = 48.0f;
     constexpr f32 XPadding    = 32.0f;
     void Render(AppContext& ctx);
 }
-
-	 
