@@ -86,3 +86,30 @@ namespace Str{
 
 
 }
+
+
+/*  Minimize wait times at school
+Math 2790: Tueday 8:30 - 9:50 
+Friday 2:30 to 3:20  Only option, Unmovable
+
+Elec 2141: Wed 11:30 - 12:50 Friday 10 - 11:20 Only option
+Lab Tuesday 11:30 - 2:20 or Wed 2:30 - 5:20     would have to wait 100mins after Math 2790 or 180mins after Elec 2141
+
+GENG 2101 Mon & Wed 8:30 - 9:50  or Mon & Wed 10-11:20
+Lab Mon 7-8:50PM 
+
+Math 2780 Mon & Wed 8:30 - 9:50 AM Lab Fri 1:30 - 2:20 Mehdi Mansoora
+or Mon & Wed 10 - 12:20 Lab Fri 11:30 - 12:20 
+If i pick Mehdi Mansoora it will clash with GENG 2101 Morning
+
+Elec 2240 Mon & Wed 1-2:20 Lab Fri 3:30 - 6:20  only option
+
+Phys 2100, 36 class options all hapening at same time,
+but lab times are different 
+Tuesday, so ill pick whichever one is the earliest that doesnt clash with any classes
+
+*/
+
+/*
+
+*/

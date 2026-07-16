@@ -23,6 +23,9 @@ namespace UI{
     }
 }
 
+/*
+    Why it top bar height 42 in 1.25 dpi and 32 in 1.0 dpi, no correlation, everything else scales normally
+*/
 namespace TopBar{
     namespace Colors = UI::Colors;
     namespace Style = UI::Style;
@@ -75,7 +78,11 @@ namespace TopBar{
         ImGui::PopStyleVar(3);  // rounding, bordersize, padding
 
         ImGui::EndChild();
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, Colors::WindowBackground);
+        ImGui::Dummy(ImVec2(ImGui::GetContentRegionAvail().x, 8.0f * ctx.dpiScale));
+        ImGui::PopStyleColor();
     }
+    // Add padding below, that spans the whole width, and is 8px * dpiScale
 }
 
 namespace ToolBar{

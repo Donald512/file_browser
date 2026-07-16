@@ -245,8 +245,12 @@ namespace UI{
 }
 
 namespace UI::Colors{
-    constexpr ImVec4 WindowBackground(0.12f, 0.12f, 0.12f, 1.00f);
+    // constexpr ImVec4 WindowBackground(0.12f, 0.12f, 0.12f, 1.00f);
+    constexpr ImVec4 WindowBackground(0.1725f, 0.1725f, 0.1725f, 1.00f);
     constexpr ImVec4 TopBarBackground(0.1725f, 0.1725f, 0.1725f, 1.00f);
+    // constexpr ImVec4 TopBarBackground(0.125f, 0.125f, 0.125f, 1.00f);
+    constexpr ImVec4 AddressBarBackground(0.22f, 0.22f, 0.22f, 1.00f);
+    constexpr ImVec4 WindowForeground(0.098f, 0.098f, 0.098f, 1.00f);   // def need to fix these names
     constexpr ImVec4 SidebarBackground(0.14f, 0.14f, 0.14f, 1.00f);
 }
 

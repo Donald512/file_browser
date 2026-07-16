@@ -69,6 +69,7 @@ namespace Icons
         DeleteDC(hdcMem);
         ReleaseDC(nullptr, hdc);
 
+        
         // Windows GDI gives us BGRA, but D3D11 texture expects RGBA
         // So we swap Blue (0) with Red (2) bytes
         // Leave alpha (3) byte, ImGui needs straight alpha
@@ -197,10 +198,21 @@ namespace Icons
 
 
 /*
+
 Initial plan was to store HICON in every ShellItem. Was abandoned because, some icons are used by many files, and storing each icon in each file is wasteful, 
 
 Option 1: Store HICON in ShellItem
 Each file carries its own icon around
 And every file loads the same icon multiple times, even tho its the same icon
+
+*/
+
+
+/* // todo
+    make d3dDevice spawn the texture with DXGI_FORMAT_B8G8R8A8_UNORM format, instead of manually swapping 
+    GetDC(nullptr) + CreateCompatibleDC + DeleteDC + ReleaseDC on every single cal - Cache memory DC in iconcache
+    many files in a folder have the same extension, so only get the key once per Plain folders, documents that arent .ico, .exe, .lnk etc
+
+
 
 */
