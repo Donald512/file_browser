@@ -47,7 +47,7 @@ namespace Icons
         }
 
         u32 width = bmp.bmWidth;
-        u32 height = bmp.bmHeight;
+        i32 height = bmp.bmHeight;
 
         // Extract pixel data from bitmap
         BITMAPINFO bmi = {};
@@ -132,6 +132,18 @@ namespace Icons
         return (u64) sfi.iIcon; // even if it fails, it returns 0
     }
 
+    u64 GetIconIndexForAddressBar(PIDLIST_ABSOLUTE pidl){
+        if (!pidl) return 0;
+
+        // Each icon has a unique index, so there's no need to hash it
+        SHFILEINFOW sfi = {};
+        SHGetFileInfoW((LPCWSTR) pidl, 0, &sfi, sizeof(sfi), SHGFI_PIDL | SHGFI_SYSICONINDEX | SHGFI_SMALLICON);
+        // sfi.iIcon now contains the unique icon index
+        return (u64) sfi.iIcon; // even if it fails, it returns 0
+    }
+
+
+
     ImTextureID GetIconTexture(AppContext& ctx, u64 key){
         IconCache& cache = ctx.iconCache;
 
@@ -144,7 +156,7 @@ namespace Icons
         }
 
         // Create texture if not found
-        HICON hIcon = ImageList_GetIcon(cache.hSystemImageList, key, ILD_TRANSPARENT);
+        HICON hIcon = ImageList_GetIcon(cache.hSystemImageList, (int) key, ILD_TRANSPARENT);
         
         ImTextureID texture = HIconToTexture(cache, hIcon);
         DestroyIcon(hIcon);

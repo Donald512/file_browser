@@ -1,7 +1,7 @@
 // core.h
 #pragma once
 
-#include <Windows.h>
+#include "WinFramework.h"
 // #include <string>
 #include <strsafe.h>
 #include <tchar.h>
@@ -69,7 +69,7 @@ struct BreadcrumbItem{
 struct BreadcrumbArray { // just a list of breadcrumbs
     BreadcrumbItem* breadcrumbs;
     Str::String fullPath;
-    HICON pathIcon = 0;
+    u64 iconIndex = 0;
     u64 count = 0;
     u64 capacity = 0;
     bool hasSubFolders = 0;
@@ -175,6 +175,7 @@ namespace Icons{
     void DestroyIconCache(IconCache& cache);
     ImTextureID HIconToTexture(IconCache& cache, HICON hIcon);
     u64 GetIconIndex(PIDLIST_ABSOLUTE pidl);
+    u64 GetIconIndexForAddressBar(PIDLIST_ABSOLUTE pidl);
     ImTextureID GetIconTexture(AppContext& ctx, u64 key);
     u64 EvictLeastRecentlyUsed(IconCache& cache);
 }
@@ -213,6 +214,11 @@ struct AppContext{
     std::atomic<u64> currentNavGeneration = 0;  // atomic guarantes that reads and writes are data race free 
 
     Icons::IconCache iconCache{};
+
+    PIDLIST_ABSOLUTE pidlThisPC;
+    PIDLIST_ABSOLUTE pidlHome;
+    PIDLIST_ABSOLUTE pidlDesktop;
+
 };
 
 namespace Utils{
@@ -246,8 +252,10 @@ namespace UI{
 
 namespace UI::Colors{
     // constexpr ImVec4 WindowBackground(0.12f, 0.12f, 0.12f, 1.00f);
-    constexpr ImVec4 WindowBackground(0.1725f, 0.1725f, 0.1725f, 1.00f);
-    constexpr ImVec4 TopBarBackground(0.1725f, 0.1725f, 0.1725f, 1.00f);
+    constexpr ImVec4 WindowBackground(0.102f, 0.133f, 0.141f, 1.00f);
+    // constexpr ImVec4 TopBarBackground(0.1725f, 0.1725f, 0.1725f, 1.00f);
+    // constexpr ImVec4 TopBarBackground(0.0f, 0.0f, 0.0f, 1.00f);
+    constexpr ImVec4 TopBarBackground(0.0f, 0.055f, 0.071f, 1.00f);
     // constexpr ImVec4 TopBarBackground(0.125f, 0.125f, 0.125f, 1.00f);
     constexpr ImVec4 AddressBarBackground(0.22f, 0.22f, 0.22f, 1.00f);
     constexpr ImVec4 WindowForeground(0.098f, 0.098f, 0.098f, 1.00f);   // def need to fix these names
@@ -264,9 +272,11 @@ namespace UI::Style{
 namespace TopBar{
     constexpr ImGuiWindowFlags Flags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
 
+    constexpr f32 PaddingForIfWindowRestored = 8.0f;
     constexpr f32 Height            = 32.0f;
     constexpr f32 TotalBtnsWidth    = 145.0f; // 145 is the distance from the vertical bar to the end of the screen
-    constexpr f32 BtnHeight         = 30.0f;    // experiment
+    // constexpr f32 BtnHeight         = 30.0f;    // experiment
+    constexpr f32 BtnHeight         = Height;    // experiment
     constexpr f32 BtnWidth          = 45.0f;
     constexpr f32 CloseBtnWidth     = 46.0f;
     /*  minimize and maximize buttons are 45 wide x 32 tall, but 
@@ -311,6 +321,7 @@ namespace NavBar{
 namespace AddressBar{
     constexpr f32 Height = 32.0f;
     constexpr f32 BarStartX = UI::Style::ToolBarLayout::LeftPadding + NavBar::Width;
+    constexpr f32 CrumbButtonHeight = 19.0f;
     void Render(AppContext& ctx);
 }
 

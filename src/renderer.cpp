@@ -13,11 +13,17 @@ namespace UI{
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, Style::NoPadding);
         if (ImGui::Begin("Main UI Workspace", nullptr, WindowFlags)){
             ImGui::PopStyleVar();
+            
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f)); // Transparent
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
 
             TopBar::Render(ctx);
             ToolBar::Render(ctx);
             FileView::Render(ctx);
-
+            
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor();
+            
             ImGui::End();
         }
     }
@@ -31,9 +37,9 @@ namespace TopBar{
     namespace Style = UI::Style;
     
     void Render(AppContext& ctx){
-        f32 height = ::IsZoomed(ctx.hwnd) ? (Height * ctx.dpiScale) : (40.0f * ctx.dpiScale);
         ImGui::PushStyleColor(ImGuiCol_ChildBg, Colors::TopBarBackground);
-        if (!ImGui::BeginChild("TopBar", ImVec2(0, height), ImGuiChildFlags_None, Flags)){
+        f32 addedHeight = !::IsZoomed(ctx.hwnd) ? PaddingForIfWindowRestored : 0.0f;
+        if (!ImGui::BeginChild("TopBar", ImVec2(0, (Height + addedHeight) * ctx.dpiScale), ImGuiChildFlags_None, Flags)){
             ImGui::PopStyleColor();
             ImGui::EndChild();
             return;
@@ -41,62 +47,66 @@ namespace TopBar{
         ImGui::PopStyleColor();
 
         f32 windowWidth = ImGui::GetWindowWidth();
-        f32 captionBtnsWidth = TotalBtnsWidth * ctx.dpiScale;
-        f32 captionBtnsStartX = windowWidth - captionBtnsWidth;
+        // f32 captionBtnsWidth = TotalBtnsWidth * ctx.dpiScale;
+        // f32 captionBtnsStartX = windowWidth - captionBtnsWidth;
 
         f32 btnWidth = BtnWidth * ctx.dpiScale;
+        f32 btnHeight = BtnHeight * ctx.dpiScale;
         f32 closeBtnWidth = CloseBtnWidth * ctx.dpiScale;
 
         f32 closeStartX = windowWidth - closeBtnWidth;
         f32 maximizeStartX = closeStartX - btnWidth;
         f32 minimizeStartX = maximizeStartX - btnWidth;
   
-        ImGui::SetCursorPos(ImVec2(captionBtnsStartX, 0.0f));
-        ImGui::TextDisabled("|");
+        // f32 textHeight = ImGui::CalcTextSize("|").y;
+        // f32 centerY = (Height - textHeight) * 0.5f;
+        // ImGui::SetCursorPos(ImVec2(captionBtnsStartX, centerY));
+        // ImGui::TextDisabled("|");
         
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Style::NoRounding); // sharp squares
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, Style::NoBorder);   // Hard-remove any outline borders
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, Style::NoPadding); // Forces razor-sharp centered glyph alignment 
 
         ImGui::SetCursorPos(ImVec2(minimizeStartX, 0.0f));   
-        ImGui::Button(ICON_REG_SUBTRACT "##win_min", ImVec2(btnWidth, BtnHeight));
+        ImGui::Button(ICON_REG_SUBTRACT "##win_min", ImVec2(btnWidth, btnHeight));
 
         // NOTE: Windows handles the actual maximize behavior so Snap Layouts continue to work.
         // These buttons are purely visual and forward the interaction to the native title bar.
         ImGui::SetCursorPos(ImVec2(maximizeStartX, 0.0f)); 
         const char* maximizeGlyph = ::IsZoomed(ctx.hwnd) ? ICON_REG_SQUARE_MULTIPLE "##win_max" : ICON_REG_MAXIMIZE "##win_max";
-        ImGui::Button(maximizeGlyph, ImVec2(btnWidth, BtnHeight));
+        ImGui::Button(maximizeGlyph, ImVec2(btnWidth, btnHeight));
 
         // to give hover-red highlight
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.90f, 0.11f, 0.14f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.70f, 0.09f, 0.11f, 1.0f)); // Darker red on click
 
         ImGui::SetCursorPos(ImVec2(closeStartX, 0.0f)); 
-        ImGui::Button(ICON_REG_DISMISS "##win_close", ImVec2(btnWidth, BtnHeight));
+        ImGui::Button(ICON_REG_DISMISS "##win_close", ImVec2(btnWidth, btnHeight));
        
         ImGui::PopStyleColor(2);    // for close button 
         ImGui::PopStyleVar(3);  // rounding, bordersize, padding
 
-        ImGui::EndChild();
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, Colors::WindowBackground);
-        ImGui::Dummy(ImVec2(ImGui::GetContentRegionAvail().x, 8.0f * ctx.dpiScale));
-        ImGui::PopStyleColor();
+        ImGui::EndChild();  // TopBar
     }
-    // Add padding below, that spans the whole width, and is 8px * dpiScale
 }
 
 namespace ToolBar{
+    namespace Colors = UI::Colors;
     void Render(AppContext& ctx){
         f32 height = Height * ctx.dpiScale;
         f32 leftPadding =  LeftPadding * ctx.dpiScale;
 
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, Colors::WindowBackground);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(leftPadding, 0.0f));
+        
         if (!ImGui::BeginChild("ToolBar", ImVec2(0, height), ImGuiChildFlags_None, Flags)){
             ImGui::PopStyleVar();
+            ImGui::PopStyleColor();
             ImGui::EndChild();
             return;
         }
         ImGui::PopStyleVar();
+        ImGui::PopStyleColor();
 
         NavBar::Render(ctx);
         ImGui::SameLine();
@@ -111,25 +121,23 @@ namespace NavBar{
     namespace Style = UI::Style;
     
     void Render(AppContext& ctx){
-        f32 verticalPadding = (ToolBar::Height - Height) * 0.5f * ctx.dpiScale; // most likely 0, wonder what the compiler does to this
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, verticalPadding));
 
         if (!ImGui::BeginChild("NavBar", ImVec2(Width * ctx.dpiScale, Height * ctx.dpiScale), ImGuiChildFlags_None, TopBar::Flags)){
-            ImGui::PopStyleVar();
             ImGui::EndChild();
             return;
         }
-        ImGui::PopStyleVar();
 
-        f32 btnSize = BtnSize * ctx.dpiScale;
-        f32 margin = XPadding * ctx.dpiScale;
-        f32 navSepSpace = btnSize + margin;
-
+        
         // ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, navBtnSize * 0.5f); // 50% rounding
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding,  4.0f * ctx.dpiScale); 
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, Style::NoBorder);   // remove any outline borders
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,Style::NoPadding);   // Autocenters text inside button, but we need to center button ourselves
 
+        f32 centerY = (ToolBar::Height - BtnSize) * 0.5f * ctx.dpiScale;
+        ImGui::SetCursorPosY(centerY);
+
+        f32 btnSize = BtnSize * ctx.dpiScale;
+        f32 margin = XPadding * ctx.dpiScale;
 
         ImGui::BeginDisabled(!Navigation::CanGoBack(ctx));
         if (ImGui::Button(ICON_REG_ARROW_LEFT "##nav_backward", ImVec2(btnSize, btnSize))) { 
@@ -168,10 +176,15 @@ namespace AddressBar{
     static char s_pathInputBuffer[1024] = {0};
 
     static void RenderPathEditor(AppContext& ctx){
+        // if y parameter in below function changes, change it in inputHeight also, use variable later
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f * ctx.dpiScale, 4.0f* ctx.dpiScale));
+  
         // Center text input cursor
-        f32 inputPaddingY = (Height * ctx.dpiScale - ImGui::GetFontSize()) * 0.5f;
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f * ctx.dpiScale, inputPaddingY));
-        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+        f32 inputHeight = ImGui::GetFontSize() + (4.0f * ctx.dpiScale * 2.0f);  // Font + (Top + Bottom)Padding
+        f32 centerY = (Height * ctx.dpiScale - inputHeight) * 0.5f;
+        ImGui::SetCursorPosY(centerY);
+
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);  // done to make textbox not the size of text
 
         if (s_justOpened){
             ImGui::SetKeyboardFocusHere();
@@ -200,35 +213,90 @@ namespace AddressBar{
     }    
 
     static void RenderBreadcrumbs(AppContext& ctx){
+        
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f * ctx.dpiScale, 4.0f * ctx.dpiScale));
 
-        char folderBuffer[MAX_PATH] = {0}; 
-        char arrowBuffer[MAX_PATH] = {0};
+        f32 buttonHeight = ImGui::GetFrameHeight();
+        f32 centerY = (Height * ctx.dpiScale - buttonHeight) * 0.5f;
+        ImGui::SetCursorPosY(centerY);
+
+        char labelBuffer[MAX_PATH] = {0};
+
+        const char* breadcrumbIcon = (ILIsEqual(ctx.pidlHome, ctx.currentFolderPidl)) ? ICON_REG_HOME : ICON_REG_DESKTOP;
+        ImGui::BeginDisabled();
+        ImGui::Button(breadcrumbIcon, ImVec2(buttonHeight, buttonHeight));
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        
+        const char* firstArrowPopupID = "##firstbcrumb_popup";
+        const char* firstArrowBtnID = "##firstbcrumb_arrow";
+
+        const char* firstArrowSign = ImGui::IsPopupOpen(firstArrowPopupID) ? ICON_REG_CHEVRON_DOWN : ICON_REG_CHEVRON_RIGHT; 
+
+        snprintf(labelBuffer, sizeof(labelBuffer), "%s%s", firstArrowSign, firstArrowBtnID);
+        if (ImGui::Button(labelBuffer)){
+            ImGui::OpenPopup(firstArrowPopupID);
+        }
+
+        ImVec2 btnRect = ImGui::GetItemRectMax();
+        ImGui::SetNextWindowPos(ImVec2(btnRect.x, btnRect.y + 2.0f));
+
+        if (ImGui::BeginPopup(firstArrowPopupID)){
+            // cache the directory contents so we dont fetch every frame
+            if (!ILIsEqual(ctx.popupCachePidl, ctx.pidlDesktop)){
+                Backend::FreeLightShellItemArray(ctx.popupCacheList);
+                Utils::FreePidl(ctx.popupCachePidl);
+                ctx.popupCacheList = Backend::GetDirectoryContents(ctx.pidlDesktop);
+                ctx.popupCachePidl = ILClone(ctx.pidlDesktop);
+            }
+
+            for (u64 j = 0; j < ctx.popupCacheList.numEntries; j++){
+                // ImGui::PushID(ctx.popupCacheList.entries[j].name.data); // can i use this
+                ImGui::PushID((int)j);
+                if (ImGui::Selectable(ctx.popupCacheList.entries[j].name.data)){
+                    if (Navigation::NavigateTo(ctx, ctx.popupCacheList.entries[j].pidl)){
+                        History::Append(ctx, ctx.currentFolderPidl);
+                    }
+                    ImGui::CloseCurrentPopup();
+                    ImGui::PopID();
+                    break;
+                }
+                ImGui::PopID();
+            }
+            ImGui::EndPopup();
+        }
+        ImGui::SameLine();
+
+
+        // this is really triggering and upsetting me, why is the texts This PC, etc, slightly lower than > 
         for (u64 i = 0; i < ctx.currentBreadcrumbs.count; i++){
             BreadcrumbItem& crumb = ctx.currentBreadcrumbs.breadcrumbs[i];
 
+            ImGui::PushID(&crumb);
             const char* safeName = crumb.displayName.data ? crumb.displayName.data : "Unknown";
-            snprintf(folderBuffer, sizeof(folderBuffer), "%s##bcrumb_%lld", safeName, i);
-            if (ImGui::Button(folderBuffer)){
+            
+            if (ImGui::Button(safeName)){
                 if (Navigation::NavigateTo(ctx, crumb.pidl)){
                     History::Append(ctx, ctx.currentFolderPidl);
                 }
             }
 
             if (i < ctx.currentBreadcrumbs.count - 1 || (i == ctx.currentBreadcrumbs.count - 1 && ctx.currentBreadcrumbs.hasSubFolders)){
-                ImGui::SameLine(0.0f, 8.0f * ctx.dpiScale);
+                ImGui::SameLine(0.0f, 0.0f);
 
-                const char* arrowSign = ImGui::IsPopupOpen(arrowBuffer) ? ICON_REG_CHEVRON_DOWN : ICON_REG_CHEVRON_RIGHT; 
-                snprintf(arrowBuffer, sizeof(arrowBuffer), "%s##bcrumb_arrow_%lld", arrowSign, i);   // use a new arrowBuffer or nah
+                char popupID [64]; 
+                snprintf(popupID, sizeof(popupID), "##bcrumb_%lld", i);
+                const char* loopArrowSign = ImGui::IsPopupOpen(popupID) ? ICON_REG_CHEVRON_DOWN : ICON_REG_CHEVRON_RIGHT; 
+                snprintf(labelBuffer, sizeof(labelBuffer), "%s%s", loopArrowSign, popupID);   // use
 
-                if (ImGui::Button(arrowBuffer)){
-                    ImGui::OpenPopup(arrowBuffer);
+                if (ImGui::Button(labelBuffer)){
+                    ImGui::OpenPopup(popupID);
                 }
 
-                ImVec2 btnRect = ImGui::GetItemRectMax();
-                ImGui::SetNextWindowPos(ImVec2(btnRect.x, btnRect.y + 2.0f));
+                ImVec2 loopBtnRect = ImGui::GetItemRectMax();
+                ImGui::SetNextWindowPos(ImVec2(loopBtnRect.x, loopBtnRect.y + 2.0f));
 
-                if (ImGui::BeginPopup(arrowBuffer)){
+                if (ImGui::BeginPopup(popupID)){
                     // cache the directory contents so we dont fetch every frame
                     if (!ILIsEqual(ctx.popupCachePidl, crumb.pidl)){
                         Backend::FreeLightShellItemArray(ctx.popupCacheList);
@@ -238,17 +306,21 @@ namespace AddressBar{
                     }
 
                     for (u64 j = 0; j < ctx.popupCacheList.numEntries; j++){
+                        ImGui::PushID((int)j);
                         if (ImGui::Selectable(ctx.popupCacheList.entries[j].name.data)){
                             if (Navigation::NavigateTo(ctx, ctx.popupCacheList.entries[j].pidl)){
                                 History::Append(ctx, ctx.currentFolderPidl);
                             }
                             ImGui::CloseCurrentPopup();
+                            ImGui::PopID();
                             break;
                         }
+                        ImGui::PopID();
                     }
                     ImGui::EndPopup();
                 }
             }
+            ImGui::PopID();
             ImGui::SameLine(0.0f, 8.0f * ctx.dpiScale);
         }
         ImGui::PopStyleVar();   // FramePadding
@@ -266,6 +338,8 @@ namespace AddressBar{
         ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.16f, 0.16f, 0.16f, 1.0f)); // FrameBg color
         
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, verticalPadding));
+        f32 centerY = (ToolBar::Height - Height) * ctx.dpiScale * 0.5f;
+        ImGui::SetCursorPosY(centerY);
         if (!ImGui::BeginChild("AddressBar", ImVec2(addressWidth, Height * ctx.dpiScale), ImGuiChildFlags_None, TopBar::Flags)){
             ImGui::PopStyleColor();
             ImGui::PopStyleVar(3);

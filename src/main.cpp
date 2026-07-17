@@ -3,6 +3,9 @@
 #include "core.h"
 #include "imgui_boilerplate.h"
 
+// {f874310e-b6b7-47dc-bc84-b9e6b38f5903}
+constexpr CLSID CLSID_HOME = 
+    { 0xf874310e, 0xb6b7, 0x47dc, { 0xbc, 0x84, 0xb9, 0xe6, 0xb3, 0x8f, 0x59, 0x03 } };
 
 int main(void){
     AppContext ctx{};
@@ -10,10 +13,11 @@ int main(void){
     Utils::InitCOM();
     History::Init(ctx);
     // Get PIDL for "This PC"
-    PIDLIST_ABSOLUTE startPidl;
-    SHGetKnownFolderIDList(FOLDERID_ComputerFolder, 0, NULL, &startPidl);
+    SHGetKnownFolderIDList(FOLDERID_ComputerFolder, 0, NULL, &ctx.pidlThisPC);
+    SHGetKnownFolderIDList(FOLDERID_Desktop, 0, NULL, &ctx.pidlDesktop);
+    HRESULT hr = SHParseDisplayName(L"shell:::{f874310e-b6b7-47dc-bc84-b9e6b38f5903}", NULL, &ctx.pidlHome, 0, NULL);
 
-    if (Navigation::NavigateTo(ctx, startPidl)){
+    if (Navigation::NavigateTo(ctx, ctx.pidlThisPC)){
         History::Append(ctx, ctx.currentFolderPidl);    // currentItem.pidl is freed in NavigateTo
     }
     
@@ -28,9 +32,7 @@ int main(void){
     ::UpdateWindow(ctx.hwnd); // irrelevant
 
     InitializeImGui(ctx);
-  
     // todo completely migrate from ImGui::Text to Direct2D + DirectWrite
-
 
 
     bool running = true;

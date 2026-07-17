@@ -91,12 +91,19 @@ namespace Backend{
         IShellFolder* pTargetFolder = nullptr; 
 
         SHGetDesktopFolder(&pDesktop); 
+        LightShellItemArray results{};
 
-        if (FAILED(pDesktop->BindToObject(targetPidl, nullptr, IID_IShellFolder, (void**)&pTargetFolder))){
-            pDesktop->Release();
-            return LightShellItemArray{};
+        // Handle Desktop root differently, cannot Bind desktop to desktop
+        if (ILIsEmpty(targetPidl)){
+            pTargetFolder = pDesktop;
+            pTargetFolder->AddRef();    // add reference for release at the bottom
         }
-
+        else{
+            if (FAILED(pDesktop->BindToObject(targetPidl, nullptr, IID_IShellFolder, (void**)&pTargetFolder))){
+                pDesktop->Release();
+                return results;
+            }
+        }
        
         IEnumIDList* pEnum = nullptr;
         if (FAILED(pTargetFolder->EnumObjects(nullptr, SHCONTF_FOLDERS, &pEnum))){ // this is for breadcrumbs only, so only folders
@@ -105,7 +112,6 @@ namespace Backend{
             pDesktop->Release();
         }
 
-        LightShellItemArray results{};
 
         results.capacity = 32;
         results.entries = (LightShellItem*) malloc(sizeof(LightShellItem) * results.capacity);
@@ -193,6 +199,7 @@ namespace Backend{
 
         ctx.currentBreadcrumbs.fullPath = GetTypeablePath(pAccumulated);
         ctx.currentBreadcrumbs.hasSubFolders = PidlHasSubFolders(pAccumulated);
+        ctx.currentBreadcrumbs.iconIndex = Icons::GetIconIndexForAddressBar(pAccumulated);
 
         if (pAccumulated){
             Utils::FreePidl(pAccumulated);
