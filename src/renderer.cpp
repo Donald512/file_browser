@@ -18,7 +18,8 @@ namespace UI{
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
 
             TopBar::Render(ctx);
-            ToolBar::Render(ctx);
+            ToolBar::Render(ctx); // contains NavBar, Address Bar, and Search Bar
+            CommandBar::Render(ctx);
             FileView::Render(ctx);
             
             ImGui::PopStyleVar();
@@ -29,9 +30,6 @@ namespace UI{
     }
 }
 
-/*
-    Why it top bar height 42 in 1.25 dpi and 32 in 1.0 dpi, no correlation, everything else scales normally
-*/
 namespace TopBar{
     namespace Colors = UI::Colors;
     namespace Style = UI::Style;
@@ -214,7 +212,7 @@ namespace AddressBar{
 
     static void RenderBreadcrumbs(AppContext& ctx){
         
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4.0f * ctx.dpiScale, 4.0f * ctx.dpiScale));
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f * ctx.dpiScale, 4.0f * ctx.dpiScale));
 
         f32 buttonHeight = ImGui::GetFrameHeight();
         f32 centerY = (Height * ctx.dpiScale - buttonHeight) * 0.5f;
@@ -375,8 +373,50 @@ namespace AddressBar{
         }
         ImGui::EndChild();
     }
+}
 
+namespace CommandBar{
+    namespace Colors = UI::Colors;
+    namespace Style = UI::Style;
+    void Render(AppContext& ctx){
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, Colors::WindowForeground);
+        if (!ImGui::BeginChild("CommandBar", ImVec2(0, Height * ctx.dpiScale), ImGuiChildFlags_None, TopBar::Flags) ){
+            ImGui::PopStyleColor();
+            ImGui::EndChild();
+            return;
+        }
+        ImGui::PopStyleColor();
 
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f * ctx.dpiScale, 4.0f * ctx.dpiScale));
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, Style::NoBorder);
+        f32 oldScale = ImGui::GetFont()->Scale;
+        ImGui::GetFont()->Scale = 0.85f; 
+        ImGui::PushFont(ImGui::GetFont());
+
+        f32 buttonHeight = ImGui::GetFrameHeight();
+        f32 centerY = (Height * ctx.dpiScale - buttonHeight) * 0.5f;
+        ImGui::SetCursorPosY(centerY);  
+
+        // =========================== New 
+        char* newMenuPopupId = "NewMenuPopup";       
+        ImGui::BeginDisabled(ctx.currentDirArray.access == Backend::IO::FolderAccess::NoCreate);
+        std::string newLabel = Lang::Translate(ctx, "New") + " " + std::string(ICON_REG_CHEVRON_DOWN);
+
+        if (Render::IconAndTextButton("NewBtn", ICON_REG_ADD_CIRCLE, newLabel.c_str())){
+            ImGui::OpenPopup(newMenuPopupId);
+        }
+        ImGui::EndDisabled();
+        if (ImGui::BeginPopup(newMenuPopupId)){
+            
+            ImGui::EndPopup();
+        }
+        // ============================
+        ImGui::SameLine();
+    
+
+        ImGui::PopStyleVar(2);
+        ImGui::EndChild();
+    }
 }
 
 namespace FileView{
@@ -503,3 +543,33 @@ namespace FileView{
     
 }
 
+
+namespace Render{
+    namespace Colors = UI::Colors;
+    bool IconAndTextButton(const char* str_id, const char* icon, const char* label, const ImVec4& icon_color){
+        ImGui::PushID(str_id);
+
+        f32 iconWidth = ImGui::CalcTextSize(icon).x;
+        f32 textWidth = ImGui::CalcTextSize(label).x;
+        f32 innerSpacing = ImGui::GetStyle().ItemInnerSpacing.x;
+        f32 btnWidth = iconWidth + textWidth + (innerSpacing * 2.0f);
+        f32 btnHeight = ImGui::GetFrameHeight();
+
+        ImVec2 startCursorPos = ImGui::GetCursorPos();
+
+        // clickable bounding box
+        bool pressed = ImGui::Button("##bg", ImVec2(btnWidth, btnHeight));
+
+        ImGui::SetCursorPos(ImVec2(startCursorPos.x + innerSpacing, startCursorPos.y + (btnHeight - ImGui::GetTextLineHeight()) * 0.5f));
+
+        ImGui::PushStyleColor(ImGuiCol_Text, icon_color);
+        ImGui::TextUnformatted(icon);
+        ImGui::PopStyleColor();
+
+        ImGui::SameLine(0.0f, innerSpacing);
+        ImGui::TextUnformatted(label);
+
+        ImGui::PopID();
+        return pressed;
+    }
+}

@@ -21,6 +21,7 @@
 #include <queue>
 #include <functional>
 #include <vector>
+#include <map>
 
 
 // todo prefix variables used by Windows Wide function by tmp_
@@ -28,6 +29,7 @@
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "Ole32.lib")
 #pragma comment(lib, "comctl32.lib")
+#pragma comment(lib, "Advapi32.lib")
 
 using f32 = float;
 using i16 = int16_t;
@@ -76,7 +78,36 @@ struct BreadcrumbArray { // just a list of breadcrumbs
 
 };
 //
+
 namespace Backend{    
+    namespace IO{
+        enum class FolderAccess {
+            NoCreate,     // Hide "New" menu completely
+            Restricted,   // Only show New Folder
+            FullAccess    // Show full menu (cached ShellNew items)
+        };
+
+        enum class NewItemAction{
+            Folder,
+            Shortcut,
+            EmptyFile,
+            FromTemplate
+        };
+
+        struct NewMenuItem {
+            Str::String displayName; // e.g., "Text Document"
+            Str::String extension;   // e.g., ".txt"
+            PIDLIST_ABSOLUTE templatePath; // If it uses a template file
+            u64 iconIndex;           // The System Image List index for the icon
+            NewItemAction action;
+        };
+
+        struct NewMenuItemArray{
+            NewMenuItem* entries = nullptr;
+            u64 capacity = 0;
+            u64 count = 0;
+        };
+    }
     struct ShellItem{
         Str::String name; // 24
         PIDLIST_ABSOLUTE pidl = nullptr;    // 8
@@ -98,6 +129,7 @@ namespace Backend{
         u64 capacity;
         
         i64 selectedIndex = -1;
+        Backend::IO::FolderAccess access = Backend::IO::FolderAccess::NoCreate;
     };
 
     struct LightShellItemArray{
@@ -119,7 +151,13 @@ namespace Backend{
     bool PidlHasSubFolders(PCIDLIST_ABSOLUTE targetPidl);
     PIDLIST_ABSOLUTE CreatePidlFromPath(const wchar_t* widePath);
     bool ExecuteFile(PIDLIST_ABSOLUTE pidl);    // opens the file with the default app
-    
+
+}
+
+namespace Backend::IO{
+    FolderAccess GetFolderAccess(PIDLIST_ABSOLUTE pidl);
+    void EnumerateNewMenu(AppContext& ctx);
+
 }
 
 struct PathHistory {
@@ -171,6 +209,25 @@ namespace Icons{
         ID3D11DeviceContext* d3dContext = nullptr;
     };
 
+    struct Group1{  // persistent icons so they dont take up space in IconCache, since they always used
+        ImTextureID NEW;
+        ImTextureID CUT;
+        ImTextureID COPY;
+        ImTextureID PASTE;
+        ImTextureID RENAME;
+        ImTextureID SHARE;
+        ImTextureID BIN;
+        ImTextureID SORT;
+        ImTextureID VIEW;
+    };
+
+    struct Group2{ // These come up when you click on a photo
+        ImTextureID SETBG;
+        ImTextureID ROTATELEFT;
+        ImTextureID ROTATERIGHT;
+    };
+    // Might just use ordinary icons after, then i spent the last 4 hours looking for exact icons online
+
     void InitIconCache(AppContext& ctx);
     void DestroyIconCache(IconCache& cache);
     ImTextureID HIconToTexture(IconCache& cache, HICON hIcon);
@@ -178,6 +235,39 @@ namespace Icons{
     u64 GetIconIndexForAddressBar(PIDLIST_ABSOLUTE pidl);
     ImTextureID GetIconTexture(AppContext& ctx, u64 key);
     u64 EvictLeastRecentlyUsed(IconCache& cache);
+    u64 GetIconIndex2(UINT flags);  // so i dont have GetIconIndexSmall
+    u64 GetIconIndexForExt(const wchar_t* extension);
+}
+
+namespace Lang{
+    
+    enum class Language{
+        English,
+        French,
+        Spanish
+    };
+
+    // using std::string cos i cannot handle operators 
+    inline std::map<Language, std::map<std::string, std::string>> translations =
+    {
+        {
+            Language::English,
+            {
+                {"New", "New"},
+                {"Open", "Open"},
+                {"Save", "Save"}
+            }
+        },
+        {
+            Language::French,
+            {
+                {"New", "Nouveau"},
+                {"Open", "Ouvrir"},
+                {"Save", "Enregistrer"}
+            }
+        }
+    };
+    std::string Translate(AppContext& ctx  , const char* string);
 }
 
 
@@ -219,15 +309,15 @@ struct AppContext{
     PIDLIST_ABSOLUTE pidlHome;
     PIDLIST_ABSOLUTE pidlDesktop;
 
+    Lang::Language UserLang = Lang::Language::English;
+
+    Backend::IO::NewMenuItemArray newMenuItems{};
 };
 
 namespace Utils{
     void InitCOM();
     void FreePidl(PIDLIST_ABSOLUTE& pidl);
 }
-
-
-
 
 namespace Navigation{
     bool NavigateTo(AppContext& ctx, PIDLIST_ABSOLUTE newPidl);    
@@ -260,6 +350,7 @@ namespace UI::Colors{
     constexpr ImVec4 AddressBarBackground(0.22f, 0.22f, 0.22f, 1.00f);
     constexpr ImVec4 WindowForeground(0.098f, 0.098f, 0.098f, 1.00f);   // def need to fix these names
     constexpr ImVec4 SidebarBackground(0.14f, 0.14f, 0.14f, 1.00f);
+    constexpr ImVec4 AccentBlue(0.0f, 0.47f, 0.84f, 1.0f);
 }
 
 namespace UI::Style{
@@ -322,6 +413,16 @@ namespace AddressBar{
     constexpr f32 Height = 32.0f;
     constexpr f32 BarStartX = UI::Style::ToolBarLayout::LeftPadding + NavBar::Width;
     constexpr f32 CrumbButtonHeight = 19.0f;
+    void Render(AppContext& ctx);
+}
+
+namespace Render{
+    bool IconAndTextButton(const char* str_id, const char* icon, const char* label, const ImVec4& icon_color = UI::Colors::AccentBlue);
+}
+
+namespace CommandBar{
+    constexpr f32 Height = 46.0f;
+
     void Render(AppContext& ctx);
 }
 

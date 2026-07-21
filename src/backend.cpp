@@ -37,7 +37,7 @@ namespace Backend{
         ctx.currentDirArray.capacity = 64;
         ctx.currentDirArray.selectedIndex = -1;
         ctx.currentDirArray.entries = (ShellItem*) malloc(sizeof(ShellItem) * ctx.currentDirArray.capacity);
-
+        ctx.currentDirArray.access = IO::GetFolderAccess(targetPidl);
         LPITEMIDLIST childPidl = nullptr;   // buffer for PIDLs
         ULONG fetched = 0;                  // tracker required by Windows to confirm that an item was succefully copied
         
@@ -56,6 +56,7 @@ namespace Backend{
             StrRetToBufW(&strName, childPidl, nameBuffer, MAX_PATH);
             entry.name = Str::WideToString(nameBuffer);
 
+            // todo, check if Folder and if it is, get the extension and use FIlEATTRIBUTES
             entry.attributes = SFGAO_FOLDER | SFGAO_CANRENAME | SFGAO_CANDELETE;  // todo add SFGAO_HASPROPSHEET
             pTargetFolder->GetAttributesOf(1, (LPCITEMIDLIST*)&childPidl, &entry.attributes);
             entry.pidl = ILCombine(targetPidl, childPidl);
@@ -331,7 +332,7 @@ namespace Backend{
 
                         if (_wcsicmp(nameBuf, widePath) == 0) {
                             pidl = ILClone(childPidl); 
-                            CoTaskMemFree(childPidl); // FIX: Free this BEFORE breaking to prevent memory leak
+                            CoTaskMemFree(childPidl); 
                             break;
                         }
                     }
@@ -403,6 +404,137 @@ namespace Backend{
 
 } // namespace Backend
 
+
+namespace Backend::IO{
+    FolderAccess GetFolderAccess(PIDLIST_ABSOLUTE targetPidl){
+        if (!targetPidl) return FolderAccess::NoCreate;
+        
+        // 1. Physical path check (Handles mapped folders, redirects, & templates)
+        // This catches read-only drives, system folders
+        wchar_t* pszPath = nullptr;
+        if (SUCCEEDED(SHGetNameFromIDList(targetPidl, SIGDN_FILESYSPATH, &pszPath))){
+            DWORD dwAttrib = GetFileAttributesW(pszPath);
+            if (dwAttrib != INVALID_FILE_ATTRIBUTES && (dwAttrib & FILE_ATTRIBUTE_DIRECTORY)){
+                // Check if the directory is marked read-only on the file system level
+                if (dwAttrib & FILE_ATTRIBUTE_READONLY) {
+                    CoTaskMemFree(pszPath);
+                    return FolderAccess::Restricted; // Allow browsing/basic viewing, but restrict creation
+                }
+
+                // todo check if Quick write-permission check using CreateFileW is neccesary
+
+                CoTaskMemFree(pszPath);
+                return FolderAccess::FullAccess;
+            }
+            CoTaskMemFree(pszPath);
+            return FolderAccess::NoCreate;
+        }
+
+        // 2. Fallback for Virtual/Shell Folders (OneDrive, Libraries, Control Panel, etc.)
+        // These don't have standard physical paths, so we check Shell attributes instead.
+        IShellFolder* pParentFolder = nullptr;
+        PCUITEMID_CHILD pidlChild = nullptr;
+
+        HRESULT hr = SHBindToFolderIDListParent(nullptr, targetPidl, IID_PPV_ARGS(&pParentFolder), &pidlChild);
+        if (FAILED(hr)) {
+            return FolderAccess::NoCreate;
+        }
+        ULONG attributes = SFGAO_FILESYSTEM | SFGAO_FILESYSANCESTOR | SFGAO_STORAGE | SFGAO_STREAM;
+        hr = pParentFolder->GetAttributesOf(1, &pidlChild, &attributes);
+        pParentFolder->Release();
+
+        // If it has physical or storage shell attributes, it a real place on disk
+        if (SUCCEEDED(hr) && ((attributes & SFGAO_FILESYSTEM) || (attributes & SFGAO_FILESYSANCESTOR))) {
+            // "This PC" and "Network" are FILESYSANCESTOR, but they do NOT have SFGAO_STORAGE or SFGAO_STREAM.
+            // ZIP folders and OneDrive folders WILL have SFGAO_STORAGE/SFGAO_STREAM along with file system flags.
+            bool isFileSystem = (attributes & SFGAO_FILESYSTEM);
+            bool isStorageContainer = (attributes & (SFGAO_STORAGE | SFGAO_STREAM));
+            if (isFileSystem && isStorageContainer) {
+                return FolderAccess::FullAccess;
+            }
+            // If it's a file system ancestor (like the Desktop root itself), we can allow it
+            // ONLY if it's not a pure virtual root folder like "This PC".
+            if ((attributes & SFGAO_FILESYSANCESTOR) && isStorageContainer) {
+                return FolderAccess::FullAccess; 
+            }
+        }
+        // otherwise its a purely virtual namespace (like "This PC" root or "Network")
+        return FolderAccess::NoCreate;
+    }
+
+    void EnumerateNewMenu(AppContext& ctx){
+        ctx.newMenuItems.capacity = 8;
+        ctx.newMenuItems.entries = (NewMenuItem*) malloc(ctx.newMenuItems.capacity * sizeof(NewMenuItem));
+        ctx.newMenuItems.count = 0; // Initialize count
+        
+        auto PushMenuItem = [&](NewMenuItem item){
+            if (ctx.newMenuItems.count >= ctx.newMenuItems.capacity){
+                ctx.newMenuItems.capacity *= 2;
+                ctx.newMenuItems.entries = (NewMenuItem*) realloc(ctx.newMenuItems.entries, ctx.newMenuItems.capacity * sizeof(NewMenuItem));
+            }
+            ctx.newMenuItems.entries[ctx.newMenuItems.count] = item;
+            ctx.newMenuItems.count++;
+        };
+
+
+        // Hardcode  folder and shortcut later
+        HKEY hKeyRoot;
+        if (RegOpenKeyExW(HKEY_CLASSES_ROOT, NULL, 0, KEY_READ, &hKeyRoot) != ERROR_SUCCESS) return;
+        
+        DWORD index = 0;
+        wchar_t subKeyName[256];
+        DWORD nameLen = 256;
+
+        while(RegEnumKeyExW(hKeyRoot, index, subKeyName, &nameLen, NULL, NULL, NULL, NULL) == ERROR_SUCCESS){
+
+            if (subKeyName[0] != L'.') continue;    // we only care about extensiions, but what else is there
+
+            wchar_t* shellNewPath = wcscat(subKeyName, L"\\ShellNew");
+            HKEY hKeyShellNew;
+
+            if (RegOpenKeyExW(HKEY_CLASSES_ROOT, shellNewPath, 0, KEY_READ, &hKeyShellNew) == ERROR_SUCCESS){
+                NewMenuItem item = {};
+                item.action = NewItemAction::EmptyFile;
+
+                item.extension = Str::WideToString(subKeyName);
+                // maybe i should switch to std::string, and RAII, mehn casey muratori judging me
+                // hmmmm switch or continue
+
+                // check if its a template file
+                wchar_t templateFile[MAX_PATH];
+                DWORD templateSize = sizeof(templateFile);
+                if (RegQueryValueExW(hKeyShellNew, L"FileName", NULL, NULL, (LPBYTE) templateFile, &templateSize) == ERROR_SUCCESS){
+                    item.action = NewItemAction::FromTemplate;
+
+                    item.templatePath = Backend::CreatePidlFromPath(templateFile);
+                }
+                RegCloseKey(hKeyShellNew);
+
+                // Get Friendly Name ("txtfile" -> "Text Document")
+                wchar_t progID[256] = {0};
+                DWORD progIDSize = sizeof(progID);
+                bool foundName = false;
+
+                if (RegQueryValueExW(hKeyRoot, subKeyName, NULL, NULL, (LPBYTE)progID, &progIDSize) == ERROR_SUCCESS && progIDSize > 2) {
+                    wchar_t friendlyName[256] = {0};
+                    DWORD friendlySize = sizeof(friendlyName);
+                    if (RegQueryValueExW(hKeyRoot, progID, NULL, NULL, (LPBYTE)friendlyName, &friendlySize) == ERROR_SUCCESS && friendlySize > 2) {
+                        item.displayName = Str::WideToString(friendlyName);
+                        foundName = true;
+                    }
+                }
+
+                // Get the specific Icon for this extension!
+                item.iconIndex = Icons::GetIconIndexForExt(subKeyName);
+                
+                PushMenuItem(item);
+    
+            }
+        }
+        RegCloseKey(hKeyRoot);
+    }
+            
+}
 
 
 /*

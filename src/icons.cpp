@@ -132,7 +132,27 @@ namespace Icons
         return (u64) sfi.iIcon; // even if it fails, it returns 0
     }
 
-    u64 GetIconIndexForAddressBar(PIDLIST_ABSOLUTE pidl){
+    u64 GetIconIndex2(UINT flags){  // so i dont have GetIconIndexSmall
+        SHFILEINFOW sfi = {};
+        SHGetFileInfoW((LPCWSTR) L"DUMMY", 0, &sfi, sizeof(sfi), flags);  
+        return (u64) sfi.iIcon; 
+    }
+
+    u64 GetIconIndexForExt(const wchar_t* extension){
+        wchar_t dummyPath[MAX_PATH];
+        swprintf_s(dummyPath, MAX_PATH, L"dummy%s", extension); // Creates dummy.txt if extension is .txt
+
+        SHFILEINFOW sfi = {};
+        UINT flags = SHGFI_USEFILEATTRIBUTES | SHGFI_SYSICONINDEX | SHGFI_SMALLICON;
+
+        if (SHGetFileInfoW(dummyPath, FILE_ATTRIBUTE_NORMAL, &sfi, sizeof(sfi), flags)){
+            return (u64) sfi.iIcon;
+        }
+        return 0;
+    }
+
+
+    u64 GetIconIndexForAddressBar(PIDLIST_ABSOLUTE pidl){ // No more in use
         if (!pidl) return 0;
 
         // Each icon has a unique index, so there's no need to hash it
@@ -141,6 +161,7 @@ namespace Icons
         // sfi.iIcon now contains the unique icon index
         return (u64) sfi.iIcon; // even if it fails, it returns 0
     }
+
 
 
 
@@ -203,8 +224,6 @@ namespace Icons
 
         return indexOfLRU;
     }
-
-
 
 } // namespace Icons
 

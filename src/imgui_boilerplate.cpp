@@ -57,6 +57,7 @@ static void BuildFonts(AppContext& ctx, ImFontAtlas* atlas){
     // 2. Fluent Icons (Merged directly into Base Font)
     ImFontConfig icon_config;
     icon_config.MergeMode = true;
+    icon_config.GlyphOffset.y = 2.0f* ctx.dpiScale; // ion know why, but it put the chevrons on the same line as the breadcrumbs
     icon_config.PixelSnapH = true;
     icon_config.GlyphMinAdvanceX = 16.0f * ctx.dpiScale; 
     

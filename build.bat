@@ -41,6 +41,7 @@ echo [2/2] Compiling %source_file%
 cl /nologo /Z7 /W4 /MP /std:c++17 /I"include" /I"%imgui_root%" /I"%imgui_root%\backends" /I"%font_stuff%"^
    "%source_file%" "src\imgui_boilerplate.cpp" "src\backend.cpp" "src\string.cpp"^
    "src\renderer.cpp" "src\utils.cpp" "src\navigation.cpp" "src\history.cpp" "src\icons.cpp"^
+   "src\language.cpp"^
    "%build_dir%\imgui.obj" ^
    "%build_dir%\imgui_widgets.obj" ^
    "%build_dir%\imgui_draw.obj" ^

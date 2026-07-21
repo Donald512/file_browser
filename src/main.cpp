@@ -15,8 +15,10 @@ int main(void){
     // Get PIDL for "This PC"
     SHGetKnownFolderIDList(FOLDERID_ComputerFolder, 0, NULL, &ctx.pidlThisPC);
     SHGetKnownFolderIDList(FOLDERID_Desktop, 0, NULL, &ctx.pidlDesktop);
-    HRESULT hr = SHParseDisplayName(L"shell:::{f874310e-b6b7-47dc-bc84-b9e6b38f5903}", NULL, &ctx.pidlHome, 0, NULL);
+    SHParseDisplayName(L"shell:::{f874310e-b6b7-47dc-bc84-b9e6b38f5903}", NULL, &ctx.pidlHome, 0, NULL);
 
+    Backend::IO::EnumerateNewMenu(ctx);
+    // todo currently doesnt work, so come back after refactoring whole codebase
     if (Navigation::NavigateTo(ctx, ctx.pidlThisPC)){
         History::Append(ctx, ctx.currentFolderPidl);    // currentItem.pidl is freed in NavigateTo
     }
