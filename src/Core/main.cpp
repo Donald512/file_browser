@@ -1,41 +1,36 @@
-// main.cpp
-
-#include "core.h"
+#include "AppContext.h"
 #include "imgui_boilerplate.h"
+#include "UI.h"
+#include <ShlDisp.h>
+
 
 // {f874310e-b6b7-47dc-bc84-b9e6b38f5903}
 constexpr CLSID CLSID_HOME = 
     { 0xf874310e, 0xb6b7, 0x47dc, { 0xbc, 0x84, 0xb9, 0xe6, 0xb3, 0x8f, 0x59, 0x03 } };
 
-int main(void){
+int main (void){
+    // Init com
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     AppContext ctx{};
-    // 1. Setup phase
-    Utils::InitCOM();
-    History::Init(ctx);
+
     // Get PIDL for "This PC"
-    SHGetKnownFolderIDList(FOLDERID_ComputerFolder, 0, NULL, &ctx.pidlThisPC);
-    SHGetKnownFolderIDList(FOLDERID_Desktop, 0, NULL, &ctx.pidlDesktop);
-    SHParseDisplayName(L"shell:::{f874310e-b6b7-47dc-bc84-b9e6b38f5903}", NULL, &ctx.pidlHome, 0, NULL);
+    SHGetKnownFolderIDList(FOLDERID_ComputerFolder, 0, NULL, ctx.pidlThisPC.GetAddressOf());
+    SHGetKnownFolderIDList(FOLDERID_Desktop, 0, NULL, ctx.pidlDesktop.GetAddressOf());
+    SHParseDisplayName(L"shell:::{f874310e-b6b7-47dc-bc84-b9e6b38f5903}", NULL, ctx.pidlHome.GetAddressOf(), 0, NULL);
 
-    Backend::IO::EnumerateNewMenu(ctx);
-    // todo currently doesnt work, so come back after refactoring whole codebase
-    if (Navigation::NavigateTo(ctx, ctx.pidlThisPC)){
-        History::Append(ctx, ctx.currentFolderPidl);    // currentItem.pidl is freed in NavigateTo
-    }
-    
+    ctx.navigation.NavigateTo(ctx.pidlThisPC.get());
+
     WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"File Browser Window", nullptr };
-
     if (!CreateMyOSWindow(ctx, wc)) return 1;
 
     if (!InitializeGraphicsAPI(ctx, wc)) return 1;
-    Icons::InitIconCache(ctx);  // has to happen after initializing ctx.d3dDevice, else, it is 0
-    
+    ctx.icons.Init(ctx.d3dDevice.Get(), ctx.d3dContext.Get());
+
     ::ShowWindow(ctx.hwnd, SW_SHOWMAXIMIZED);
     ::UpdateWindow(ctx.hwnd); // irrelevant
 
     InitializeImGui(ctx);
     // todo completely migrate from ImGui::Text to Direct2D + DirectWrite
-
 
     bool running = true;
     while (running) {
@@ -58,30 +53,26 @@ int main(void){
             CreateRenderTarget(ctx);
         }
 
-        ctx.iconCache.currentFrame++;
+        ctx.icons.NextFrame(); 
         ImGui_Backend_NewFrame();
         ImGui::NewFrame();
 
-        UI::Render(ctx);
+        UI::Render(ctx); 
 
         ImGui::Render();
   
         MyGraphicsAPI_PresentFrame(ctx); 
     }
 
-    // 3. Cleanup phase (Runs ONCE when exiting)
-    Icons::DestroyIconCache(ctx.iconCache);
-    History::Destroy(ctx);
-    Backend::FreeDirectoryArray(ctx.currentDirArray);
-    Backend::FreeBreadcrumbs(ctx.currentBreadcrumbs);
-    Utils::FreePidl(ctx.popupCachePidl);
-    Backend::FreeLightShellItemArray(ctx.popupCacheList);
-
     ::UnregisterClassW(wc.lpszClassName, wc.hInstance);
     ShutdownImGui(ctx, wc);
     printf("Exited succefully\n");
     return 0;
+
 }
+
+
+
 
 /*  ImGuiListClipper for only previewing visible items
     Main thread should only give 60+ frames to ImGui, never touch a pdf file, open a video, or run an expensive SHGetFileInfoW

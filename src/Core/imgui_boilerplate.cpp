@@ -41,7 +41,7 @@ void InitializeImGui(AppContext &ctx){
 
     // Setup Platform/Renderer backends
     ImGui_ImplWin32_Init(ctx.hwnd);
-    ImGui_ImplDX11_Init(ctx.d3dDevice, ctx.d3dContext);
+    ImGui_ImplDX11_Init(ctx.d3dDevice.Get(), ctx.d3dContext.Get());
 
     // todo ApplyWindows11DarkTheme();
 }
@@ -103,10 +103,11 @@ void MyGraphicsAPI_PresentFrame(AppContext& ctx){
     const float clear_color_with_alpha[4] = {clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w };
 
     // 3. Tell your GPU to target your main window view
-    ctx.d3dContext->OMSetRenderTargets(1, &ctx.renderTargetView, nullptr);
+    ID3D11RenderTargetView* rtv = ctx.renderTargetView.Get();
+    ctx.d3dContext->OMSetRenderTargets(1, &rtv, nullptr);
 
     // 4. Wipe the previous frame's pixels off the screen using your clear color
-    ctx.d3dContext->ClearRenderTargetView(ctx.renderTargetView, clear_color_with_alpha);
+    ctx.d3dContext->ClearRenderTargetView(ctx.renderTargetView.Get(), clear_color_with_alpha);
 
     // 5. Hand the calculated ImGui triangles over to DirectX 11 to draw them
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
@@ -229,9 +230,9 @@ bool CreateDeviceD3D(AppContext& ctx){
 
 void CleanupDeviceD3D(AppContext& ctx){
     CleanupRenderTarget(ctx);
-    if (ctx.swapChain) { ctx.swapChain->Release(); ctx.swapChain = nullptr; }
-    if (ctx.d3dContext) { ctx.d3dContext->Release(); ctx.d3dContext = nullptr; }
-    if (ctx.d3dDevice) { ctx.d3dDevice->Release(); ctx.d3dDevice = nullptr; }
+    ctx.swapChain.Reset();
+    ctx.d3dContext.Reset();
+    ctx.d3dDevice.Reset();
 }
 
 void CreateRenderTarget(AppContext& ctx){
@@ -242,7 +243,7 @@ void CreateRenderTarget(AppContext& ctx){
 }
 
 void CleanupRenderTarget(AppContext& ctx){
-    if (ctx.renderTargetView) { ctx.renderTargetView->Release(); ctx.renderTargetView = nullptr; }
+    ctx.renderTargetView.Reset();
 }
 
 // Forward declare message handler from imgui_impl_win32.cpp
@@ -327,6 +328,11 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam){
         // Re-bake fonts on the CPU using the new scale
         ImGuiIO& io = ImGui::GetIO();
         BuildFonts(*ctx, io.Fonts);
+
+        int w, h;
+        unsigned char* pixels;
+        io.Fonts->GetTexDataAsRGBA32(&pixels, &w, &h);
+        printf("Font atlas: %d x %d = %.1f MB\n", w, h, (w * h * 4) / (1024.0f * 1024.0f));
 
         // Force DX11 to upload the brand-new scaled font sheet to the GPU
         ImGui_ImplDX11_CreateDeviceObjects();

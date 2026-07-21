@@ -18,7 +18,6 @@
 #define NOSYSMETRICS
 #define NOMENUS
 // #define NOICONS
-#define NOSYSCOMMANDS
 #define NORASTEROPS
 #define OEMRESOURCE
 #define NOATOM
