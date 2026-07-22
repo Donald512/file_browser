@@ -9,6 +9,8 @@
 using Microsoft::WRL::ComPtr;
 using namespace WShell;
 
+static std::wstring GetDefaultValue(HKEY root, const wchar_t* subkey);
+
 bool WShell::Directory::Load(PCIDLIST_ABSOLUTE folder){
     if (!folder) return false;
     items.clear();
@@ -338,3 +340,78 @@ FolderAccess WShell::GetFolderAccess(PCIDLIST_ABSOLUTE folder){
     // otherwise its a purely virtual namespace (like "This PC" root or "Network")
     return FolderAccess::NoCreate;
 }
+
+// =======================================
+// RegQueryValueExW reads a VALUE, this function is just boilerplate that will be used to read the registry
+static std::wstring GetDefaultValue(HKEY root, const wchar_t* subkey){
+    HKEY hKey = nullptr;
+    if (RegOpenKeyExW(root, subkey, 0, KEY_READ, &hKey) != ERROR_SUCCESS) return L"";
+
+    wchar_t buffer[256] = {};
+    DWORD size = sizeof(buffer);
+    std::wstring result;
+
+    if (RegQueryValueExW(hKey, nullptr, nullptr, nullptr, reinterpret_cast<BYTE*>(buffer), &size) == ERROR_SUCCESS) {
+        result = buffer;
+    }
+    RegCloseKey(hKey);
+    return result;
+}
+
+// =======================================
+
+std::vector<NewMenuItem> WShell::EnumerateNewMenu(){
+    std::vector<NewMenuItem> menuItems;
+
+    HKEY hKeyRoot = nullptr;
+    if (RegOpenKeyExW(HKEY_CLASSES_ROOT, nullptr, 0, KEY_READ, &hKeyRoot) != ERROR_SUCCESS){
+        return menuItems;
+    }
+
+    wchar_t subKeyName[256];
+    for (DWORD index = 0; ; index++){
+        DWORD nameLen = 256;   // reset every iteration, not just once before the loop
+        if (RegEnumKeyExW(hKeyRoot, index, subKeyName, &nameLen, nullptr, nullptr, nullptr, nullptr) != ERROR_SUCCESS){
+            break;   // ERROR_NO_MORE_ITEMS, or a real error — either way, done
+        }
+
+         if (subKeyName[0] != L'.') continue;
+
+        wchar_t shellNewSubkey[280];   // separate buffer — never mutate subKeyName itself
+        swprintf_s(shellNewSubkey, L"%s\\ShellNew", subKeyName);
+
+        HKEY hKeyShellNew = nullptr;
+        if (RegOpenKeyExW(HKEY_CLASSES_ROOT, shellNewSubkey, 0, KEY_READ, &hKeyShellNew) != ERROR_SUCCESS){
+            continue;   // no ShellNew key = doesn't belong in the New menu
+        }
+
+        NewMenuItem item;
+        item.extension = Str::WideToString(subKeyName);
+
+        wchar_t templateFile[MAX_PATH] = {};
+        DWORD templateSize = sizeof(templateFile);
+        if (RegQueryValueExW(hKeyShellNew, L"FileName", nullptr, nullptr, (LPBYTE)templateFile, &templateSize) == ERROR_SUCCESS){
+            item.action = NewItemAction::FromTemplate;
+            item.templatePath = TypeablePathToPidl(templateFile);
+        }
+        RegCloseKey(hKeyShellNew);
+
+        std::wstring progID = GetDefaultValue(HKEY_CLASSES_ROOT, subKeyName);
+        if (!progID.empty()){
+            std::wstring friendlyName = GetDefaultValue(HKEY_CLASSES_ROOT, progID.c_str());
+            if (!friendlyName.empty()){
+                item.displayName = Str::WideToString(friendlyName.c_str());
+            }
+        }
+        if (item.displayName.empty()){
+            item.displayName = item.extension;   // fallback so the entry isn't blank
+        }
+
+        item.iconIndex = Icons::GetIconIndex(nullptr, subKeyName, FILE_ATTRIBUTE_NORMAL, SHGFI_ICON | SHGFI_SMALLICON | SHGFI_USEFILEATTRIBUTES);
+        menuItems.push_back(std::move(item));
+    }
+    RegCloseKey(hKeyRoot);
+    return menuItems;
+    
+}
+

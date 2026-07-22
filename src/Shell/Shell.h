@@ -5,6 +5,7 @@
 
 #pragma comment(lib, "Shell32.lib") 
 #pragma comment(lib, "Shlwapi.lib") 
+#pragma comment(lib, "Advapi32.lib") 
 
 namespace WShell{
 
@@ -48,6 +49,20 @@ namespace WShell{
             PIDLIST_ABSOLUTE ptr = nullptr;
     };
 
+    enum class NewItemAction{
+        Folder, 
+        Shortcut, 
+        EmptyFile, 
+        FromTemplate
+    };
+
+    struct NewMenuItem{
+        std::string displayName;    // E.g: Text document
+        std::string extension;      // .txt
+        Pidl templatePath;
+        u64 iconIndex = 0;
+        NewItemAction action = NewItemAction::EmptyFile;
+    };
 
     enum class FolderAccess {
         NoCreate,     // Hide "New" menu completely
@@ -95,5 +110,6 @@ namespace WShell{
     std::string PidlToTypeablePath(PCIDLIST_ABSOLUTE pidl);
     bool PidlHasSubFolders(PCIDLIST_ABSOLUTE folder);
     FolderAccess GetFolderAccess(PCIDLIST_ABSOLUTE folder);
+    std::vector<NewMenuItem> EnumerateNewMenu();
 
 }

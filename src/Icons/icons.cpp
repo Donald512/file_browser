@@ -177,7 +177,7 @@ u64 IconManager::EvictLeastRecentlyUsed(){
 
 
 u64 Icons::GetIconIndex(PCIDLIST_ABSOLUTE pidl, const wchar_t* pszPath, DWORD dwFileAttributes, UINT uFlags){
-    if (!pidl) return 0;
+    // if (!pidl) return 0;
 
     SHFILEINFOW sfi = {};
 

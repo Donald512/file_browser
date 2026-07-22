@@ -8,6 +8,7 @@ using namespace Navigation;
 
 bool History::Push(PCIDLIST_ABSOLUTE folder){
     visited.push_back(WShell::Pidl(ILClone(folder)));
+    currentIndex++;
     return true;
 }   
 

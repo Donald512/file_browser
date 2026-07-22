@@ -43,4 +43,7 @@ struct AppContext{
    WShell::Pidl pidlHome;
    WShell::Pidl pidlDesktop;
 
+   // Shell
+    std::vector<WShell::NewMenuItem> newMenuItems =  WShell::EnumerateNewMenu();
+
 };

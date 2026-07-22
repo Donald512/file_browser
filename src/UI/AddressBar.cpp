@@ -99,9 +99,8 @@ static void Breadcrumbs(AppContext& ctx){
     ImGui::SameLine(0.0f, 8.0f * ctx.dpiScale);
 
     auto& crumbs = ctx.navigation.Breadcrumbs().Crumbs();
-    u64 i = 0; 
     for (auto& crumb : crumbs){
-        ImGui::PushID((int)i);
+        ImGui::PushID(&crumb);
         
         if (ImGui::Button(crumb.displayName.c_str())){
             ctx.navigation.NavigateTo(crumb.pidl);
@@ -111,23 +110,21 @@ static void Breadcrumbs(AppContext& ctx){
 
         if (!isLast || ctx.navigation.Breadcrumbs().hasSubFolders){
             ImGui::SameLine();
-            std::string popupID = "##bcrumb_popup_" + std::to_string(i);
-            std::string sign = ImGui::IsPopupOpen(popupID.c_str()) ? ICON_REG_CHEVRON_DOWN : ICON_REG_CHEVRON_RIGHT;
-            std::string arrowLabel= sign + popupID; 
+            const char* popupID = "##bcrumbMenu";
+            const char* sign = ImGui::IsPopupOpen(popupID) ? ICON_REG_CHEVRON_DOWN : ICON_REG_CHEVRON_RIGHT;
 
-            if (ImGui::Button(arrowLabel.c_str())){
-                ImGui::OpenPopup(popupID.c_str());
+            if (ImGui::Button(sign)){
+                ImGui::OpenPopup(popupID);
             }
             btnRect = ImGui::GetItemRectMax();
             ImGui::SetNextWindowPos(ImVec2(btnRect.x, btnRect.y + 2.0f));
-            RenderPopup(popupID.c_str(), crumb.pidl );
+            RenderPopup(popupID, crumb.pidl );
         
         }
         ImGui::PopID();
         ImGui::SameLine(0.0, 8.0f * ctx.dpiScale);
     }
     ImGui::PopStyleVar();
-    i++;
 }
 
 void AddressBar::Render(AppContext& ctx){
