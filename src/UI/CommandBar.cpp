@@ -45,7 +45,7 @@ void CommandBar::Render(AppContext& ctx){
     ImGui::SetCursorPosY(centerY);  
     ImGui::Button(ICON_REG_CUT);
     ImGui::SameLine(0.0f, 8.0f);
-    
+
     ImGui::SetCursorPosY(centerY);  
     ImGui::Button(ICON_REG_COPY);
     ImGui::SameLine(0.0f, 8.0f);
@@ -71,7 +71,6 @@ void CommandBar::Render(AppContext& ctx){
 
     // =========================== SORT & POPUP
     char* sortMenuPopupId = "SortMenuPopup";       
-    const char* sortLabel = "Sort " ICON_REG_CHEVRON_DOWN;
 
     if (ImGui::Button( ICON_REG_ARROW_SORT " Sort " ICON_REG_CHEVRON_DOWN)){
         ImGui::OpenPopup(sortMenuPopupId);

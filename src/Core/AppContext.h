@@ -51,9 +51,9 @@ struct AppContext{
     WShell::Pidl pidlNetwork;
 
     std::vector<WShell::NewMenuItem> newMenuItems = WShell::EnumerateNewMenu();
-    const std::vector<WShell::SideBar::Item>& items1 = WShell::SideBar::GetItems(WShell::SideBar::Category::C1);
-    const std::vector<WShell::SideBar::Item>& items2 = WShell::SideBar::GetItems(WShell::SideBar::Category::C2);
-    const std::vector<WShell::SideBar::Item>& items3 = WShell::SideBar::GetItems(WShell::SideBar::Category::C3);
+    const std::vector<WShell::Sidebar::Item>& items1 = WShell::Sidebar::GetItems(WShell::Sidebar::Category::C1);
+    const std::vector<WShell::Sidebar::Item>& items2 = WShell::Sidebar::GetItems(WShell::Sidebar::Category::C2);
+    const std::vector<WShell::Sidebar::Item>& items3 = WShell::Sidebar::GetItems(WShell::Sidebar::Category::C3);
 
     
 };

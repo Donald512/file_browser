@@ -17,7 +17,7 @@ int main (void){
     // Get PIDL for "This PC"
     SHGetKnownFolderIDList(FOLDERID_ComputerFolder, 0, NULL, ctx.pidlThisPC.GetAddressOf());
     SHGetKnownFolderIDList(FOLDERID_Desktop, 0, NULL, ctx.pidlDesktop.GetAddressOf()); 
-    HRESULT hr = SHGetKnownFolderIDList(FOLDERID_NetworkFolder, 0, NULL, ctx.pidlNetwork.GetAddressOf()); 
+    SHGetKnownFolderIDList(FOLDERID_NetworkFolder, 0, NULL, ctx.pidlNetwork.GetAddressOf()); 
     SHParseDisplayName(L"shell:::{f874310e-b6b7-47dc-bc84-b9e6b38f5903}", NULL, ctx.pidlHome.GetAddressOf(), 0, NULL);
     SHParseDisplayName(L"shell:::{679F85CB-0220-4080-B29B-5540CC05AAB6}", NULL, ctx.pidlQuickAccess.GetAddressOf(), 0, NULL);
 

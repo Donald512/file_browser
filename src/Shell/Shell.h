@@ -126,7 +126,7 @@ namespace WShell{
 // 2 - Pinned, Enumerate Home Quick access shell:::{679F85CB-0220-4080-B29B-5540CC05AAB6} 
 //       EnumObjects(SHCONTF_FOLDERS)
 // 3 - Will make it enumerate This PC, then Add Recycle Bin, and Control Panel
-namespace WShell::SideBar {
+namespace WShell::Sidebar {
     enum class Category { C1, C2, C3 };
 
     struct Item {
@@ -139,4 +139,6 @@ namespace WShell::SideBar {
     
     // Now you only need ONE function signature!
     std::vector<Item> GetItems(Category cat);
+    std::vector<Item> GetOneDriveAccounts();
+
 }

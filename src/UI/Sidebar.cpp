@@ -13,45 +13,52 @@ namespace Sidebar {
     static std::unordered_map<const void*, SidebarNodeState> s_nodeState; 
 
     // Helper function to draw a clean tree node with an icon
-    bool RenderSidebarNode(AppContext& ctx, const char* label, ImTextureID icon, bool hasChildren, bool isSelected, bool* isOpen){
-        ImGui::PushID(label);
+    bool RenderSidebarNode(AppContext& ctx, const char* label, ImTextureID icon, bool hasChildren, bool isSelected, bool* isOpen) {
+        ImGui::PushID((void*)label);
+        
         f32 rowHeight = ImGui::GetFrameHeight();
         f32 arrowWidth = rowHeight;
+        f32 availX = ImGui::GetContentRegionAvail().x;
+        
+        ImVec2 startPos = ImGui::GetCursorScreenPos();
+        
+        ImGui::Dummy(ImVec2(availX, rowHeight));
 
-        if (hasChildren){
+        f32 selectableX = startPos.x + arrowWidth;
+        ImGui::SetCursorScreenPos(ImVec2(selectableX, startPos.y));
+        bool clicked = ImGui::Selectable("##row", isSelected, ImGuiSelectableFlags_AllowOverlap, ImVec2(availX - arrowWidth, rowHeight));
+
+        if (hasChildren) {
+            ImGui::SetCursorScreenPos(startPos);
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0));
             const char* arrow = *isOpen ? ICON_REG_CHEVRON_DOWN : ICON_REG_CHEVRON_RIGHT;
-            if (ImGui::Button(arrow, ImVec2(arrowWidth, rowHeight))){
-                ImVec2 rowStart = ImGui::GetCursorScreenPos();
+            if (ImGui::Button(arrow, ImVec2(arrowWidth, rowHeight))) {
                 *isOpen = !*isOpen;
             }
             ImGui::PopStyleColor();
         }
-        else{
-            ImGui::Dummy(ImVec2(hasChildren ? 0 : arrowWidth, rowHeight)); // keeps leaf rows aligned with expandable ones, no click target
-        }
-        ImGui::SameLine(0, 0);
-        
-        // Selectable now only covers the row AFTER the arrow 
-        ImVec2 rowStart = ImGui::GetCursorScreenPos();
-        bool clicked = ImGui::Selectable("##row", isSelected, ImGuiSelectableFlags_None, ImVec2(0, rowHeight));
-    
-        ImGui::SameLine(0, 0);
 
-        f32 buttonY = rowStart.y + (ImGui::GetFrameHeight() - ImGui::GetFontSize()) * 0.5f;
-        ImGui::SetCursorScreenPos(ImVec2(rowStart.x, buttonY));
-        
-        if (icon){
+        f32 currentX = selectableX + (4.0f * ctx.ui.dpiScale); // Padding after arrow
+        if (icon) {
             f32 iconSize = 16.0f * ctx.ui.dpiScale;
+            f32 iconY = startPos.y + (rowHeight - iconSize) * 0.5f; 
+            
+            ImGui::SetCursorScreenPos(ImVec2(currentX, iconY));
             ImGui::Image(icon, ImVec2(iconSize, iconSize));
-            ImGui::SameLine(0, 2);
+            
+            currentX += iconSize + (6.0f * ctx.ui.dpiScale); // Padding after icon
         }
+
+        f32 textY = startPos.y + (rowHeight - ImGui::GetFontSize()) * 0.5f; 
+        ImGui::SetCursorScreenPos(ImVec2(currentX, textY));
         ImGui::TextUnformatted(label);
+
+        ImGui::SetCursorScreenPos(ImVec2(startPos.x, startPos.y + rowHeight + ImGui::GetStyle().ItemSpacing.y));
 
         ImGui::PopID();
         return clicked;
     }
-
+    
     void RenderNodeAndChildren(AppContext& ctx, const std::string& name, const WShell::Pidl& pidl, ImTextureID icon, bool hasChildren){
         SidebarNodeState& state = s_nodeState[(const void*)pidl.get()];   // creates on first access, persists across frames
 
@@ -83,14 +90,13 @@ namespace Sidebar {
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, Style::NoBorder);
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f * ctx.ui.dpiScale, 4.0f * ctx.ui.dpiScale));
         if (!ImGui::BeginChild("Sidebar", ImVec2(currentWidth, 0), ImGuiChildFlags_None)) {
-            ImGui::PopStyleVar(2);
+            ImGui::PopStyleVar(3);
             ImGui::EndChild();
             return;
         }
 
         ImGui::Dummy(ImVec2(0.0f, 4.0f));
         for (auto& item : ctx.items1){
-            bool isSelected = ILIsEqual(ctx.navigation.CurrentFolder(), item.pidl);
             ImTextureID tex = ctx.icons.GetTexture(item.iconKey);
             RenderNodeAndChildren(ctx, item.name, item.pidl, tex, item.hasSubFolder);
         }
@@ -99,7 +105,6 @@ namespace Sidebar {
 
         ImGui::Dummy(ImVec2(0.0f, SectionPaddingY));
         for (auto& item : ctx.items2){
-            bool isSelected = ILIsEqual(ctx.navigation.CurrentFolder(), item.pidl);
             ImTextureID tex = ctx.icons.GetTexture(item.iconKey);
             RenderNodeAndChildren(ctx, item.name, item.pidl, tex, false);
         }
@@ -108,7 +113,6 @@ namespace Sidebar {
         
         ImGui::Dummy(ImVec2(0.0f, SectionPaddingY));
         for (auto& item : ctx.items3){
-            bool isSelected = ILIsEqual(ctx.navigation.CurrentFolder(), item.pidl);
             ImTextureID tex = ctx.icons.GetTexture(item.iconKey);
             RenderNodeAndChildren(ctx, item.name, item.pidl, tex, item.hasSubFolder);
         }
