@@ -5,8 +5,8 @@ namespace Style = UI::Style;
 
 void TopBar::Render(AppContext& ctx){
     ImGui::PushStyleColor(ImGuiCol_ChildBg, Colors::TopBarBackground);
-    f32 addedHeight = !::IsZoomed(ctx.hwnd) ? PaddingForIfWindowRestored : 0.0f;
-    if (!ImGui::BeginChild("TopBar", ImVec2(0, (Height + addedHeight) * ctx.dpiScale), ImGuiChildFlags_None, Flags)){
+    f32 addedHeight = !::IsZoomed(ctx.gfx.hwnd) ? PaddingForIfWindowRestored : 0.0f;
+    if (!ImGui::BeginChild("TopBar", ImVec2(0, (Height + addedHeight) * ctx.ui.dpiScale), ImGuiChildFlags_None, Flags)){
         ImGui::PopStyleColor();
         ImGui::EndChild();
         return;
@@ -14,12 +14,12 @@ void TopBar::Render(AppContext& ctx){
     ImGui::PopStyleColor();
 
     f32 windowWidth = ImGui::GetWindowWidth();
-    // f32 captionBtnsWidth = TotalBtnsWidth * ctx.dpiScale;
+    // f32 captionBtnsWidth = TotalBtnsWidth * ctx.ui.dpiScale;
     // f32 captionBtnsStartX = windowWidth - captionBtnsWidth;
 
-    f32 btnWidth = BtnWidth * ctx.dpiScale;
-    f32 btnHeight = BtnHeight * ctx.dpiScale;
-    f32 closeBtnWidth = CloseBtnWidth * ctx.dpiScale;
+    f32 btnWidth = BtnWidth * ctx.ui.dpiScale;
+    f32 btnHeight = BtnHeight * ctx.ui.dpiScale;
+    f32 closeBtnWidth = CloseBtnWidth * ctx.ui.dpiScale;
 
     f32 closeStartX = windowWidth - closeBtnWidth;
     f32 maximizeStartX = closeStartX - btnWidth;
@@ -35,7 +35,7 @@ void TopBar::Render(AppContext& ctx){
     // NOTE: Windows handles the actual maximize behavior so Snap Layouts continue to work.
     // These buttons are purely visual and forward the interaction to the native title bar.
     ImGui::SetCursorPos(ImVec2(maximizeStartX, 0.0f)); 
-    const char* maximizeGlyph = ::IsZoomed(ctx.hwnd) ? ICON_REG_SQUARE_MULTIPLE "##win_max" : ICON_REG_MAXIMIZE "##win_max";
+    const char* maximizeGlyph = ::IsZoomed(ctx.gfx.hwnd) ? ICON_REG_SQUARE_MULTIPLE "##win_max" : ICON_REG_MAXIMIZE "##win_max";
     ImGui::Button(maximizeGlyph, ImVec2(btnWidth, btnHeight));
 
     // to give hover-red highlight

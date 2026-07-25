@@ -3,6 +3,7 @@
 #include <utility>
 #include <ShlObj.h>
 
+
 #pragma comment(lib, "Shell32.lib") 
 #pragma comment(lib, "Shlwapi.lib") 
 #pragma comment(lib, "Advapi32.lib") 
@@ -12,7 +13,9 @@ namespace WShell{
     class Pidl{
         public:
             Pidl() = default;
+            Pidl(std::nullptr_t) : ptr(nullptr) {}
             explicit Pidl(PIDLIST_ABSOLUTE owned) : ptr(owned) {}
+            explicit Pidl(PCIDLIST_ABSOLUTE unowned) : ptr(unowned ? ILClone(unowned) : nullptr) {}
 
             ~Pidl(){ if (ptr) ILFree(ptr); }
 
@@ -60,7 +63,7 @@ namespace WShell{
         std::string displayName;    // E.g: Text document
         std::string extension;      // .txt
         Pidl templatePath;
-        u64 iconIndex = 0;
+        u64 iconKey = 0;   // key into Icons::IconManager::GetTexture()
         NewItemAction action = NewItemAction::EmptyFile;
     };
 
@@ -72,17 +75,17 @@ namespace WShell{
 
     struct Item{
         std::string name; // 24
-       WShell::Pidl pidl;    // 8
+        Pidl pidl;    // 8
 
         u64 fileSize = 0;   // 8
         FILETIME lastWriteTime{}; // 8
         SFGAOF attributes = 0;  // 4
-        u64 iconCacheKey = 0;
+        u64 iconKey = 0;   // key into Icons::IconManager::GetTexture()
     };
 
     struct ItemLite{   // just a stripped down version of ShellItem
         std::string name; // 24
-       WShell::Pidl pidl;    // 8
+        Pidl pidl;    // 8
     };
 
     class Directory{
@@ -92,24 +95,48 @@ namespace WShell{
             const std::vector<Item>& Items() const { return items; }
             FolderAccess Access() const { return access; }
             void SelectIndex(u64 i) {
-                if (i < items.size()){
-                    selectedIndex = (i64) i;
-                }
+                if (i < items.size()) selectedIndex = (i64) i;
             };
             u64 Selected() const {return (u64) selectedIndex; }
-            private:
+
+        private:
             i64 selectedIndex = -1;
             std::vector<Item> items;
             FolderAccess access = FolderAccess::NoCreate;
     };
     
     // NOTE: Typeable means it cincludes the names of virtual folders
+    std::vector<Item> EnumFolder(PCIDLIST_ABSOLUTE folder);
     std::vector<ItemLite> GetLiteItems(PCIDLIST_ABSOLUTE folder);
     bool ExecuteFile(PCIDLIST_ABSOLUTE file);
     Pidl TypeablePathToPidl(const wchar_t* widePath);
     std::string PidlToTypeablePath(PCIDLIST_ABSOLUTE pidl);
-    bool PidlHasSubFolders(PCIDLIST_ABSOLUTE folder);
+    bool PidlHasSubFolders(PCIDLIST_ABSOLUTE folder, bool accurate = false);
     FolderAccess GetFolderAccess(PCIDLIST_ABSOLUTE folder);
     std::vector<NewMenuItem> EnumerateNewMenu();
 
+    // Resolves a well-known folder (This PC, Desktop, Recycle Bin, ...) to a Pidl.
+    Pidl GetKnownFolderPidl(REFKNOWNFOLDERID folderID);
+    Pidl GetKnownFolderPidl(const wchar_t* shellParsingGuid);
+
+}
+
+// Sidebar is sectioned in 3 parts, 
+// 1 - SHCONTF_FOLDERS | SHCONTF_NAVIGATION_ENUM
+// 2 - Pinned, Enumerate Home Quick access shell:::{679F85CB-0220-4080-B29B-5540CC05AAB6} 
+//       EnumObjects(SHCONTF_FOLDERS)
+// 3 - Will make it enumerate This PC, then Add Recycle Bin, and Control Panel
+namespace WShell::SideBar {
+    enum class Category { C1, C2, C3 };
+
+    struct Item {
+        std::string name;
+        WShell::Pidl pidl; 
+        u64 iconKey = 0;   // key into Icons::IconManager::GetTexture()
+        bool hasSubFolder = false;
+        Category category = Category::C1; // Now ImGui can easily group them!
+    };
+    
+    // Now you only need ONE function signature!
+    std::vector<Item> GetItems(Category cat);
 }

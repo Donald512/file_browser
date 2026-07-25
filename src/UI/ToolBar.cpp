@@ -6,8 +6,8 @@ namespace Colors = UI::Colors;
 
 void ToolBar::Render(AppContext& ctx){
 
-    f32 height = Height * ctx.dpiScale;
-    f32 leftPadding =  LeftPadding * ctx.dpiScale;
+    f32 height = Height * ctx.ui.dpiScale;
+    f32 leftPadding =  LeftPadding * ctx.ui.dpiScale;
     ImGui::PushStyleColor(ImGuiCol_ChildBg, Colors::WindowBackground);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(leftPadding, 0.0f));
         

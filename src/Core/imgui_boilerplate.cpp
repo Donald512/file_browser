@@ -9,12 +9,12 @@ bool CreateMyOSWindow(AppContext &ctx, WNDCLASSEXW &wc){
         return false;
     }
     // pass Address of ctx as final param (lpParam), this is to allow us to pass AppContext into WndProc
-    ctx.hwnd = ::CreateWindowW(wc.lpszClassName, L"File Browser", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,CW_USEDEFAULT ,CW_USEDEFAULT,   nullptr, nullptr, wc.hInstance, &ctx); 
-    if (!ctx.hwnd){
+    ctx.gfx.hwnd = ::CreateWindowW(wc.lpszClassName, L"File Browser", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,CW_USEDEFAULT ,CW_USEDEFAULT,   nullptr, nullptr, wc.hInstance, &ctx); 
+    if (!ctx.gfx.hwnd){
         printf("Create Window failed");
     }
 
-    return ctx.hwnd != nullptr;
+    return ctx.gfx.hwnd != nullptr;
 }
 
 bool InitializeGraphicsAPI(AppContext& ctx, WNDCLASSEXW &wc){
@@ -34,14 +34,14 @@ void InitializeImGui(AppContext &ctx){
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
     ApplyWindows11DarkTheme();
     // Setup scaling based on primary window position
-    ctx.dpiScale = ImGui_ImplWin32_GetDpiScaleForMonitor(::MonitorFromPoint(POINT{ 0, 0 }, MONITOR_DEFAULTTONEAREST));
+    ctx.ui.dpiScale = ImGui_ImplWin32_GetDpiScaleForMonitor(::MonitorFromPoint(POINT{ 0, 0 }, MONITOR_DEFAULTTONEAREST));
     
     // Pass the correct font atlas pointer from ImGuiIO
     BuildFonts(ctx, io.Fonts);
 
     // Setup Platform/Renderer backends
-    ImGui_ImplWin32_Init(ctx.hwnd);
-    ImGui_ImplDX11_Init(ctx.d3dDevice.Get(), ctx.d3dContext.Get());
+    ImGui_ImplWin32_Init(ctx.gfx.hwnd);
+    ImGui_ImplDX11_Init(ctx.gfx.d3dDevice.Get(), ctx.gfx.d3dContext.Get());
 
     // todo ApplyWindows11DarkTheme();
 }
@@ -52,17 +52,17 @@ static void BuildFonts(AppContext& ctx, ImFontAtlas* atlas){
     atlas->Clear();
 
     // 1. Base Font (Text)
-    ctx.mainFont = atlas->AddFontFromFileTTF("C:\\Windows\\Fonts\\segoeui.ttf", 16.0f * ctx.dpiScale);
+    ctx.ui.mainFont = atlas->AddFontFromFileTTF("C:\\Windows\\Fonts\\segoeui.ttf", 16.0f * ctx.ui.dpiScale);
 
     // 2. Fluent Icons (Merged directly into Base Font)
     ImFontConfig icon_config;
     icon_config.MergeMode = true;
-    icon_config.GlyphOffset.y = 2.0f* ctx.dpiScale; // ion know why, but it put the chevrons on the same line as the breadcrumbs
+    icon_config.GlyphOffset.y = 2.0f* ctx.ui.dpiScale; // ion know why, but it put the chevrons on the same line as the breadcrumbs
     icon_config.PixelSnapH = true;
-    icon_config.GlyphMinAdvanceX = 16.0f * ctx.dpiScale; 
+    icon_config.GlyphMinAdvanceX = 16.0f * ctx.ui.dpiScale; 
     
     static const ImWchar icon_ranges[] = { (ImWchar)ICON_MIN_REG, (ImWchar)ICON_MAX_REG, 0 };
-    ctx.iconFont = atlas->AddFontFromFileTTF("thirdparty\\fontstuff\\FluentSystemIcons-Regular.ttf", 12.0f * ctx.dpiScale, &icon_config, icon_ranges);
+    ctx.ui.iconFont = atlas->AddFontFromFileTTF("thirdparty\\fontstuff\\FluentSystemIcons-Regular.ttf", 12.0f * ctx.ui.dpiScale, &icon_config, icon_ranges);
 
     // 3. Emoji Fallback (Merged directly into Base Font)
     ImFontConfig emoji_config;
@@ -79,12 +79,12 @@ static void BuildFonts(AppContext& ctx, ImFontAtlas* atlas){
         0
     };
 
-    atlas->AddFontFromFileTTF("C:\\Windows\\Fonts\\seguiemj.ttf", 16.0f * ctx.dpiScale, &emoji_config, emoji_ranges);
+    atlas->AddFontFromFileTTF("C:\\Windows\\Fonts\\seguiemj.ttf", 16.0f * ctx.ui.dpiScale, &emoji_config, emoji_ranges);
 
     // 4. DPI Style Scaling
     ImGuiStyle& style = ImGui::GetStyle();
-    style.ScaleAllSizes(ctx.dpiScale);    
-    style.FontScaleDpi = ctx.dpiScale;    
+    style.ScaleAllSizes(ctx.ui.dpiScale);    
+    style.FontScaleDpi = ctx.ui.dpiScale;    
 }
 
 void ImGui_Backend_NewFrame(){
@@ -99,21 +99,21 @@ void MyGraphicsAPI_PresentFrame(AppContext& ctx){
     ImGui::Render();
 
     // 2. Prep your clear color (handles alpha blending math)
-    ImVec4 clear_color = ctx.clearColor;
+    ImVec4 clear_color = ctx.ui.clearColor;
     const float clear_color_with_alpha[4] = {clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w };
 
     // 3. Tell your GPU to target your main window view
-    ID3D11RenderTargetView* rtv = ctx.renderTargetView.Get();
-    ctx.d3dContext->OMSetRenderTargets(1, &rtv, nullptr);
+    ID3D11RenderTargetView* rtv = ctx.gfx.renderTargetView.Get();
+    ctx.gfx.d3dContext->OMSetRenderTargets(1, &rtv, nullptr);
 
     // 4. Wipe the previous frame's pixels off the screen using your clear color
-    ctx.d3dContext->ClearRenderTargetView(ctx.renderTargetView.Get(), clear_color_with_alpha);
+    ctx.gfx.d3dContext->ClearRenderTargetView(ctx.gfx.renderTargetView.Get(), clear_color_with_alpha);
 
     // 5. Hand the calculated ImGui triangles over to DirectX 11 to draw them
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
-    HRESULT hr = ctx.swapChain->Present(1, 0); // 1 = Lock to your monitor's VSync refresh rate
-    ctx.swapChainOccluded = (hr == DXGI_STATUS_OCCLUDED);
+    HRESULT hr = ctx.gfx.swapChain->Present(1, 0); // 1 = Lock to your monitor's VSync refresh rate
+    ctx.gfx.swapChainOccluded = (hr == DXGI_STATUS_OCCLUDED);
 }
 
 
@@ -124,13 +124,13 @@ void ShutdownImGui(AppContext& ctx, WNDCLASSEXW& wc){
     ImGui::DestroyContext();
 
     CleanupDeviceD3D(ctx);
-    ::DestroyWindow(ctx.hwnd);
+    ::DestroyWindow(ctx.gfx.hwnd);
     ::UnregisterClassW(wc.lpszClassName, wc.hInstance);
 }
 
 
 void SetBackgroundColor(AppContext& ctx, float r, float g, float b, float a) {      // think this function is useless
-    ctx.clearColor = ImVec4(r, g, b, a);    
+    ctx.ui.clearColor = ImVec4(r, g, b, a);    
 }
 
 
@@ -208,7 +208,7 @@ bool CreateDeviceD3D(AppContext& ctx){
     sd.BufferDesc.RefreshRate.Denominator = 1;
     sd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
     sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    sd.OutputWindow = ctx.hwnd;
+    sd.OutputWindow = ctx.gfx.hwnd;
     sd.SampleDesc.Count = 1;
     sd.SampleDesc.Quality = 0;
     sd.Windowed = TRUE;
@@ -218,9 +218,9 @@ bool CreateDeviceD3D(AppContext& ctx){
     //createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
     D3D_FEATURE_LEVEL featureLevel;
     const D3D_FEATURE_LEVEL featureLevelArray[2] = { D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_0, };
-    HRESULT res = D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, createDeviceFlags, featureLevelArray, 2, D3D11_SDK_VERSION, &sd, &ctx.swapChain, &ctx.d3dDevice, &featureLevel, &ctx.d3dContext);
+    HRESULT res = D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, createDeviceFlags, featureLevelArray, 2, D3D11_SDK_VERSION, &sd, &ctx.gfx.swapChain, &ctx.gfx.d3dDevice, &featureLevel, &ctx.gfx.d3dContext);
     if (res == DXGI_ERROR_UNSUPPORTED) // Try high-performance WARP software driver if hardware is not available.
-        res = D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, createDeviceFlags, featureLevelArray, 2, D3D11_SDK_VERSION, &sd, &ctx.swapChain, &ctx.d3dDevice, &featureLevel, &ctx.d3dContext);
+        res = D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, createDeviceFlags, featureLevelArray, 2, D3D11_SDK_VERSION, &sd, &ctx.gfx.swapChain, &ctx.gfx.d3dDevice, &featureLevel, &ctx.gfx.d3dContext);
     if (res != S_OK)
         return false;
 
@@ -230,20 +230,20 @@ bool CreateDeviceD3D(AppContext& ctx){
 
 void CleanupDeviceD3D(AppContext& ctx){
     CleanupRenderTarget(ctx);
-    ctx.swapChain.Reset();
-    ctx.d3dContext.Reset();
-    ctx.d3dDevice.Reset();
+    ctx.gfx.swapChain.Reset();
+    ctx.gfx.d3dContext.Reset();
+    ctx.gfx.d3dDevice.Reset();
 }
 
 void CreateRenderTarget(AppContext& ctx){
     ID3D11Texture2D* pBackBuffer;
-    ctx.swapChain->GetBuffer(0, IID_PPV_ARGS(&pBackBuffer));
-    ctx.d3dDevice->CreateRenderTargetView(pBackBuffer, nullptr, &ctx.renderTargetView);
+    ctx.gfx.swapChain->GetBuffer(0, IID_PPV_ARGS(&pBackBuffer));
+    ctx.gfx.d3dDevice->CreateRenderTargetView(pBackBuffer, nullptr, &ctx.gfx.renderTargetView);
     pBackBuffer->Release(); 
 }
 
 void CleanupRenderTarget(AppContext& ctx){
-    ctx.renderTargetView.Reset();
+    ctx.gfx.renderTargetView.Reset();
 }
 
 // Forward declare message handler from imgui_impl_win32.cpp
@@ -312,7 +312,7 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam){
     } break;
     case WM_DPICHANGED:{
         UINT newDpi = HIWORD(wParam);
-        ctx->dpiScale = (f32) newDpi / 96.0f;
+        ctx->ui.dpiScale = (f32) newDpi / 96.0f;
 
         RECT* prcNewWindow = reinterpret_cast<RECT*>(lParam);
         ::SetWindowPos(hWnd, nullptr, prcNewWindow->left, prcNewWindow->top,  prcNewWindow->right - prcNewWindow->left, prcNewWindow->bottom - prcNewWindow->top, SWP_NOZORDER | SWP_NOACTIVATE);
@@ -348,8 +348,8 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam){
         ::GetClientRect(hWnd, &rect);
 
         
-        f32 topBarHeight = 32.0f * ctx->dpiScale;
-        LONG borderThickness = (LONG) ( 8.0 * ctx->dpiScale);
+        f32 topBarHeight = 32.0f * ctx->ui.dpiScale;
+        LONG borderThickness = (LONG) ( 8.0 * ctx->ui.dpiScale);
         
         RECT innerRect = {borderThickness, borderThickness, rect.right - borderThickness, rect.bottom - borderThickness};
 
@@ -374,7 +374,7 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam){
             f32 clsBtnWidth = 46.0f;
             f32 maxBtnWidth = 45.0f;
             f32 minBtnWidth = 45.0f;
-            f32 controlClusterWidth = (clsBtnWidth + maxBtnWidth + minBtnWidth) * ctx->dpiScale;
+            f32 controlClusterWidth = (clsBtnWidth + maxBtnWidth + minBtnWidth) * ctx->ui.dpiScale;
             f32 buttonStartX = windowWidth - controlClusterWidth;   // 136px total
             
             if (pt.x >= buttonStartX ){
@@ -399,8 +399,8 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam){
     case WM_SIZE:
         if (wParam == SIZE_MINIMIZED)
             return 0;
-        ctx->resizeWidth = (UINT)LOWORD(lParam); // Queue resize
-        ctx->resizeHeight = (UINT)HIWORD(lParam);
+        ctx->gfx.resizeWidth = (UINT)LOWORD(lParam); // Queue resize
+        ctx->gfx.resizeHeight = (UINT)HIWORD(lParam);
         return 0;
     case WM_SYSCOMMAND:
         if ((wParam & 0xfff0) == SC_KEYMENU) // Disable ALT application menu

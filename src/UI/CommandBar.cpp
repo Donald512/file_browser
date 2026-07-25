@@ -9,20 +9,20 @@ static void DrawNewMenuDropdown(AppContext& ctx);
 
 void CommandBar::Render(AppContext& ctx){
     ImGui::PushStyleColor(ImGuiCol_ChildBg, Colors::WindowForeground);
-    if (!ImGui::BeginChild("CommandBar", ImVec2(0, Height * ctx.dpiScale), ImGuiChildFlags_None, TopBar::Flags) ){
+    if (!ImGui::BeginChild("CommandBar", ImVec2(0, Height * ctx.ui.dpiScale), ImGuiChildFlags_None, TopBar::Flags) ){
         ImGui::PopStyleColor();
         ImGui::EndChild();
         return;
     }
     ImGui::PopStyleColor();
 
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f * ctx.dpiScale, 4.0f * ctx.dpiScale));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f * ctx.ui.dpiScale, 4.0f * ctx.ui.dpiScale));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, Style::NoBorder);
 
     ImGui::SetWindowFontScale(1.2f);
 
     f32 buttonHeight = ImGui::GetFrameHeight();
-    f32 centerY = (Height * ctx.dpiScale - buttonHeight) * 0.5f;
+    f32 centerY = (Height * ctx.ui.dpiScale - buttonHeight) * 0.5f;
     ImGui::SetCursorPosY(centerY);  
 
     // =========================== New Button & Popup
@@ -43,23 +43,29 @@ void CommandBar::Render(AppContext& ctx){
     ImGui::SameLine(0.0f, 8.0f);
     
     ImGui::SetCursorPosY(centerY);  
-    if (ImGui::Button(ICON_REG_CUT));
+    ImGui::Button(ICON_REG_CUT);
     ImGui::SameLine(0.0f, 8.0f);
+    
     ImGui::SetCursorPosY(centerY);  
-    if (ImGui::Button(ICON_REG_COPY));
+    ImGui::Button(ICON_REG_COPY);
     ImGui::SameLine(0.0f, 8.0f);
+
     ImGui::SetCursorPosY(centerY);  
-    if (ImGui::Button(ICON_REG_CLIPBOARD_PASTE));
+    ImGui::Button(ICON_REG_CLIPBOARD_PASTE);
     ImGui::SameLine(0.0f, 8.0f);
+
     ImGui::SetCursorPosY(centerY);  
-    if (ImGui::Button(ICON_REG_RENAME));
+    ImGui::Button(ICON_REG_RENAME);
     ImGui::SameLine(0.0f, 8.0f);
+
     ImGui::SetCursorPosY(centerY);  
-    if (ImGui::Button(ICON_REG_SHARE));
+    ImGui::Button(ICON_REG_SHARE);
     ImGui::SameLine(0.0f, 8.0f);
+
     ImGui::SetCursorPosY(centerY);  
-    if (ImGui::Button(ICON_REG_BIN_RECYCLE));
+    ImGui::Button(ICON_REG_BIN_RECYCLE);
     ImGui::SameLine(0.0f, 8.0f);
+
     ImGui::SetCursorPosY(centerY);  
 
 
@@ -98,7 +104,7 @@ void CommandBar::Render(AppContext& ctx){
 static void DrawNewMenuDropdown(AppContext& ctx){
     for (auto& item : ctx.newMenuItems){
         ImGui::PushID(&item);
-        ImTextureID iconTex = ctx.icons.GetTexture(item.iconIndex);
+        ImTextureID iconTex = ctx.icons.GetTexture(item.iconKey);
         if (iconTex){
             ImGui::Image(iconTex, ImVec2(16.0f, 16.0f));
             ImGui::SameLine();

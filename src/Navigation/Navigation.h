@@ -13,7 +13,7 @@ namespace Navigation{
 
     struct Breadcrumb{
         std::string displayName;
-       WShell::Pidl pidl;
+        WShell::Pidl pidl;
     };
 
     class Breadcrumbs{

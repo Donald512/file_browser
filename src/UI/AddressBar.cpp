@@ -1,24 +1,21 @@
 #include "UI.h"
 #include "..\Str\Str.h"
-// #include "Str.h"
 
-namespace Colors = UI::Colors;
-namespace Style = UI::Style;
 using namespace AddressBar;
 
 static bool s_isEditing = false;
 static bool s_justOpened = false;
 static char s_pathInputBuffer[1024] = {0};
-WShell::Pidl cachedPopupFolder;
-std::vector<WShell::ItemLite> cachedPopupItems;
+static WShell::Pidl s_cachedPopupFolder;
+static std::vector<WShell::ItemLite> s_cachedPopupItems;
 
 static void PathEditor(AppContext& ctx){
     // if y parameter in below function changes, change it in inputHeight also, use variable later
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f * ctx.dpiScale, 4.0f* ctx.dpiScale));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f * ctx.ui.dpiScale, 4.0f* ctx.ui.dpiScale));
 
     // Center text input cursor
-    f32 inputHeight = ImGui::GetFontSize() + (4.0f * ctx.dpiScale * 2.0f);  // Font + (Top + Bottom)Padding
-    f32 centerY = (Height * ctx.dpiScale - inputHeight) * 0.5f;
+    f32 inputHeight = ImGui::GetFontSize() + (4.0f * ctx.ui.dpiScale * 2.0f);  // Font + (Top + Bottom)Padding
+    f32 centerY = (Height * ctx.ui.dpiScale - inputHeight) * 0.5f;
     ImGui::SetCursorPosY(centerY);
 
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);  // done to make textbox not the size of text
@@ -48,16 +45,16 @@ static void PathEditor(AppContext& ctx){
 
 static void Breadcrumbs(AppContext& ctx){
     
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f * ctx.dpiScale, 4.0f * ctx.dpiScale));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f * ctx.ui.dpiScale, 4.0f * ctx.ui.dpiScale));
 
     auto RenderPopup = [&](const char* popupID, PCIDLIST_ABSOLUTE folder){
         // cache the directory contents so we dont fetch every frame
         if (ImGui::BeginPopup(popupID)){
-            if (!ILIsEqual(cachedPopupFolder, folder)){
-                cachedPopupItems =WShell::GetLiteItems(folder);
-                cachedPopupFolder =WShell::Pidl(ILClone(folder));
+            if (!ILIsEqual(s_cachedPopupFolder, folder)){
+                s_cachedPopupItems =WShell::GetLiteItems(folder);
+                s_cachedPopupFolder =WShell::Pidl(ILClone(folder));
             }
-            for (auto& item : cachedPopupItems){
+            for (auto& item : s_cachedPopupItems){
                 ImGui::PushID(&item);
                 if (ImGui::Selectable(item.name.c_str())){
                     ctx.navigation.NavigateTo(item.pidl);
@@ -73,7 +70,7 @@ static void Breadcrumbs(AppContext& ctx){
 
 
     f32 buttonHeight = ImGui::GetFrameHeight();
-    f32 centerY = (Height * ctx.dpiScale - buttonHeight) * 0.5f;
+    f32 centerY = (Height * ctx.ui.dpiScale - buttonHeight) * 0.5f;
     ImGui::SetCursorPosY(centerY);
 
     const char* breadcrumbIcon = (ILIsEqual(ctx.pidlHome, ctx.navigation.CurrentFolder())) ? ICON_REG_HOME : ICON_REG_DESKTOP;
@@ -96,7 +93,7 @@ static void Breadcrumbs(AppContext& ctx){
 
     RenderPopup(firstPopupID.c_str(), ctx.pidlDesktop.get());
     
-    ImGui::SameLine(0.0f, 8.0f * ctx.dpiScale);
+    ImGui::SameLine(0.0f, 8.0f * ctx.ui.dpiScale);
 
     auto& crumbs = ctx.navigation.Breadcrumbs().Crumbs();
     for (auto& crumb : crumbs){
@@ -122,26 +119,26 @@ static void Breadcrumbs(AppContext& ctx){
         
         }
         ImGui::PopID();
-        ImGui::SameLine(0.0, 8.0f * ctx.dpiScale);
+        ImGui::SameLine(0.0, 8.0f * ctx.ui.dpiScale);
     }
     ImGui::PopStyleVar();
 }
 
 void AddressBar::Render(AppContext& ctx){
     f32 windowWidth = ImGui::GetWindowWidth();
-    f32 remainingWidth = windowWidth - ((ToolBar::LeftPadding + NavBar::Width + ToolBar::AddressToSearchGap + ToolBar::RightPadding) * ctx.dpiScale);
+    f32 remainingWidth = windowWidth - ((ToolBar::LeftPadding + NavBar::Width + ToolBar::AddressToSearchGap + ToolBar::RightPadding) * ctx.ui.dpiScale);
     f32 addressWidth = remainingWidth * ToolBar::AddressRatio;
     
-    f32 verticalPadding = (Height - AddressBar::Height) * 0.5f * ctx.dpiScale;
+    f32 verticalPadding = (Height - AddressBar::Height) * 0.5f * ctx.ui.dpiScale;
 
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f * ctx.dpiScale);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f * ctx.ui.dpiScale);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.16f, 0.16f, 0.16f, 1.0f)); // FrameBg color
     
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, verticalPadding));
-    f32 centerY = (ToolBar::Height - Height) * ctx.dpiScale * 0.5f;
+    f32 centerY = (ToolBar::Height - Height) * ctx.ui.dpiScale * 0.5f;
     ImGui::SetCursorPosY(centerY);
-    if (!ImGui::BeginChild("AddressBar", ImVec2(addressWidth, Height * ctx.dpiScale), ImGuiChildFlags_None, TopBar::Flags)){
+    if (!ImGui::BeginChild("AddressBar", ImVec2(addressWidth, Height * ctx.ui.dpiScale), ImGuiChildFlags_None, TopBar::Flags)){
         ImGui::PopStyleColor();
         ImGui::PopStyleVar(3);
         ImGui::EndChild();
@@ -159,7 +156,7 @@ void AddressBar::Render(AppContext& ctx){
 
     // Empty Space Click Detection
     ImVec2 min = ImGui::GetWindowPos();
-    ImVec2 max = ImVec2(min.x + addressWidth, min.y + Height * ctx.dpiScale);
+    ImVec2 max = ImVec2(min.x + addressWidth, min.y + Height * ctx.ui.dpiScale);
 
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && ImGui::IsMouseHoveringRect(min, max)){
         if (!ImGui::IsAnyItemActive() && !ImGui::IsAnyItemHovered()){

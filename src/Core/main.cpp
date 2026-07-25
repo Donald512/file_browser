@@ -13,10 +13,14 @@ int main (void){
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     AppContext ctx{};
 
+    
     // Get PIDL for "This PC"
     SHGetKnownFolderIDList(FOLDERID_ComputerFolder, 0, NULL, ctx.pidlThisPC.GetAddressOf());
-    SHGetKnownFolderIDList(FOLDERID_Desktop, 0, NULL, ctx.pidlDesktop.GetAddressOf());
+    SHGetKnownFolderIDList(FOLDERID_Desktop, 0, NULL, ctx.pidlDesktop.GetAddressOf()); 
+    HRESULT hr = SHGetKnownFolderIDList(FOLDERID_NetworkFolder, 0, NULL, ctx.pidlNetwork.GetAddressOf()); 
     SHParseDisplayName(L"shell:::{f874310e-b6b7-47dc-bc84-b9e6b38f5903}", NULL, ctx.pidlHome.GetAddressOf(), 0, NULL);
+    SHParseDisplayName(L"shell:::{679F85CB-0220-4080-B29B-5540CC05AAB6}", NULL, ctx.pidlQuickAccess.GetAddressOf(), 0, NULL);
+
 
     ctx.navigation.NavigateTo(ctx.pidlThisPC.get());
 
@@ -24,10 +28,10 @@ int main (void){
     if (!CreateMyOSWindow(ctx, wc)) return 1;
 
     if (!InitializeGraphicsAPI(ctx, wc)) return 1;
-    ctx.icons.Init(ctx.d3dDevice.Get(), ctx.d3dContext.Get());
+    ctx.icons.Init(ctx.gfx.d3dDevice.Get(), ctx.gfx.d3dContext.Get());
 
-    ::ShowWindow(ctx.hwnd, SW_SHOWMAXIMIZED);
-    ::UpdateWindow(ctx.hwnd); // irrelevant
+    ::ShowWindow(ctx.gfx.hwnd, SW_SHOWMAXIMIZED);
+    ::UpdateWindow(ctx.gfx.hwnd); // irrelevant
 
     InitializeImGui(ctx);
     // todo completely migrate from ImGui::Text to Direct2D + DirectWrite
@@ -43,13 +47,13 @@ int main (void){
             if (msg.message == WM_QUIT) running = false;
         }
 
-        ctx.swapChainOccluded = false;
+        ctx.gfx.swapChainOccluded = false;
 
         // Handle window resize (we don't resize directly in the WM_SIZE handler)
-        if (ctx.resizeWidth != 0 && ctx.resizeHeight != 0){
+        if (ctx.gfx.resizeWidth != 0 && ctx.gfx.resizeHeight != 0){
             CleanupRenderTarget(ctx);
-            ctx.swapChain->ResizeBuffers(0, ctx.resizeWidth, ctx.resizeHeight, DXGI_FORMAT_UNKNOWN, 0);
-            ctx.resizeWidth = ctx.resizeHeight = 0;
+            ctx.gfx.swapChain->ResizeBuffers(0, ctx.gfx.resizeWidth, ctx.gfx.resizeHeight, DXGI_FORMAT_UNKNOWN, 0);
+            ctx.gfx.resizeWidth = ctx.gfx.resizeHeight = 0;
             CreateRenderTarget(ctx);
         }
 

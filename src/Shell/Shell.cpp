@@ -2,8 +2,10 @@
 #include <Shlwapi.h>
 #include "..\Str\Str.h"
 // #include "Str.h"
-#include "..\Icons\icons.h"
+#include "Icons/IconLookup.h"   // Icons::GetIconIndex only — no renderer dependency
 #include <wrl/client.h>
+#include <PortableDeviceApi.h>
+#pragma comment(lib, "PortableDeviceGuids.lib")
 
 
 using Microsoft::WRL::ComPtr;
@@ -11,119 +13,162 @@ using namespace WShell;
 
 static std::wstring GetDefaultValue(HKEY root, const wchar_t* subkey);
 
-bool WShell::Directory::Load(PCIDLIST_ABSOLUTE folder){
-    if (!folder) return false;
-    items.clear();
-
-    ComPtr<IShellFolder> pDesktop;
-    ComPtr<IShellFolder> pTargetFolder;
-
-    //  Fetch Desktop Root
-    if (FAILED(SHGetDesktopFolder(&pDesktop))) {
-        return false;
-    }
-
-    //  Bind to the target folder or mirror the desktop
-    if (ILIsEmpty(folder)) {
-        pTargetFolder = pDesktop; // ComPtr automatically calls AddRef() under the hood
-    }
-    else {
-        // IID_PPV_ARGS automatically passes the correct IID interface GUID and casts the pointer type safely
-        if (FAILED(pDesktop->BindToObject(folder, nullptr, IID_PPV_ARGS(&pTargetFolder)))) {
-            return false; 
-        }
-    } // pDesktop is no longer needed after this point;
-
-    //  Enumerate Objects
-    ComPtr<IEnumIDList> pEnum;
-    if (FAILED(pTargetFolder->EnumObjects(nullptr, SHCONTF_FOLDERS | SHCONTF_NONFOLDERS, &pEnum))) {
-        return false; 
-    }
-
-    PITEMID_CHILD childPidl = nullptr; // Using standard modern Windows naming for child PIDLs
-    ULONG fetched = 0;
-
-    while(pEnum->Next(1, &childPidl, &fetched) == S_OK){
-        Item item;
-
+namespace { // Anonymous namespace means these are private to this .cpp file
+    
+    // Extracts a child's display name cleanly.
+    std::string GetDisplayName(IShellFolder* folder, PITEMID_CHILD child, SHGDNF flags) {
         STRRET strName;
-        if (SUCCEEDED(pTargetFolder->GetDisplayNameOf(childPidl, SHGDN_NORMAL, &strName))) {
+        if (SUCCEEDED(folder->GetDisplayNameOf(child, flags, &strName))) {
             wchar_t nameBuffer[MAX_PATH] = {};
-            StrRetToBufW(&strName, childPidl, nameBuffer, MAX_PATH);
-            item.name = Str::WideToString(nameBuffer);
+            StrRetToBufW(&strName, child, nameBuffer, MAX_PATH);
+            return Str::WideToString(nameBuffer);
         }
-        
-        // todo, check if Folder and if it is, get the extension and use FIlEATTRIBUTES
-        item.attributes = SFGAO_FOLDER | SFGAO_CANRENAME | SFGAO_CANDELETE;
-        pTargetFolder->GetAttributesOf(1, (LPCITEMIDLIST*)&childPidl, &item.attributes);
-
-
-        item.pidl =WShell::Pidl(ILCombine(folder, childPidl));
-
-        UINT iconFlags = SHGFI_PIDL | SHGFI_SYSICONINDEX | SHGFI_LARGEICON;
-        item.iconCacheKey = Icons::GetIconIndex(item.pidl.get(), 0, 0, iconFlags);
-
-        items.push_back(std::move(item));
-        CoTaskMemFree(childPidl);   
+        return "";
     }
 
-    access =WShell::GetFolderAccess(folder); 
-    printf("capacity: %zu, size: %zu\n", items.capacity(), items.size());
-    return true;
+    // The universal COM enumeration loop — every "list a folder's children" call
+    // in this file goes through here instead of hand-rolling BindToObject/EnumObjects.
+    template <typename Func>
+    void IterateFolder(PCIDLIST_ABSOLUTE folder, DWORD shcontfFlags, Func&& callback) {
+        if (!folder) return;
+
+        ComPtr<IShellFolder> desktop, targetFolder;
+        if (FAILED(SHGetDesktopFolder(&desktop))) return;
+
+        if (ILIsEmpty(folder)) {
+            targetFolder = desktop;
+        } else {
+            if (FAILED(desktop->BindToObject(folder, nullptr, IID_PPV_ARGS(&targetFolder)))) return;
+        } 
+
+        ComPtr<IEnumIDList> enumerator;
+        if (FAILED(targetFolder->EnumObjects(nullptr, shcontfFlags, &enumerator))) return;
+
+        PITEMID_CHILD childPidl = nullptr;
+        ULONG fetched = 0;
+
+        while (enumerator->Next(1, &childPidl, &fetched) == S_OK) {
+            callback(targetFolder.Get(), childPidl);
+            CoTaskMemFree(childPidl);   
+        }
+    }
+
+    // Combines a parent + child into a freshly-owned Pidl. Was written out by hand
+    // (ILCombine(...) wrapped in WShell::Pidl(...)) at every single call site below.
+    Pidl CombineChild(PCIDLIST_ABSOLUTE parent, PITEMID_CHILD child) {
+        return Pidl(ILCombine(parent, child));
+    }
+
+    // The "SHGFI_PIDL | SHGFI_SYSICONINDEX | <size>" combination was repeated
+    u64 GetSystemIconKey(PCIDLIST_ABSOLUTE pidl, UINT sizeFlag) {
+        return Icons::GetIconIndex(pidl, nullptr, 0, SHGFI_PIDL | SHGFI_SYSICONINDEX | sizeFlag);
+    }
 }
 
+Pidl WShell::GetKnownFolderPidl(REFKNOWNFOLDERID folderID){
+    PIDLIST_ABSOLUTE pidl = nullptr;
+        SHGetKnownFolderIDList(folderID, 0, NULL, &pidl);
+    return Pidl(pidl);
+    }
+Pidl WShell::GetKnownFolderPidl(const wchar_t* shellParsingGuid){
+    PIDLIST_ABSOLUTE pidl = nullptr;
+    SHParseDisplayName(shellParsingGuid, NULL, &pidl, 0, NULL);
+    return Pidl(pidl);
+}
+
+
+std::vector<Item> WShell::EnumFolder(PCIDLIST_ABSOLUTE folder){
+    std::vector<Item> items;
+    IterateFolder(folder, SHCONTF_FOLDERS | SHCONTF_NONFOLDERS, [&](IShellFolder* pTarget, PITEMID_CHILD child) {
+        Item item;
+        item.name = GetDisplayName(pTarget, child, SHGDN_NORMAL);
+        item.pidl = CombineChild(folder, child);
+        
+        // item.attributes = 0xFFFFFFFF;
+        item.attributes = SFGAO_FOLDER | SFGAO_CANRENAME | SFGAO_CANDELETE;
+        pTarget->GetAttributesOf(1, (LPCITEMIDLIST*)&child, &item.attributes);
+
+        item.iconKey = GetSystemIconKey(item.pidl.get(), SHGFI_LARGEICON);
+        items.push_back(std::move(item));
+    });
+
+    return items;
+}
+
+bool WShell::Directory::Load(PCIDLIST_ABSOLUTE folder){
+    if (!folder) return false;
+    items = WShell::EnumFolder(folder);
+    access = WShell::GetFolderAccess(folder);
+    selectedIndex = -1;
+    return true;
+}
 // =======================================
 
 std::vector<ItemLite>WShell::GetLiteItems(PCIDLIST_ABSOLUTE folder){
     std::vector<ItemLite> items;
 
-    if (!folder) return items;
-
-    ComPtr<IShellFolder> pDesktop;
-    ComPtr<IShellFolder> pTargetFolder;
-    //  Fetch Desktop Root
-    if (FAILED(SHGetDesktopFolder(&pDesktop))) {
-        return items;
-    }
-
-    //  Bind to the target folder or mirror the desktop
-    if (ILIsEmpty(folder)) {
-        pTargetFolder = pDesktop; // ComPtr automatically calls AddRef() under the hood
-    }
-    else {
-        // IID_PPV_ARGS automatically passes the correct IID interface GUID and casts the pointer type safely
-        if (FAILED(pDesktop->BindToObject(folder, nullptr, IID_PPV_ARGS(&pTargetFolder)))) {
-            return items; 
-        }
-    } // pDesktop is no longer needed after this point;
-
-    //  Enumerate Objects
-    ComPtr<IEnumIDList> pEnum;
-    if (FAILED(pTargetFolder->EnumObjects(nullptr, SHCONTF_FOLDERS | SHCONTF_NONFOLDERS, &pEnum))) {
-        return items; 
-    }
-
-    PITEMID_CHILD childPidl = nullptr; // Using standard modern Windows naming for child PIDLs
-    ULONG fetched = 0;
-
-    while (pEnum->Next(1, &childPidl, &fetched) == S_OK){ 
+    IterateFolder(folder, SHCONTF_FOLDERS | SHCONTF_NONFOLDERS, [&](IShellFolder* pTarget, PITEMID_CHILD child) {
         ItemLite item;
-
-        STRRET strName;
-        if (SUCCEEDED(pTargetFolder->GetDisplayNameOf(childPidl, SHGDN_NORMAL, &strName))) {
-            wchar_t nameBuffer[MAX_PATH] = {};
-            StrRetToBufW(&strName, childPidl, nameBuffer, MAX_PATH);
-            item.name = Str::WideToString(nameBuffer);
-            
-        }
-        item.pidl =WShell::Pidl(ILCombine(folder, childPidl));
-
+        item.name = GetDisplayName(pTarget, child, SHGDN_NORMAL);
+        item.pidl = CombineChild(folder, child);
         items.push_back(std::move(item));
-        CoTaskMemFree(childPidl);
-    }
+    });
+
     return items;
 }
+// =======================================
 
+namespace {
+    // Shared by every SideBar::Item construction site below (drives, Recycle Bin,
+    // Control Panel, Quick Access) — previously each one rebuilt name/pidl/icon by
+    // hand with small, easy-to-miss differences.
+    WShell::SideBar::Item MakeSideBarItem(std::string name, PCIDLIST_ABSOLUTE itemPidl, WShell::SideBar::Category category){
+        WShell::SideBar::Item item;
+        item.name = std::move(name);
+        item.pidl = WShell::Pidl(itemPidl);   // clones — caller keeps ownership of itemPidl
+        item.hasSubFolder = PidlHasSubFolders(itemPidl);
+        item.iconKey = GetSystemIconKey(itemPidl, SHGFI_SMALLICON);
+        item.category = category;
+        return item;
+    }
+}
+
+std::vector<WShell::SideBar::Item> WShell::SideBar::GetItems(Category cat){
+    std::vector<WShell::SideBar::Item> items;
+
+    if (cat == Category::C3){
+        Pidl thisPc = GetKnownFolderPidl(FOLDERID_ComputerFolder);
+
+        // This PC's real drives/containers (skips virtual entries like "Gallery")
+        IterateFolder(thisPc, SHCONTF_FOLDERS | SHCONTF_STORAGE | SHCONTF_NAVIGATION_ENUM, [&](IShellFolder* target, PITEMID_CHILD child) {
+            SFGAOF attrs = SFGAO_FOLDER | SFGAO_STREAM;
+            if (FAILED(target->GetAttributesOf(1, (LPCITEMIDLIST*)&child, &attrs))) return;
+
+            bool isRealContainer = (attrs & SFGAO_FOLDER) && !(attrs & SFGAO_STREAM);
+            if (!isRealContainer) return;
+
+            Pidl drivePidl = CombineChild(thisPc.get(), child);
+            items.push_back(MakeSideBarItem(GetDisplayName(target, child, SHGDN_NORMAL), drivePidl.get(), Category::C3));
+        });
+
+        Pidl recycleBin = GetKnownFolderPidl(FOLDERID_RecycleBinFolder);
+        items.push_back(MakeSideBarItem(PidlToTypeablePath(recycleBin.get()), recycleBin.get(), Category::C3));
+    }
+    else if (cat == Category::C2){
+        Pidl quickAccess = GetKnownFolderPidl(L"shell:::{679F85CB-0220-4080-B29B-5540CC05AAB6}");
+        
+        IterateFolder(quickAccess, SHCONTF_FOLDERS | SHCONTF_NAVIGATION_ENUM, [&](IShellFolder* target, PITEMID_CHILD child) {
+            Pidl pinnedPidl = CombineChild(quickAccess.get(), child);
+            items.push_back(MakeSideBarItem(GetDisplayName(target, child, SHGDN_NORMAL), pinnedPidl.get(), Category::C2));
+        });
+    }
+    else if (cat == Category::C1){ 
+        Pidl home = GetKnownFolderPidl(L"shell:::{f874310e-b6b7-47dc-bc84-b9e6b38f5903}");
+        items.push_back(MakeSideBarItem(PidlToTypeablePath(home.get()), home.get(), Category::C1));
+    }
+
+    return items;
+}
 // =======================================
 
 bool WShell::ExecuteFile(PCIDLIST_ABSOLUTE file){
@@ -258,8 +303,10 @@ std::string WShell::PidlToTypeablePath(PCIDLIST_ABSOLUTE pidl){
 
 // todo
 // ! USE HASSUBFOLDER attr stuff 
-bool WShell::PidlHasSubFolders(PCIDLIST_ABSOLUTE folder){
+
+bool WShell::PidlHasSubFolders(PCIDLIST_ABSOLUTE folder, bool accurate){
     if (!folder) return false;
+    // memoize, map<Pidl, bool>
 
     bool hasSubFolders = false;
     ComPtr<IShellItem> pParentItem;
@@ -268,24 +315,33 @@ bool WShell::PidlHasSubFolders(PCIDLIST_ABSOLUTE folder){
     
     // check if folder, only folders can have subfolders
     SFGAOF attr = 0;
-    if (FAILED(pParentItem->GetAttributes(SFGAO_FOLDER, &attr)) || !(attr & SFGAO_FOLDER)) return hasSubFolders;
+    if (accurate){
+        if (FAILED(pParentItem->GetAttributes(SFGAO_FOLDER, &attr)) || !(attr & SFGAO_FOLDER)) return hasSubFolders;
+        ComPtr<IEnumShellItems> pEnum;
+        if (FAILED(pParentItem->BindToHandler(nullptr, BHID_EnumItems, IID_PPV_ARGS(&pEnum)))) return hasSubFolders;
+        
+        ComPtr<IShellItem> pChild;
+        ULONG fetched = 0; 
     
-    ComPtr<IEnumShellItems> pEnum;
-    if (FAILED(pParentItem->BindToHandler(nullptr, BHID_EnumItems, IID_PPV_ARGS(&pEnum)))) return hasSubFolders;
-    
-    ComPtr<IShellItem> pChild;
-    ULONG fetched = 0; 
-
-    // exit once a folder is found
-    while (pEnum->Next(1, &pChild, &fetched) == S_OK && fetched == 1){
-        SFGAOF childAttr = 0;
-        if (SUCCEEDED(pChild->GetAttributes(SFGAO_FOLDER, &childAttr))){
-            if (childAttr & SFGAO_FOLDER){
-                hasSubFolders = true;
-                break;
+        // exit once a folder is found
+        while (pEnum->Next(1, &pChild, &fetched) == S_OK && fetched == 1){
+            SFGAOF childAttr = 0;
+            if (SUCCEEDED(pChild->GetAttributes(SFGAO_FOLDER, &childAttr))){
+                if (childAttr & SFGAO_FOLDER){
+                    hasSubFolders = true;
+                    break;
+                }
             }
         }
     }
+    else{
+        if (SUCCEEDED(pParentItem->GetAttributes(SFGAO_HASSUBFOLDER, &attr))) {
+            return (attr & SFGAO_HASSUBFOLDER) != 0;
+        }
+        return false;
+        
+    }
+    
     return hasSubFolders;
 }
 
@@ -407,7 +463,7 @@ std::vector<NewMenuItem> WShell::EnumerateNewMenu(){
             item.displayName = item.extension;   // fallback so the entry isn't blank
         }
 
-        item.iconIndex = Icons::GetIconIndex(nullptr, subKeyName, FILE_ATTRIBUTE_NORMAL, SHGFI_ICON | SHGFI_SMALLICON | SHGFI_USEFILEATTRIBUTES);
+        item.iconKey = Icons::GetIconIndex(nullptr, subKeyName, FILE_ATTRIBUTE_NORMAL, SHGFI_ICON | SHGFI_SMALLICON | SHGFI_USEFILEATTRIBUTES);
         menuItems.push_back(std::move(item));
     }
     RegCloseKey(hKeyRoot);
@@ -415,3 +471,62 @@ std::vector<NewMenuItem> WShell::EnumerateNewMenu(){
     
 }
 
+/*
+This PC                             :    10110000000000000000000101110100
+Network                             :    10110000000001000000000001100100
+Donald's S20 FE                     :    11110000100000000000000001001101
+Linux                               :    10100000100000000000000001001101
+31, 29, 6, 2
+
+Home                                :    10100000000000000000000000000100
+Gallery                             :    00110000100000000000000100000100
+Donald - Personal                   :    11110000100000000000000001001101
+Somtochukwu - University of Windsor :    11110000100000000000000001001101
+
+This PC                             :    10110000000000000000000101110100
+Network                             :    10110000000001000000000001100100
+Recycle Bin                         :    00100000000000000000000101010100
+Control Panel                       :    10100000000000000000000000100100
+Donald Udeh                         :    11110000100000000000000100101101
+Libraries                           :    10110000100000000000000100001101
+Music                               :    11110000100000000000000001001101
+Downloads                           :    11110000100000000000000001001101
+Pictures                            :    11110000100000000000000001001101
+Control Panel                       :    00000000000000000000000000100100
+Videos                              :    11110000100000000000000001001101
+Documents                           :    11110000100000000000000001001101
+Linux                               :    10100000100000000000000001001101
+Desktop                             :    11110000100000000000000001001101
+Gallery                             :    00110000100000000000000100000100
+Home                                :    10100000000000000000000000000100
+Donald - Personal                   :    11110000100000000000000001001101
+Somtochukwu - University of Windsor :    11110000100000000000000001001101
+Learn about this picture            :    00000000000000000000000000000000
+Donald's S20 FE                     :    11110000100000000000000001001101
+Arduino IDE                         :    01000000010000010000000101110111
+Command Prompt                      :    01000000010000010000000101110111
+Desktop                             :    01110000100000000000000101111111
+Discord                             :    01000000010000010000000101110111
+Dynamic Theme                       :    01000000010000010000000101110111
+Firefox.exe                         :    01000000010000000000000101110111
+GitHub Desktop                      :    01000000010000010000000101110111
+IOLab                               :    01000000010000010000000101110111
+JDownloader 2                       :    01000000010000010000000101110111
+Old Firefox Data                    :    11110000100000000000000101111111
+SignalRgb                           :    01000000010000010000000101110111
+Stacher7                            :    01000000010000010000000101110111
+udeh - Chrome                       :    01000000010000010000000101110111
+Visual Studio Code-Donalds-PC       :    01000000010000010000000101110111
+Visual Studio Code                  :    01000000010000010000000101110111
+VsCode.code-workspace               :    01000000010000000000000101110111
+WECDSB Student AI Hub               :    01000000010000010000000101110111
+Accessibility Insights For Windows  :    01000000010000010000000101110111
+Adobe Acrobat                       :    01000000010000010000000101110111
+AirDroid                            :    01000000010000010000000101110111
+Google Chrome                       :    01000000010000010000000101110111
+Hasleo Backup Suite                 :    01000000010000010000000101110111
+KiCad 10.0                          :    01000000010000010000000101110111
+Microsoft Edge                      :    01000000010000010000000101110111
+VLC media player                    :    01000000010000010000000101110111
+VMware Workstation Pro              :    01000000010000010000000101110111
+*/

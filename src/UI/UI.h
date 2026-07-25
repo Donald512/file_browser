@@ -87,3 +87,7 @@ namespace FileView{
     void Render(AppContext& ctx);
 }
 
+namespace Sidebar{
+    inline f32 Width = 220.0f;
+    void Render(AppContext& ctx, f32 currentWidth);
+}

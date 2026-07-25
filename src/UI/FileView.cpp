@@ -1,7 +1,5 @@
 #include "UI.h"
-// #include "..\Icons\icons.h"
 
-namespace Colors = UI::Colors;
 namespace Style = UI::Style;
 
 void FileView::Render(AppContext& ctx){        
@@ -9,10 +7,9 @@ void FileView::Render(AppContext& ctx){
         ImGui::EndChild();
         return;
     }
-    
     f32 availWidth = ImGui::GetContentRegionAvail().x;    // Calculate how much width is available currently
-    f32 iconSize = IconSize * ctx.dpiScale;
-    f32 cellWidth  = (IconSize + XPadding) * ctx.dpiScale;
+    f32 iconSize = IconSize * ctx.ui.dpiScale;
+    f32 cellWidth  = (IconSize + XPadding) * ctx.ui.dpiScale;
 
     // Determine how many columns can fit based on width. Minimum 1 column
     u16 columnsCount = (u16) (availWidth / cellWidth);
@@ -80,7 +77,7 @@ void FileView::Render(AppContext& ctx){
                     ImGui::SetCursorPosX(centeredIconX);
 
                     // Draw a colored box as placeholder using ImDrawList, so it doesnt steal clicks like Button()
-                    ImTextureID iconTexture = ctx.icons.GetTexture(item.iconCacheKey);
+                    ImTextureID iconTexture = ctx.icons.GetTexture(item.iconKey);
                     if (iconTexture){
                         ImGui::Image(iconTexture, ImVec2(iconSize, iconSize));
                     }
