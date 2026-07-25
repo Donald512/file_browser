@@ -1,6 +1,8 @@
 #include "UI.h"
 #include <unordered_map>
 
+namespace Style = UI::Style;
+
 namespace Sidebar {
     struct SidebarNodeState{
         bool isOpen = false;
@@ -15,7 +17,7 @@ namespace Sidebar {
         ImGui::PushID(label);
         f32 rowHeight = ImGui::GetFrameHeight();
         f32 arrowWidth = rowHeight;
-        
+
         if (hasChildren){
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0));
             const char* arrow = *isOpen ? ICON_REG_CHEVRON_DOWN : ICON_REG_CHEVRON_RIGHT;
@@ -35,11 +37,14 @@ namespace Sidebar {
         bool clicked = ImGui::Selectable("##row", isSelected, ImGuiSelectableFlags_None, ImVec2(0, rowHeight));
     
         ImGui::SameLine(0, 0);
-        ImGui::SetCursorScreenPos(rowStart);
+
+        f32 buttonY = rowStart.y + (ImGui::GetFrameHeight() - ImGui::GetFontSize()) * 0.5f;
+        ImGui::SetCursorScreenPos(ImVec2(rowStart.x, buttonY));
+        
         if (icon){
             f32 iconSize = 16.0f * ctx.ui.dpiScale;
             ImGui::Image(icon, ImVec2(iconSize, iconSize));
-            ImGui::SameLine();
+            ImGui::SameLine(0, 2);
         }
         ImGui::TextUnformatted(label);
 
@@ -74,30 +79,40 @@ namespace Sidebar {
 
     void Render(AppContext& ctx, f32 currentWidth) {
         // Begin the sidebar window with the specific width passed by the resizer
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding,  8.0f * ctx.ui.dpiScale); 
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, Style::NoBorder);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f * ctx.ui.dpiScale, 4.0f * ctx.ui.dpiScale));
         if (!ImGui::BeginChild("Sidebar", ImVec2(currentWidth, 0), ImGuiChildFlags_None)) {
+            ImGui::PopStyleVar(2);
             ImGui::EndChild();
             return;
         }
 
+        ImGui::Dummy(ImVec2(0.0f, 4.0f));
         for (auto& item : ctx.items1){
             bool isSelected = ILIsEqual(ctx.navigation.CurrentFolder(), item.pidl);
             ImTextureID tex = ctx.icons.GetTexture(item.iconKey);
             RenderNodeAndChildren(ctx, item.name, item.pidl, tex, item.hasSubFolder);
         }
+        ImGui::Dummy(ImVec2(0.0f, SectionPaddingY));
         ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
 
+        ImGui::Dummy(ImVec2(0.0f, SectionPaddingY));
         for (auto& item : ctx.items2){
             bool isSelected = ILIsEqual(ctx.navigation.CurrentFolder(), item.pidl);
             ImTextureID tex = ctx.icons.GetTexture(item.iconKey);
             RenderNodeAndChildren(ctx, item.name, item.pidl, tex, false);
         }
-
+        ImGui::Dummy(ImVec2(0.0f, SectionPaddingY));
         ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
+        
+        ImGui::Dummy(ImVec2(0.0f, SectionPaddingY));
         for (auto& item : ctx.items3){
             bool isSelected = ILIsEqual(ctx.navigation.CurrentFolder(), item.pidl);
             ImTextureID tex = ctx.icons.GetTexture(item.iconKey);
             RenderNodeAndChildren(ctx, item.name, item.pidl, tex, item.hasSubFolder);
         }
+        ImGui::PopStyleVar(3);
         ImGui::EndChild();
     }
 }

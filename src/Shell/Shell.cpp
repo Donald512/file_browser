@@ -12,6 +12,7 @@ using Microsoft::WRL::ComPtr;
 using namespace WShell;
 
 static std::wstring GetDefaultValue(HKEY root, const wchar_t* subkey);
+Pidl home = GetKnownFolderPidl(L"shell:::{f874310e-b6b7-47dc-bc84-b9e6b38f5903}");
 
 namespace { // Anonymous namespace means these are private to this .cpp file
     
@@ -163,7 +164,6 @@ std::vector<WShell::SideBar::Item> WShell::SideBar::GetItems(Category cat){
         });
     }
     else if (cat == Category::C1){ 
-        Pidl home = GetKnownFolderPidl(L"shell:::{f874310e-b6b7-47dc-bc84-b9e6b38f5903}");
         items.push_back(MakeSideBarItem(PidlToTypeablePath(home.get()), home.get(), Category::C1));
     }
 
@@ -306,6 +306,7 @@ std::string WShell::PidlToTypeablePath(PCIDLIST_ABSOLUTE pidl){
 
 bool WShell::PidlHasSubFolders(PCIDLIST_ABSOLUTE folder, bool accurate){
     if (!folder) return false;
+    if (ILIsEqual(folder, home)) return false;
     // memoize, map<Pidl, bool>
 
     bool hasSubFolders = false;

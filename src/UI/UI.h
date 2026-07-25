@@ -89,5 +89,6 @@ namespace FileView{
 
 namespace Sidebar{
     inline f32 Width = 220.0f;
+    constexpr f32 SectionPaddingY = 20.0f;
     void Render(AppContext& ctx, f32 currentWidth);
 }
