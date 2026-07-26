@@ -74,6 +74,7 @@ namespace AddressBar{
 
 namespace UI::Helpers{
     bool IconAndTextButton(const char* str_id, const char* icon, const char* label, const ImVec4& icon_color = UI::Colors::AccentBlue);
+    void DrawCenteredWrappedText(const char* text, float columnWidth, int maxLines);
 }
 
 namespace CommandBar{
@@ -82,10 +83,16 @@ namespace CommandBar{
 }
 
 namespace FileView{
+    enum class ViewMode { ExtraLarge, Large, Medium, Small, List, Details, Tiles, Content };
     inline f32 IconSize   = 48.0f;
     constexpr f32 XPadding = 32.0f;
+
+    inline ViewMode currentView = ViewMode::Details;   // same pattern as your existing `inline f32 IconSize`
+    inline bool showFileExtensions = true;
+
     void Render(AppContext& ctx);
 }
+
 
 namespace Sidebar{
     inline f32 Width = 220.0f;

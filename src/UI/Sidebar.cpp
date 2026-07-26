@@ -2,6 +2,7 @@
 #include <unordered_map>
 
 namespace Style = UI::Style;
+namespace Colors = UI::Colors;
 
 namespace Sidebar {
     struct SidebarNodeState{
@@ -58,7 +59,7 @@ namespace Sidebar {
         ImGui::PopID();
         return clicked;
     }
-    
+
     void RenderNodeAndChildren(AppContext& ctx, const std::string& name, const WShell::Pidl& pidl, ImTextureID icon, bool hasChildren){
         SidebarNodeState& state = s_nodeState[(const void*)pidl.get()];   // creates on first access, persists across frames
 
@@ -89,8 +90,10 @@ namespace Sidebar {
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding,  8.0f * ctx.ui.dpiScale); 
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, Style::NoBorder);
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f * ctx.ui.dpiScale, 4.0f * ctx.ui.dpiScale));
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, Colors::WindowForeground);
         if (!ImGui::BeginChild("Sidebar", ImVec2(currentWidth, 0), ImGuiChildFlags_None)) {
             ImGui::PopStyleVar(3);
+            ImGui::PopStyleColor();
             ImGui::EndChild();
             return;
         }
@@ -116,6 +119,7 @@ namespace Sidebar {
             ImTextureID tex = ctx.icons.GetTexture(item.iconKey);
             RenderNodeAndChildren(ctx, item.name, item.pidl, tex, item.hasSubFolder);
         }
+        ImGui::PopStyleColor();
         ImGui::PopStyleVar(3);
         ImGui::EndChild();
     }

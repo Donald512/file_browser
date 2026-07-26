@@ -5,7 +5,8 @@ namespace Colors = UI::Colors;
 namespace Style = UI::Style;
 
 static void DrawNewMenuDropdown(AppContext& ctx);
-
+static void PositionPopupBelowWindow(const char* popupId, float dpiScale, float offsetPxY);
+static void DrawViewMenuDropdown(AppContext& ctx);
 
 void CommandBar::Render(AppContext& ctx){
     ImGui::PushStyleColor(ImGuiCol_ChildBg, Colors::WindowForeground);
@@ -16,10 +17,9 @@ void CommandBar::Render(AppContext& ctx){
     }
     ImGui::PopStyleColor();
 
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f * ctx.ui.dpiScale, 4.0f * ctx.ui.dpiScale));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f * ctx.ui.dpiScale, 8.0f * ctx.ui.dpiScale));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, Style::NoBorder);
 
-    ImGui::SetWindowFontScale(1.2f);
 
     f32 buttonHeight = ImGui::GetFrameHeight();
     f32 centerY = (Height * ctx.ui.dpiScale - buttonHeight) * 0.5f;
@@ -34,11 +34,12 @@ void CommandBar::Render(AppContext& ctx){
         ImGui::OpenPopup(newMenuPopupId);
     }
     ImGui::EndDisabled();
-
+    PositionPopupBelowWindow(newMenuPopupId, ctx.ui.dpiScale, 5);
     if (ImGui::BeginPopup(newMenuPopupId)){
         DrawNewMenuDropdown(ctx);
         ImGui::EndPopup();
     }
+
     // ============================
     ImGui::SameLine(0.0f, 8.0f);
     
@@ -88,19 +89,36 @@ void CommandBar::Render(AppContext& ctx){
     if (ImGui::Button( ICON_REG_LIST " View " ICON_REG_CHEVRON_DOWN)){
         ImGui::OpenPopup(viewMenuPopupId);
     }
+    PositionPopupBelowWindow(viewMenuPopupId, ctx.ui.dpiScale, 5);
     if (ImGui::BeginPopup(viewMenuPopupId)){
+        DrawViewMenuDropdown(ctx);
         ImGui::EndPopup();
     }
     // ============================
 
 
 
-    ImGui::SetWindowFontScale(1.0f);
     ImGui::PopStyleVar(2);
     ImGui::EndChild();
 }
 
+static void PositionPopupBelowWindow(const char* popupId, float dpiScale, float offsetPxY){
+    if (ImGui::IsPopupOpen(popupId)){
+
+        // Set NextWindowPos here to move the popup 2px directly below, aligned with View button?
+        ImVec2 buttonMin = ImGui::GetItemRectMin(); // Top left of button
+        ImVec2 buttonSize = ImGui::GetItemRectSize();
+        
+        ImVec2 parentPos = ImGui::GetWindowPos();   // Top-left of current window
+        ImVec2 parentSize = ImGui::GetWindowSize();
+        
+        ImVec2 popupPos = ImVec2(buttonMin.x, (offsetPxY * dpiScale) + parentPos.y + parentSize.y);
+        ImGui::SetNextWindowPos(popupPos);
+    }
+}
+
 static void DrawNewMenuDropdown(AppContext& ctx){
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f * ctx.ui.dpiScale, 8.0f * ctx.ui.dpiScale));
     for (auto& item : ctx.newMenuItems){
         ImGui::PushID(&item);
         ImTextureID iconTex = ctx.icons.GetTexture(item.iconKey);
@@ -117,4 +135,69 @@ static void DrawNewMenuDropdown(AppContext& ctx){
         ImGui::PopID();
 
     }
+    ImGui::PopStyleVar();
+}
+static bool CustomMenuItem(const char* label, bool selected, bool isRadioStyle = true) {
+    ImGui::PushID(label); // Prevents ID collisions between items
+    
+    ImVec2 cursorStart = ImGui::GetCursorPos();
+    
+    // Using AllowOverlap lets us draw text/icons on top of the selectable
+    bool clicked = ImGui::Selectable("##selectable", selected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap);
+
+    ImGui::SetCursorPos(cursorStart);
+
+    if (selected) {
+        const char* checkMark = isRadioStyle ? ICON_REG_RADIO_BUTTON : ICON_REG_CHECKMARK;
+        ImGui::TextUnformatted(checkMark);
+    } else {
+        // Space holder for alignment
+        ImGui::Dummy(ImVec2(ImGui::GetFontSize(), 0.0f));
+    }
+
+    ImGui::SameLine();
+    ImGui::TextUnformatted(label);
+
+    ImGui::PopID();
+    return clicked;
+}
+
+
+static void DrawViewMenuDropdown(AppContext& ctx){
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f * ctx.ui.dpiScale, 8.0f * ctx.ui.dpiScale));
+    if (CustomMenuItem(ICON_REG_DESKTOP_28 " Extra large icons", FileView::currentView == FileView::ViewMode::ExtraLarge)) FileView::currentView = FileView::ViewMode::ExtraLarge;
+    if (CustomMenuItem(ICON_REG_DESKTOP_20 " Large icons", FileView::currentView == FileView::ViewMode::Large)) FileView::currentView = FileView::ViewMode::Large;
+    if (CustomMenuItem(ICON_REG_DESKTOP_MAC " Medium icons", FileView::currentView == FileView::ViewMode::Medium)) FileView::currentView = FileView::ViewMode::Medium;
+    if (CustomMenuItem(ICON_REG_GRID " Small icons", FileView::currentView == FileView::ViewMode::Small)) FileView::currentView = FileView::ViewMode::Small;
+    if (CustomMenuItem(ICON_REG_LIST " List", FileView::currentView == FileView::ViewMode::List)) FileView::currentView = FileView::ViewMode::List;
+    if (CustomMenuItem(ICON_REG_DOCUMENT_BULLET_LIST " Details", FileView::currentView == FileView::ViewMode::Details)) FileView::currentView = FileView::ViewMode::Details;
+    if (CustomMenuItem(ICON_REG_APPS_LIST_DETAIL " Tiles", FileView::currentView == FileView::ViewMode::Tiles)) FileView::currentView = FileView::ViewMode::Tiles;
+    if (CustomMenuItem(ICON_REG_APPS_LIST " Content", FileView::currentView == FileView::ViewMode::Content)) FileView::currentView = FileView::ViewMode::Content;
+    
+    ImGui::Separator();
+    
+    if (CustomMenuItem(ICON_REG_PANEL_LEFT " Details pane", FileView::currentView == FileView::ViewMode::Tiles)) FileView::currentView = FileView::ViewMode::Tiles;
+    if (CustomMenuItem(ICON_REG_PANEL_RIGHT " Preview pane", FileView::currentView == FileView::ViewMode::Content)) FileView::currentView = FileView::ViewMode::Content;
+    
+    ImGui::Separator();
+    
+    // The "Show >" sub-menu
+    if (ImGui::BeginMenu("Show")) {
+        CustomMenuItem(ICON_REG_PANEL_LEFT " Navigation pane", true, false); // True by default based on your image
+        ImGui::Separator();
+        CustomMenuItem(ICON_REG_ARROW_BIDIRECTIONAL_UP_DOWN "Compact view", false, false);
+        ImGui::Separator();
+        CustomMenuItem(ICON_REG_CHECKMARK_SQUARE "Item check boxes", false, false);
+        
+        CustomMenuItem(ICON_REG_DOCUMENT_ARROW_UP "File name extensions", false, false);
+        
+        CustomMenuItem(ICON_REG_EYE "Hidden items", false, false);
+
+        ImGui::EndMenu();
+    }
+
+    
+
+    ImGui::PopStyleVar();
+    
 }

@@ -85,3 +85,39 @@ bool UI::Helpers::IconAndTextButton(const char* str_id, const char* icon, const 
     ImGui::PopID();
     return pressed;
 }
+void UI::Helpers::DrawCenteredWrappedText(const char* text, float columnWidth, int maxLines) {
+    ImFont* font = ImGui::GetFont();
+    float fontSize = ImGui::GetFontSize();
+    const char* text_end = text + strlen(text);
+
+    int line = 0;
+    const char* current = text;
+
+    while (current < text_end && line < maxLines) {
+        const char* wrap_pos = font->CalcWordWrapPositionA(1.0f, current, text_end, columnWidth);
+        if (wrap_pos == current) wrap_pos++;
+
+        bool isLastAllowedLine = (line == maxLines - 1);
+        bool hasMoreTextAfter = wrap_pos < text_end;
+
+        std::string lineText(current, wrap_pos);
+
+        if (isLastAllowedLine && hasMoreTextAfter) {
+            // Truncate this line and append "..." until it fits
+            while (!lineText.empty() &&
+                   font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, (lineText + "...").c_str()).x > columnWidth) {
+                lineText.pop_back();
+            }
+            lineText += "...";
+        }
+
+        ImVec2 lineSize = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, lineText.c_str());
+        float cursorX = ImGui::GetCursorPosX();
+        ImGui::SetCursorPosX(cursorX + (columnWidth - lineSize.x) * 0.5f);
+        ImGui::TextUnformatted(lineText.c_str());
+
+        current = wrap_pos;
+        while (current < text_end && (*current == ' ' || *current == '\n')) current++;
+        line++;
+    }
+}

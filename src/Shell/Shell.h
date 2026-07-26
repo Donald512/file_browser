@@ -88,6 +88,9 @@ namespace WShell{
         Pidl pidl;    // 8
     };
 
+    enum class SortMode { Name, DateModified, Type, Size};
+    enum class SortDirection {Ascending, Descending };
+
     class Directory{
         public:
             bool Load(PCIDLIST_ABSOLUTE folder);
@@ -99,10 +102,28 @@ namespace WShell{
             };
             u64 Selected() const {return (u64) selectedIndex; }
 
+            void SetSort(SortMode mode, SortDirection dir){
+                sortMode = mode;
+                sortDirection = dir;
+                ResortItems();  
+            }
+
+            void setShowHidden(bool show){
+                showHidden = show;
+            }
+
         private:
             i64 selectedIndex = -1;
+
             std::vector<Item> items;
+
             FolderAccess access = FolderAccess::NoCreate;
+
+            SortMode sortMode = SortMode::Name;
+            SortDirection sortDirection = SortDirection::Ascending;
+            void ResortItems();
+
+            bool showHidden = false;
     };
     
     // NOTE: Typeable means it cincludes the names of virtual folders

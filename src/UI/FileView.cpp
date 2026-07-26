@@ -1,38 +1,62 @@
 #include "UI.h"
+#include <algorithm>
 
 namespace Style = UI::Style;
+namespace Colors = UI::Colors;
 
-void FileView::Render(AppContext& ctx){        
+struct GridViewParams {
+    f32 iconSize;      
+    int maxTextLines;
+    f32 xPadding;      // gap between cells
+    f32 yGap;          // gap between icon bottom and text top
+};
+
+void RenderGrid(AppContext& ctx, const GridViewParams& params);
+
+static GridViewParams GetGridParamsForMode(FileView::ViewMode mode) {
+    switch (mode) {
+        case FileView::ViewMode::ExtraLarge: return { 218.0f, 4, 16.0f, 8.0f };
+        case FileView::ViewMode::Large:      return { 96.0f,  4, 12.0f, 6.0f };
+        case FileView::ViewMode::Medium:     return { 48.0f,  4, 12.0f, 4.0f };
+        case FileView::ViewMode::Small:      return { 24.0f,  4, 8.0f,  4.0f };
+        default:                             return { 96.0f,  4, 12.0f, 6.0f };
+    }
+}
+
+void RenderGrid(AppContext& ctx, const GridViewParams& params){       
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, Colors::WindowForeground); 
     if (!ImGui::BeginChild("FileView", Style::AutoFillRemnantWindow, ImGuiChildFlags_Borders, ImGuiChildFlags_NavFlattened)){
+        ImGui::PopStyleColor();
         ImGui::EndChild();
         return;
     }
-    f32 availWidth = ImGui::GetContentRegionAvail().x;    // Calculate how much width is available currently
-    f32 iconSize = IconSize * ctx.ui.dpiScale;
-    f32 cellWidth  = (IconSize + XPadding) * ctx.ui.dpiScale;
 
-    // Determine how many columns can fit based on width. Minimum 1 column
-    u16 columnsCount = (u16) (availWidth / cellWidth);
-    columnsCount = columnsCount ? columnsCount: 1;  // if columnsCount is 0, make it 1
+    f32 dpi = ctx.ui.dpiScale;
+    f32 iconSize = params.iconSize * dpi;
+    f32 cellWidth = iconSize + (params.xPadding * dpi);
+    f32 textLineHeight = ImGui::GetTextLineHeightWithSpacing();
+    f32 maxTextHeight = textLineHeight * params.maxTextLines;
+    f32 cellHeight = iconSize + (params.yGap * dpi) + maxTextHeight;
 
+    f32 availWidth = ImGui::GetContentRegionAvail().x;
+    u16 columnsCount = (u16)(availWidth / cellWidth);
+    columnsCount = columnsCount ? columnsCount : 1;
 
     if (ImGui::BeginTable("ExplorerGrid", columnsCount, ImGuiTableFlags_NoSavedSettings)){
         auto &dir = ctx.navigation.Contents().Items();
+        u16 totalRows = (u16) (dir.size() + columnsCount - 1)/columnsCount; // ceiling
 
-        u16 totalRows = (u16) (dir.size() + columnsCount - 1)/columnsCount; // the + columnsCount - 1/ columnsCount is there to celiling the result
         ImGuiListClipper clipper;
-        clipper.Begin(totalRows);
+        clipper.Begin(totalRows, cellHeight); // fixed row height
         
         // instead of looping through, entries, we loop through visible rows
         while (clipper.Step()){
             for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++){  // DisplayStart is the first row, DisplayEnd is exclusive
-                u64 startItemIdx = (u64) row * columnsCount;
-                u64 endItemIdex = startItemIdx + columnsCount;
-                endItemIdex = (endItemIdex < dir.size()) ? endItemIdex : dir.size();  // get the min, important for last row
+                u64 startIdx = (u64) row * columnsCount;
+                u64 endIdx = (std::min)((startIdx + columnsCount), dir.size());
 
-                for (u64 i = startItemIdx; i < endItemIdex; i++){
+                for (u64 i = startIdx; i < endIdx; i++){
                     ImGui::TableNextColumn();
-
                     f32 realCellWidth = ImGui::GetContentRegionAvail().x;
                     
                     auto& item = dir[i];
@@ -61,6 +85,7 @@ void FileView::Render(AppContext& ctx){
                             ctx.navigation.NavigateTo(dir[i].pidl);
                             ImGui::PopID();
                             ImGui::EndTable();
+                            ImGui::PopStyleColor();
                             ImGui::EndChild();
                             return;
                         }
@@ -90,21 +115,11 @@ void FileView::Render(AppContext& ctx){
                     
                     // Push the layout cursor past our custom drawn box
                     ImGui::Dummy(ImVec2(iconSize, iconSize));
-                    
-                    // center text
-                    f32 textWidth = ImGui::CalcTextSize(item.name.c_str()).x; 
-                    if (textWidth < realCellWidth){
-                        ImGui::SetCursorPosX(columnStartX + (realCellWidth - textWidth) * 0.5f);
-                    }
-                    else{
-                        ImGui::SetCursorPosX(columnStartX);
-                    }
+                    ImGui::Dummy(ImVec2(0, params.yGap * dpi));
 
-                    // Wraps text smoothly if name exceeds column size limit
-                    ImGui::PushTextWrapPos(columnStartX + realCellWidth);
-                    ImGui::Text("%s", item.name.c_str());
-                    ImGui::PopTextWrapPos();
-                    
+                    ImGui::SetCursorPosX(columnStartX);
+                    UI::Helpers::DrawCenteredWrappedText(item.name.c_str(), realCellWidth, params.maxTextLines);
+
                     ImGui::EndGroup();
                     ImGui::PopID();
                 }
@@ -112,6 +127,11 @@ void FileView::Render(AppContext& ctx){
         }
         ImGui::EndTable();
     }
+    ImGui::PopStyleColor();
     ImGui::EndChild();
 }
     
+void FileView::Render(AppContext& ctx){
+    GridViewParams params = GetGridParamsForMode(FileView::currentView);
+    RenderGrid(ctx, params);
+}
