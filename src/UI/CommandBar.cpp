@@ -123,7 +123,7 @@ static void DrawNewMenuDropdown(AppContext& ctx){
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f * ctx.ui.dpiScale, 8.0f * ctx.ui.dpiScale));
     for (auto& item : ctx.newMenuItems){
         ImGui::PushID(&item);
-        ImTextureID iconTex = ctx.icons.GetTexture(item.iconKey);
+        ImTextureID iconTex = ctx.icons.GetTexture({item.iconKey, SHIL_SMALL});
         if (iconTex){
             ImGui::Image(iconTex, ImVec2(16.0f, 16.0f));
             ImGui::SameLine();

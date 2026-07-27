@@ -4,19 +4,38 @@
 #include <functional>
 
 using namespace Icons;
+
+IImageList* IconManager::GetImageList(int shilSize) {
+    switch (shilSize) {
+        case SHIL_SMALL:      return imgListSmall.Get();
+        case SHIL_LARGE:      return imgListLarge.Get();
+        case SHIL_EXTRALARGE: return imgListExtraLarge.Get();
+        case SHIL_JUMBO:      return imgListJumbo.Get();
+        default:              return imgListLarge.Get();
+    }
+}
+
 bool IconManager::Init(ID3D11Device* device, ID3D11DeviceContext* context){
     d3dDevice = device;
     d3dContext = context;
 
-    HRESULT hr = SHGetImageList(SHIL_LARGE, IID_IImageList, (void**)&hSystemImageList);
-        if (FAILED(hr)) {
-            return false;
-        }
+    // Fetch each system image list variant
+    HRESULT hrSmall = SHGetImageList(SHIL_SMALL, IID_PPV_ARGS(&imgListSmall));
+    HRESULT hrLarge = SHGetImageList(SHIL_LARGE, IID_PPV_ARGS(&imgListLarge));
+    HRESULT hrExtra = SHGetImageList(SHIL_EXTRALARGE, IID_PPV_ARGS(&imgListExtraLarge));
+    HRESULT hrJumbo = SHGetImageList(SHIL_JUMBO, IID_PPV_ARGS(&imgListJumbo));
+
+    // Fail if at least small or large failed (Jumbo is safe on Vista+)
+    if (FAILED(hrSmall) || FAILED(hrLarge)) {
+        return false;
+    }
+
     return true;
 }
 
-ImTextureID IconManager::GetTexture(u64 key){
 
+ImTextureID IconManager::GetTexture(const IconKey& key) {
+    // Pack iconIndex (32-bit) and shilSize into a unique 64-bit cache key
     
     // search cache
     for (auto& cachedIcon : cachedIcons){
@@ -26,8 +45,12 @@ ImTextureID IconManager::GetTexture(u64 key){
         }
     }
 
+    IImageList* imgList = GetImageList(key.shilSize);
+    if (!imgList) return {};
+
     // create texture if not found
-    HICON hIcon = ImageList_GetIcon(hSystemImageList, static_cast<int>(key), ILD_TRANSPARENT);
+    HICON hIcon = nullptr;
+    HRESULT hr = imgList->GetIcon(static_cast<int>(key.iIcon), ILD_TRANSPARENT, &hIcon);
     if (!hIcon) return 0;
 
     auto iconScope = std::unique_ptr<HICON__, decltype(&DestroyIcon)>(hIcon, DestroyIcon);
@@ -36,11 +59,9 @@ ImTextureID IconManager::GetTexture(u64 key){
     ImTextureID texture = HIconToTexture(iconScope.get());
     if (!texture) return 0;
 
-    u64 targetIndex = 0;
-
-    // 5. Cache insertion & LRU eviction management
+    // Cache insertion & LRU eviction management
     if (cachedIcons.size() >= capacity) {
-        targetIndex = EvictLeastRecentlyUsed();
+        u64 targetIndex = EvictLeastRecentlyUsed();
         CachedIcon& entry = cachedIcons[targetIndex];
         entry.key = key;
         entry.texture.Attach(reinterpret_cast<ID3D11ShaderResourceView*>(texture));
@@ -176,23 +197,20 @@ u64 IconManager::EvictLeastRecentlyUsed(){
 }
 
 
-u64 Icons::GetIconIndex(PCIDLIST_ABSOLUTE pidl, const wchar_t* pszPath, DWORD dwFileAttributes, UINT uFlags){
-    // if (!pidl) return 0;
-
-    // memoize, map<Pidl | wchar_t*, bool>
+u32 Icons::GetIconIndex(PCIDLIST_ABSOLUTE pidl, const wchar_t* pszPath, DWORD dwFileAttributes, UINT uFlags) {
     SHFILEINFOW sfi = {};
 
-    if (pidl){
-        SHGetFileInfoW((LPCWSTR) pidl, dwFileAttributes, &sfi, sizeof(sfi), uFlags);
-    }
-    else if (pszPath){
-        SHGetFileInfoW(pszPath, dwFileAttributes, &sfi, sizeof(sfi), uFlags);
+    // Ensure SHGFI_SYSICONINDEX is always set
+    UINT flags = uFlags | SHGFI_SYSICONINDEX;
 
+    if (pidl) {
+        SHGetFileInfoW(reinterpret_cast<LPCWSTR>(pidl), dwFileAttributes, &sfi, sizeof(sfi), flags);
+    } else if (pszPath) {
+        SHGetFileInfoW(pszPath, dwFileAttributes, &sfi, sizeof(sfi), flags);
     }
-    // sfi.iIcon now contains the unique icon index
-    return (u64) sfi.iIcon; // even if it fails, it returns 0
+
+    return sfi.iIcon;
 }
-
 
 /* // todo
     GetDC(nullptr) + CreateCompatibleDC + DeleteDC + ReleaseDC on every single cal - Cache memory DC in iconcache

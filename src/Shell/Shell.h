@@ -63,7 +63,7 @@ namespace WShell{
         std::string displayName;    // E.g: Text document
         std::string extension;      // .txt
         Pidl templatePath;
-        u64 iconKey = 0;   // key into Icons::IconManager::GetTexture()
+        u32 iconKey = 0;   // key into Icons::IconManager::GetTexture()
         NewItemAction action = NewItemAction::EmptyFile;
     };
 
@@ -80,12 +80,13 @@ namespace WShell{
         u64 fileSize = 0;   // 8
         FILETIME lastWriteTime{}; // 8
         SFGAOF attributes = 0;  // 4
-        u64 iconKey = 0;   // key into Icons::IconManager::GetTexture()
+        u32 iconKey = 0;   // key into Icons::IconManager::GetTexture()
     };
 
     struct ItemLite{   // just a stripped down version of ShellItem
         std::string name; // 24
         Pidl pidl;    // 8
+        u32 iconKey = 0;    // used by 
     };
 
     enum class SortMode { Name, DateModified, Type, Size};
@@ -153,7 +154,7 @@ namespace WShell::Sidebar {
     struct Item {
         std::string name;
         WShell::Pidl pidl; 
-        u64 iconKey = 0;   // key into Icons::IconManager::GetTexture()
+        u32 iconKey = 0;   // key into Icons::IconManager::GetTexture()
         bool hasSubFolder = false;
         Category category = Category::C1; // Now ImGui can easily group them!
     };

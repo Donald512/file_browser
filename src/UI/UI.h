@@ -90,7 +90,7 @@ namespace FileView{
     inline f32 IconSize   = 48.0f;
     constexpr f32 XPadding = 32.0f;
 
-    inline ViewMode currentView = ViewMode::Details;   // same pattern as your existing `inline f32 IconSize`
+    inline ViewMode currentView = ViewMode::Medium;   // same pattern as your existing `inline f32 IconSize`
     inline bool showFileExtensions = true;
 
     void Render(AppContext& ctx);

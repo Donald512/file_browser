@@ -10,5 +10,5 @@
 namespace Icons{
     // Returns the system image list index for a pidl or path — cheap,
     // no GDI/D3D work happens here. 0 on failure (matches an empty icon).
-    u64 GetIconIndex(PCIDLIST_ABSOLUTE pidl, const wchar_t* pszPath, DWORD dwFileAttributes, UINT uFlags);
+    u32 GetIconIndex(PCIDLIST_ABSOLUTE pidl, const wchar_t* pszPath, DWORD dwFileAttributes, UINT uFlags);
 }

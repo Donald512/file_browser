@@ -1,6 +1,6 @@
 #include "IconLookup.h"
 
-u64 Icons::GetIconIndex(PCIDLIST_ABSOLUTE pidl, const wchar_t* pszPath, DWORD dwFileAttributes, UINT uFlags){
+u32 Icons::GetIconIndex(PCIDLIST_ABSOLUTE pidl, const wchar_t* pszPath, DWORD dwFileAttributes, UINT uFlags){
     // if (!pidl) return 0;
 
     // memoize, map<Pidl | wchar_t*, bool>
@@ -13,5 +13,5 @@ u64 Icons::GetIconIndex(PCIDLIST_ABSOLUTE pidl, const wchar_t* pszPath, DWORD dw
         SHGetFileInfoW(pszPath, dwFileAttributes, &sfi, sizeof(sfi), uFlags);
     }
     // sfi.iIcon now contains the unique icon index
-    return (u64) sfi.iIcon; // even if it fails, it returns 0
+    return sfi.iIcon; // even if it fails, it returns 0
 }

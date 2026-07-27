@@ -70,7 +70,7 @@ namespace { // Anonymous namespace means these are private to this .cpp file
     }
 
     // The "SHGFI_PIDL | SHGFI_SYSICONINDEX | <size>" combination was repeated
-    u64 GetSystemIconKey(PCIDLIST_ABSOLUTE pidl, UINT sizeFlag) {
+    u32 GetSystemIconKey(PCIDLIST_ABSOLUTE pidl, UINT sizeFlag) {
         return Icons::GetIconIndex(pidl, nullptr, 0, SHGFI_PIDL | SHGFI_SYSICONINDEX | sizeFlag);
     }
 }

@@ -3,6 +3,7 @@
 
 namespace Style = UI::Style;
 namespace Colors = UI::Colors;
+using namespace FileView;
 
 struct GridViewParams {
     f32 iconSize;      
@@ -20,6 +21,17 @@ static GridViewParams GetGridParamsForMode(FileView::ViewMode mode) {
         case FileView::ViewMode::Medium:     return { 48.0f,  4, 12.0f, 4.0f };
         case FileView::ViewMode::Small:      return { 24.0f,  4, 8.0f,  4.0f };
         default:                             return { 96.0f,  4, 12.0f, 6.0f };
+    }
+}
+
+static int ShilSizeFromViewMode(ViewMode viewMode){
+    // todo relook this
+    switch (viewMode) {
+        case FileView::ViewMode::ExtraLarge: return SHIL_JUMBO;
+        case FileView::ViewMode::Large:      return SHIL_JUMBO;
+        case FileView::ViewMode::Medium:     return SHIL_EXTRALARGE;
+        case FileView::ViewMode::Small:      return SHIL_LARGE;
+        default:                             return SHIL_JUMBO;
     }
 }
 
@@ -99,7 +111,7 @@ void RenderGrid(AppContext& ctx, const GridViewParams& params){
                     ImGui::SetCursorPosX(centeredIconX);
 
                     // Draw a colored box as placeholder using ImDrawList, so it doesnt steal clicks like Button()
-                    ImTextureID iconTexture = ctx.icons.GetTexture(item.iconKey);
+                    ImTextureID iconTexture = ctx.icons.GetTexture({item.iconKey, ShilSizeFromViewMode(currentView)});
                     if (iconTexture){
                         ImGui::Image(iconTexture, ImVec2(iconSize, iconSize));
                     }
