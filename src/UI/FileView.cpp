@@ -111,7 +111,7 @@ void RenderGrid(AppContext& ctx, const GridViewParams& params){
                     ImGui::SetCursorPosX(centeredIconX);
 
                     // Draw a colored box as placeholder using ImDrawList, so it doesnt steal clicks like Button()
-                    ImTextureID iconTexture = ctx.icons.GetTexture({item.iconKey, ShilSizeFromViewMode(currentView)});
+                    ImTextureID iconTexture = ctx.icons.GetTexture({item.IconKey(), ShilSizeFromViewMode(currentView)});
                     if (iconTexture){
                         ImGui::Image(iconTexture, ImVec2(iconSize, iconSize));
                     }

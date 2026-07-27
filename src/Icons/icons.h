@@ -1,3 +1,4 @@
+#pragma once
 #include "Types.h"
 #include "imgui.h"
 #include <d3d11.h>

@@ -2,7 +2,8 @@
 #include "Types.h"
 #include <utility>
 #include <ShlObj.h>
-
+#include "icons.h"
+#include "Str.h"
 
 #pragma comment(lib, "Shell32.lib") 
 #pragma comment(lib, "Shlwapi.lib") 
@@ -10,6 +11,7 @@
 
 namespace WShell{
 
+    bool PidlHasSubFolders(PCIDLIST_ABSOLUTE folder, bool accurate = false);
     class Pidl{
         public:
             Pidl() = default;
@@ -63,8 +65,18 @@ namespace WShell{
         std::string displayName;    // E.g: Text document
         std::string extension;      // .txt
         Pidl templatePath;
-        u32 iconKey = 0;   // key into Icons::IconManager::GetTexture()
+
+        mutable u32 iconKeyCache = 0; 
+        mutable bool iconKeyResolved = false;
+
         NewItemAction action = NewItemAction::EmptyFile;
+        u32 IconKey() const {
+            if (!iconKeyResolved){
+                iconKeyCache = Icons::GetIconIndex(nullptr, Str::Utf8ToWide(extension.c_str()), FILE_ATTRIBUTE_NORMAL, SHGFI_ICON | SHGFI_SMALLICON | SHGFI_USEFILEATTRIBUTES);
+                iconKeyResolved = true;
+            }
+            return iconKeyCache;
+        };
     };
 
     enum class FolderAccess {
@@ -73,7 +85,7 @@ namespace WShell{
         FullAccess    // Show full menu (cached ShellNew items)
     };
 
-    enum class HasSubFolders{Unknown, True, False};
+    enum class TriState{Unknown, True, False};
 
     struct Item{
         std::string name; // 24
@@ -82,15 +94,45 @@ namespace WShell{
         u64 fileSize = 0;   // 8
         FILETIME lastWriteTime{}; // 8
         SFGAOF attributes = 0;  // 4
-        u32 iconKey = 0;   // key into Icons::IconManager::GetTexture()
+        
+        mutable u32 iconKeyCache = 0; 
+        mutable bool iconKeyResolved = false;
+        u32 IconKey() const {
+            if (!iconKeyResolved){
+                iconKeyCache = (u32) Icons::GetIconIndex(pidl.get(), nullptr, 0, SHGFI_PIDL | SHGFI_SYSICONINDEX | SHGFI_SMALLICON);
+                iconKeyResolved = true;
+            }
+            return iconKeyCache;
+        };
     };
 
     struct ItemLite{   // just a stripped down version of ShellItem
         std::string name; // 24
         Pidl pidl;    // 8
-        u32 iconKey = 0; 
-        bool hasSubFolder = false;
+
+        mutable TriState subFolderState = TriState::Unknown;
         
+        mutable u32 iconKeyCache = 0; 
+        mutable bool iconKeyResolved = false;
+        
+        bool HasSubFolders() const { 
+            if (subFolderState == TriState::Unknown){
+                if (PidlHasSubFolders(pidl.get())){
+                    subFolderState = TriState::True;
+                }   else{
+                    subFolderState = TriState::False;   
+                }
+            }
+            return subFolderState == TriState::True;
+        }
+
+        u32 IconKey() const {
+            if (!iconKeyResolved){
+                iconKeyCache = (u32) Icons::GetIconIndex(pidl.get(), nullptr, 0, SHGFI_PIDL | SHGFI_SYSICONINDEX | SHGFI_SMALLICON);
+                iconKeyResolved = true;
+            }
+            return iconKeyCache;
+        };
     };
 
     enum class SortMode { Name, DateModified, Type, Size};
@@ -137,7 +179,6 @@ namespace WShell{
     bool ExecuteFile(PCIDLIST_ABSOLUTE file);
     Pidl TypeablePathToPidl(const wchar_t* widePath);
     std::string PidlToTypeablePath(PCIDLIST_ABSOLUTE pidl);
-    bool PidlHasSubFolders(PCIDLIST_ABSOLUTE folder, bool accurate = false);
     FolderAccess GetFolderAccess(PCIDLIST_ABSOLUTE folder);
     std::vector<NewMenuItem> EnumerateNewMenu();
     std::vector<ItemLite> GetOneDriveAccounts();
@@ -155,3 +196,4 @@ namespace WShell{
 // 2 - Pinned, Enumerate Home Quick access shell:::{679F85CB-0220-4080-B29B-5540CC05AAB6} 
 //       EnumObjects(SHCONTF_FOLDERS)
 // 3 - Will make it enumerate This PC, then Add Recycle Bin, and Control Panel
+

@@ -98,7 +98,6 @@ std::vector<Item> WShell::EnumFolder(PCIDLIST_ABSOLUTE folder){
         item.attributes = SFGAO_FOLDER | SFGAO_CANRENAME | SFGAO_CANDELETE;
         pTarget->GetAttributesOf(1, (LPCITEMIDLIST*)&child, &item.attributes);
 
-        item.iconKey = GetSystemIconKey(item.pidl.get(), SHGFI_LARGEICON);
         items.push_back(std::move(item));
     });
 
@@ -137,8 +136,6 @@ namespace {
         ItemLite item;
         item.name = std::move(name);
         item.pidl = WShell::Pidl(itemPidl);   // clones — caller keeps ownership of itemPidl
-        item.hasSubFolder = PidlHasSubFolders(itemPidl);
-        item.iconKey = GetSystemIconKey(itemPidl, SHGFI_SMALLICON);
         return item;
     }
 }
@@ -480,7 +477,6 @@ std::vector<NewMenuItem> WShell::EnumerateNewMenu(){
             item.displayName = item.extension;   // fallback so the entry isn't blank
         }
 
-        item.iconKey = Icons::GetIconIndex(nullptr, subKeyName, FILE_ATTRIBUTE_NORMAL, SHGFI_ICON | SHGFI_SMALLICON | SHGFI_USEFILEATTRIBUTES);
         menuItems.push_back(std::move(item));
     }
     RegCloseKey(hKeyRoot);
@@ -514,8 +510,6 @@ std::vector<ItemLite> WShell::GetOneDriveAccounts(){
             account.pidl = TypeablePathToPidl(userFolder);   
             if (account.pidl){
                 account.name = GetDisplayName(account.pidl.get());
-                account.hasSubFolder = PidlHasSubFolders(account.pidl.get());
-                account.iconKey = Icons::GetIconIndex(account.pidl.get(), nullptr, 0, SHGFI_PIDL | SHGFI_SYSICONINDEX | SHGFI_SMALLICON);
                 accounts.push_back(std::move(account));
             }
         }

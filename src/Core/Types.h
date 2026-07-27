@@ -14,3 +14,4 @@ using u64 = std::uint64_t;
 using i64 = std::int64_t;
 using u8  = std::uint8_t;
 
+enum class TriState{Unknown, True, False};

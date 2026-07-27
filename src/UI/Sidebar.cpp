@@ -77,9 +77,8 @@ namespace Sidebar {
             }
             ImGui::Indent();
             for (auto& child : state.children){
-                bool childHasSub = WShell::PidlHasSubFolders(child.pidl.get());
-                ImTextureID childIcon = ctx.icons.GetTexture({Icons::GetIconIndex(child.pidl.get(), 0, 0, SHGFI_PIDL | SHGFI_SYSICONINDEX | SHGFI_SMALLICON), SHIL_LARGE});
-                RenderNodeAndChildren(ctx, child.name, child.pidl, childIcon, childHasSub);   // recursion — a node's children are rendered the same way a node is
+                ImTextureID childIcon = ctx.icons.GetTexture({child.IconKey(), SHIL_LARGE});
+                RenderNodeAndChildren(ctx, child.name, child.pidl, childIcon, child.HasSubFolders());   // recursion — a node's children are rendered the same way a node is
             }
             ImGui::Unindent();
         }
@@ -97,15 +96,15 @@ namespace Sidebar {
 
         ImGui::Dummy(ImVec2(0.0f, 4.0f));
         for (auto& item : ctx.items1){
-            ImTextureID tex = ctx.icons.GetTexture({item.iconKey, SHIL_SMALL});
-            RenderNodeAndChildren(ctx, item.name, item.pidl, tex, item.hasSubFolder);
+            ImTextureID tex = ctx.icons.GetTexture({item.IconKey(), SHIL_LARGE});
+            RenderNodeAndChildren(ctx, item.name, item.pidl, tex, item.HasSubFolders());
         }
         ImGui::Dummy(ImVec2(0.0f, SectionPaddingY));
         ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
 
         ImGui::Dummy(ImVec2(0.0f, SectionPaddingY));
         for (auto& item : ctx.items2){
-            ImTextureID tex = ctx.icons.GetTexture({item.iconKey, SHIL_SMALL});
+            ImTextureID tex = ctx.icons.GetTexture({item.IconKey(), SHIL_LARGE});
             RenderNodeAndChildren(ctx, item.name, item.pidl, tex, false);
         }
         ImGui::Dummy(ImVec2(0.0f, SectionPaddingY));
@@ -113,8 +112,8 @@ namespace Sidebar {
         
         ImGui::Dummy(ImVec2(0.0f, SectionPaddingY));
         for (auto& item : ctx.items3){
-            ImTextureID tex = ctx.icons.GetTexture({item.iconKey, SHIL_SMALL});
-            RenderNodeAndChildren(ctx, item.name, item.pidl, tex, item.hasSubFolder);
+            ImTextureID tex = ctx.icons.GetTexture({item.IconKey(), SHIL_LARGE});
+            RenderNodeAndChildren(ctx, item.name, item.pidl, tex, item.HasSubFolders());
         }
         ImGui::PopStyleVar(2);
         ImGui::EndChild();
