@@ -2,6 +2,7 @@
 #include "UI.h"
 
 namespace Style = UI::Style;
+namespace Helpers = UI::Helpers;
 
 namespace NavBar{
     void Render(AppContext& ctx){
@@ -9,43 +10,34 @@ namespace NavBar{
             ImGui::EndChild();
             return;
         }
-
         
-        // ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, navBtnSize * 0.5f); // 50% rounding
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding,  4.0f * ctx.ui.dpiScale); 
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, Style::NoBorder);   // remove any outline borders
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,Style::NoPadding);   // Autocenters text inside button, but we need to center button ourselves
-
-        f32 centerY = (ToolBar::Height - BtnSize) * 0.5f * ctx.ui.dpiScale;
-        ImGui::SetCursorPosY(centerY);
-
+        
         f32 btnSize = BtnSize * ctx.ui.dpiScale;
         f32 margin = XPadding * ctx.ui.dpiScale;
-
-        ImGui::BeginDisabled(!ctx.navigation.CanGoBack());
-        if (ImGui::Button(ICON_REG_ARROW_LEFT "##nav_backward", ImVec2(btnSize, btnSize))) { 
+        UI::Helpers::AlignCursorVertically(ToolBar::Height * ctx.ui.dpiScale, btnSize);
+        
+        if (Helpers::IconButton(ICON_REG_ARROW_LEFT, btnSize, !ctx.navigation.CanGoBack())){
             ctx.navigation.GoBack();
-        }   ImGui::SameLine(0, margin);
-        ImGui::EndDisabled();
+        }
+        ImGui::SameLine(0, margin);
 
-        ImGui::BeginDisabled(!ctx.navigation.CanGoForward());
-        if (ImGui::Button(ICON_REG_ARROW_RIGHT "##nav_forward", ImVec2(btnSize, btnSize))) {
+        if (Helpers::IconButton(ICON_REG_ARROW_RIGHT, btnSize, !ctx.navigation.CanGoForward())){
             ctx.navigation.GoForward();
-        }   ImGui::SameLine(0, margin);
-        ImGui::EndDisabled();
-
-        ImGui::BeginDisabled(!ctx.navigation.CanGoParent());
-        if (ImGui::Button(ICON_REG_ARROW_UP "##nav_parent", ImVec2(btnSize, btnSize))) {
+        }
+        ImGui::SameLine(0, margin);
+            
+        if (Helpers::IconButton(ICON_REG_ARROW_UP, btnSize, !ctx.navigation.CanGoParent())){
             ctx.navigation.GoParent();
-        }   ImGui::SameLine(0, margin);
-        ImGui::EndDisabled();
+        }
+        ImGui::SameLine(0, margin);
+            
 
-
-        if (ImGui::Button(ICON_REG_ARROW_CLOCKWISE "##refresh", ImVec2(btnSize, btnSize))) { 
+        if (Helpers::IconButton(ICON_REG_ARROW_CLOCKWISE, btnSize)){
             ctx.navigation.Refresh();
-        };
+        }
 
-        ImGui::PopStyleVar(3);
+        ImGui::PopStyleVar();
         ImGui::EndChild();
     }
 

@@ -121,3 +121,32 @@ void UI::Helpers::DrawCenteredWrappedText(const char* text, float columnWidth, i
         line++;
     }
 }
+
+void UI::Helpers::AlignCursorVertically(f32 containerHeightPx, f32 itemHeightPx){
+    f32 centerY = (containerHeightPx - itemHeightPx) * 0.5f;
+    // Prevent negative offsets if the item is somehow bigger than the container
+    if (centerY > 0.0f) {
+        ImGui::SetCursorPosY(centerY);
+    }
+}
+
+void UI::Helpers::TextCentered(const char* text) {
+    f32 windowWidth = ImGui::GetContentRegionAvail().x;
+    f32 textWidth = ImGui::CalcTextSize(text).x;
+
+    ImGui::SetCursorPosX((windowWidth - textWidth) * 0.5f);
+    ImGui::TextUnformatted(text);
+}
+
+
+bool UI::Helpers::IconButton(const char* iconLabel, f32 sizePx, bool disabled) {
+    if (disabled) ImGui::BeginDisabled();
+
+    ImGui::PushID((void*) iconLabel);
+    bool clicked = ImGui::Button(iconLabel, ImVec2(sizePx, sizePx));
+    ImGui::PopID();
+    
+    if (disabled) ImGui::EndDisabled();
+    
+    return clicked;
+}

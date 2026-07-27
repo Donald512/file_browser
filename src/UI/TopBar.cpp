@@ -25,9 +25,7 @@ void TopBar::Render(AppContext& ctx){
     f32 maximizeStartX = closeStartX - btnWidth;
     f32 minimizeStartX = maximizeStartX - btnWidth;
 
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Style::NoRounding); // sharp squares
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, Style::NoBorder);   // Hard-remove any outline borders
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, Style::NoPadding); // Forces razor-sharp centered glyph alignment 
 
     ImGui::SetCursorPos(ImVec2(minimizeStartX, 0.0f));   
     ImGui::Button(ICON_REG_SUBTRACT "##win_min", ImVec2(btnWidth, btnHeight));
@@ -44,9 +42,9 @@ void TopBar::Render(AppContext& ctx){
 
     ImGui::SetCursorPos(ImVec2(closeStartX, 0.0f)); 
     ImGui::Button(ICON_REG_DISMISS "##win_close", ImVec2(btnWidth, btnHeight));
-    
     ImGui::PopStyleColor(2);    // for close button 
-    ImGui::PopStyleVar(3);  // rounding, bordersize, padding
+    
+    ImGui::PopStyleVar();
 
     ImGui::EndChild();
 }

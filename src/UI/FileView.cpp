@@ -24,9 +24,7 @@ static GridViewParams GetGridParamsForMode(FileView::ViewMode mode) {
 }
 
 void RenderGrid(AppContext& ctx, const GridViewParams& params){       
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, Colors::WindowForeground); 
     if (!ImGui::BeginChild("FileView", Style::AutoFillRemnantWindow, ImGuiChildFlags_Borders, ImGuiChildFlags_NavFlattened)){
-        ImGui::PopStyleColor();
         ImGui::EndChild();
         return;
     }
@@ -85,7 +83,6 @@ void RenderGrid(AppContext& ctx, const GridViewParams& params){
                             ctx.navigation.NavigateTo(dir[i].pidl);
                             ImGui::PopID();
                             ImGui::EndTable();
-                            ImGui::PopStyleColor();
                             ImGui::EndChild();
                             return;
                         }
@@ -114,7 +111,6 @@ void RenderGrid(AppContext& ctx, const GridViewParams& params){
                     }
                     
                     // Push the layout cursor past our custom drawn box
-                    ImGui::Dummy(ImVec2(iconSize, iconSize));
                     ImGui::Dummy(ImVec2(0, params.yGap * dpi));
 
                     ImGui::SetCursorPosX(columnStartX);
@@ -127,7 +123,6 @@ void RenderGrid(AppContext& ctx, const GridViewParams& params){
         }
         ImGui::EndTable();
     }
-    ImGui::PopStyleColor();
     ImGui::EndChild();
 }
     

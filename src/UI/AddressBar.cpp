@@ -2,10 +2,13 @@
 #include "..\Str\Str.h"
 
 using namespace AddressBar;
+namespace Helpers = UI::Helpers;
+
 
 static bool s_isEditing = false;
 static bool s_justOpened = false;
 static char s_pathInputBuffer[1024] = {0};
+
 static WShell::Pidl s_cachedPopupFolder;
 static std::vector<WShell::ItemLite> s_cachedPopupItems;
 
@@ -13,10 +16,9 @@ static void PathEditor(AppContext& ctx){
     // if y parameter in below function changes, change it in inputHeight also, use variable later
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f * ctx.ui.dpiScale, 4.0f* ctx.ui.dpiScale));
 
-    // Center text input cursor
+    // Center text input cursor vertically
     f32 inputHeight = ImGui::GetFontSize() + (4.0f * ctx.ui.dpiScale * 2.0f);  // Font + (Top + Bottom)Padding
-    f32 centerY = (Height * ctx.ui.dpiScale - inputHeight) * 0.5f;
-    ImGui::SetCursorPosY(centerY);
+    Helpers::AlignCursorVertically(Height * ctx.ui.dpiScale, inputHeight);
 
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);  // done to make textbox not the size of text
 
@@ -68,10 +70,9 @@ static void Breadcrumbs(AppContext& ctx){
         }
     };
 
-
     f32 buttonHeight = ImGui::GetFrameHeight();
-    f32 centerY = (Height * ctx.ui.dpiScale - buttonHeight) * 0.5f;
-    ImGui::SetCursorPosY(centerY);
+
+    Helpers::AlignCursorVertically(Height * ctx.ui.dpiScale);
 
     const char* breadcrumbIcon = (ILIsEqual(ctx.pidlHome, ctx.navigation.CurrentFolder())) ? ICON_REG_HOME : ICON_REG_DESKTOP;
     ImGui::BeginDisabled();
@@ -129,30 +130,25 @@ void AddressBar::Render(AppContext& ctx){
     f32 remainingWidth = windowWidth - ((ToolBar::LeftPadding + NavBar::Width + ToolBar::AddressToSearchGap + ToolBar::RightPadding) * ctx.ui.dpiScale);
     f32 addressWidth = remainingWidth * ToolBar::AddressRatio;
     
-    f32 verticalPadding = (Height - AddressBar::Height) * 0.5f * ctx.ui.dpiScale;
+    f32 verticalPadding = (ToolBar::Height - AddressBar::Height) * 0.5f * ctx.ui.dpiScale;
 
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 4.0f * ctx.ui.dpiScale);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.16f, 0.16f, 0.16f, 1.0f)); // FrameBg color
-    
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyleColorVec4(ImGuiCol_FrameBg));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, verticalPadding));
-    f32 centerY = (ToolBar::Height - Height) * ctx.ui.dpiScale * 0.5f;
-    ImGui::SetCursorPosY(centerY);
+
+    UI::Helpers::AlignCursorVertically(ToolBar::Height * ctx.ui.dpiScale, Height * ctx.ui.dpiScale);
+
     if (!ImGui::BeginChild("AddressBar", ImVec2(addressWidth, Height * ctx.ui.dpiScale), ImGuiChildFlags_None, TopBar::Flags)){
         ImGui::PopStyleColor();
-        ImGui::PopStyleVar(3);
+        ImGui::PopStyleVar();
         ImGui::EndChild();
         return;
     }
+    ImGui::PopStyleVar();
     ImGui::PopStyleColor();
-    ImGui::PopStyleVar(3);
 
-    if (s_isEditing){
-        PathEditor(ctx);
-    }
-    else{
-        Breadcrumbs(ctx);
-    }
+    // ======== Real lines =========
+    if (s_isEditing) PathEditor(ctx);
+    else Breadcrumbs(ctx);
 
     // Empty Space Click Detection
     ImVec2 min = ImGui::GetWindowPos();

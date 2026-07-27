@@ -87,13 +87,10 @@ namespace Sidebar {
 
     void Render(AppContext& ctx, f32 currentWidth) {
         // Begin the sidebar window with the specific width passed by the resizer
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding,  8.0f * ctx.ui.dpiScale); 
         ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, Style::NoBorder);
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f * ctx.ui.dpiScale, 4.0f * ctx.ui.dpiScale));
-        ImGui::PushStyleColor(ImGuiCol_ChildBg, Colors::WindowForeground);
         if (!ImGui::BeginChild("Sidebar", ImVec2(currentWidth, 0), ImGuiChildFlags_None)) {
-            ImGui::PopStyleVar(3);
-            ImGui::PopStyleColor();
+            ImGui::PopStyleVar(2);
             ImGui::EndChild();
             return;
         }
@@ -119,8 +116,7 @@ namespace Sidebar {
             ImTextureID tex = ctx.icons.GetTexture(item.iconKey);
             RenderNodeAndChildren(ctx, item.name, item.pidl, tex, item.hasSubFolder);
         }
-        ImGui::PopStyleColor();
-        ImGui::PopStyleVar(3);
+        ImGui::PopStyleVar(2);
         ImGui::EndChild();
     }
 }

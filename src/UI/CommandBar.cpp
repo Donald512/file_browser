@@ -9,22 +9,16 @@ static void PositionPopupBelowWindow(const char* popupId, float dpiScale, float 
 static void DrawViewMenuDropdown(AppContext& ctx);
 
 void CommandBar::Render(AppContext& ctx){
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, Colors::WindowForeground);
     if (!ImGui::BeginChild("CommandBar", ImVec2(0, Height * ctx.ui.dpiScale), ImGuiChildFlags_None, TopBar::Flags) ){
-        ImGui::PopStyleColor();
         ImGui::EndChild();
         return;
     }
-    ImGui::PopStyleColor();
 
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f * ctx.ui.dpiScale, 8.0f * ctx.ui.dpiScale));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, Style::NoBorder);
 
-
-    f32 buttonHeight = ImGui::GetFrameHeight();
-    f32 centerY = (Height * ctx.ui.dpiScale - buttonHeight) * 0.5f;
-    ImGui::SetCursorPosY(centerY);  
-
+    UI::Helpers::AlignCursorVertically(Height * ctx.ui.dpiScale);
+    
     // =========================== New Button & Popup
     char* newMenuPopupId = "NewMenuPopup";       
     ImGui::BeginDisabled(ctx.navigation.Contents().Access() == WShell::FolderAccess::NoCreate);
@@ -43,31 +37,38 @@ void CommandBar::Render(AppContext& ctx){
     // ============================
     ImGui::SameLine(0.0f, 8.0f);
     
-    ImGui::SetCursorPosY(centerY);  
+     UI::Helpers::AlignCursorVertically(Height * ctx.ui.dpiScale);
+
     ImGui::Button(ICON_REG_CUT);
     ImGui::SameLine(0.0f, 8.0f);
 
-    ImGui::SetCursorPosY(centerY);  
+     UI::Helpers::AlignCursorVertically(Height * ctx.ui.dpiScale);
+
     ImGui::Button(ICON_REG_COPY);
     ImGui::SameLine(0.0f, 8.0f);
 
-    ImGui::SetCursorPosY(centerY);  
+     UI::Helpers::AlignCursorVertically(Height * ctx.ui.dpiScale);
+
     ImGui::Button(ICON_REG_CLIPBOARD_PASTE);
     ImGui::SameLine(0.0f, 8.0f);
 
-    ImGui::SetCursorPosY(centerY);  
+     UI::Helpers::AlignCursorVertically(Height * ctx.ui.dpiScale);
+
     ImGui::Button(ICON_REG_RENAME);
     ImGui::SameLine(0.0f, 8.0f);
 
-    ImGui::SetCursorPosY(centerY);  
+     UI::Helpers::AlignCursorVertically(Height * ctx.ui.dpiScale);
+
     ImGui::Button(ICON_REG_SHARE);
     ImGui::SameLine(0.0f, 8.0f);
 
-    ImGui::SetCursorPosY(centerY);  
+     UI::Helpers::AlignCursorVertically(Height * ctx.ui.dpiScale);
+
     ImGui::Button(ICON_REG_BIN_RECYCLE);
     ImGui::SameLine(0.0f, 8.0f);
 
-    ImGui::SetCursorPosY(centerY);  
+     UI::Helpers::AlignCursorVertically(Height * ctx.ui.dpiScale);
+
 
 
     // =========================== SORT & POPUP
@@ -83,7 +84,8 @@ void CommandBar::Render(AppContext& ctx){
     // ============================
     ImGui::SameLine(0.0f, 8.0f);
 
-    ImGui::SetCursorPosY(centerY);  
+    UI::Helpers::AlignCursorVertically(Height * ctx.ui.dpiScale);
+
     // =========================== View
     char* viewMenuPopupId = "ViewMenuPopup";       
     if (ImGui::Button( ICON_REG_LIST " View " ICON_REG_CHEVRON_DOWN)){
