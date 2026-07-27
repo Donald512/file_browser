@@ -73,6 +73,8 @@ namespace WShell{
         FullAccess    // Show full menu (cached ShellNew items)
     };
 
+    enum class HasSubFolders{Unknown, True, False};
+
     struct Item{
         std::string name; // 24
         Pidl pidl;    // 8
@@ -86,7 +88,9 @@ namespace WShell{
     struct ItemLite{   // just a stripped down version of ShellItem
         std::string name; // 24
         Pidl pidl;    // 8
-        u32 iconKey = 0;    // used by 
+        u32 iconKey = 0; 
+        bool hasSubFolder = false;
+        
     };
 
     enum class SortMode { Name, DateModified, Type, Size};
@@ -136,6 +140,9 @@ namespace WShell{
     bool PidlHasSubFolders(PCIDLIST_ABSOLUTE folder, bool accurate = false);
     FolderAccess GetFolderAccess(PCIDLIST_ABSOLUTE folder);
     std::vector<NewMenuItem> EnumerateNewMenu();
+    std::vector<ItemLite> GetOneDriveAccounts();
+    std::vector<ItemLite> GetSidebarItems(int category);
+
 
     // Resolves a well-known folder (This PC, Desktop, Recycle Bin, ...) to a Pidl.
     Pidl GetKnownFolderPidl(REFKNOWNFOLDERID folderID);
@@ -148,19 +155,3 @@ namespace WShell{
 // 2 - Pinned, Enumerate Home Quick access shell:::{679F85CB-0220-4080-B29B-5540CC05AAB6} 
 //       EnumObjects(SHCONTF_FOLDERS)
 // 3 - Will make it enumerate This PC, then Add Recycle Bin, and Control Panel
-namespace WShell::Sidebar {
-    enum class Category { C1, C2, C3 };
-
-    struct Item {
-        std::string name;
-        WShell::Pidl pidl; 
-        u32 iconKey = 0;   // key into Icons::IconManager::GetTexture()
-        bool hasSubFolder = false;
-        Category category = Category::C1; // Now ImGui can easily group them!
-    };
-    
-    // Now you only need ONE function signature!
-    std::vector<Item> GetItems(Category cat);
-    std::vector<Item> GetOneDriveAccounts();
-
-}

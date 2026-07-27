@@ -115,8 +115,8 @@ bool WShell::Directory::Load(PCIDLIST_ABSOLUTE folder){
 // =======================================
 
 std::vector<ItemLite>WShell::GetLiteItems(PCIDLIST_ABSOLUTE folder){
+    
     std::vector<ItemLite> items;
-
     // IterateFolder(folder, SHCONTF_FOLDERS | SHCONTF_NONFOLDERS, [&](IShellFolder* pTarget, PITEMID_CHILD child) {
     IterateFolder(folder, SHCONTF_FOLDERS, [&](IShellFolder* pTarget, PITEMID_CHILD child) {
         ItemLite item;
@@ -133,21 +133,20 @@ namespace {
     // Shared by every Sidebar::Item construction site below (drives, Recycle Bin,
     // Control Panel, Quick Access) — previously each one rebuilt name/pidl/icon by
     // hand with small, easy-to-miss differences.
-    WShell::Sidebar::Item MakeSidebarItem(std::string name, PCIDLIST_ABSOLUTE itemPidl, WShell::Sidebar::Category category){
-        WShell::Sidebar::Item item;
+    ItemLite MakeSidebarItem(std::string name, PCIDLIST_ABSOLUTE itemPidl){
+        ItemLite item;
         item.name = std::move(name);
         item.pidl = WShell::Pidl(itemPidl);   // clones — caller keeps ownership of itemPidl
         item.hasSubFolder = PidlHasSubFolders(itemPidl);
         item.iconKey = GetSystemIconKey(itemPidl, SHGFI_SMALLICON);
-        item.category = category;
         return item;
     }
 }
 
-std::vector<WShell::Sidebar::Item> WShell::Sidebar::GetItems(Category cat){
-    std::vector<WShell::Sidebar::Item> items;
+std::vector<ItemLite> WShell::GetSidebarItems(int category){
+    std::vector<ItemLite> items;
 
-    if (cat == Category::C3){
+    if (category == 3){
         Pidl thisPc = GetKnownFolderPidl(FOLDERID_ComputerFolder);
         // This PC's real drives/containers (skips virtual entries like "Gallery")
         IterateFolder(thisPc, SHCONTF_FOLDERS | SHCONTF_STORAGE | SHCONTF_NAVIGATION_ENUM, [&](IShellFolder* target, PITEMID_CHILD child) {
@@ -158,30 +157,30 @@ std::vector<WShell::Sidebar::Item> WShell::Sidebar::GetItems(Category cat){
             if (!isRealContainer) return;
 
             Pidl drivePidl = CombineChild(thisPc.get(), child);
-            items.push_back(MakeSidebarItem(GetDisplayName(target, child, SHGDN_NORMAL), drivePidl.get(), Category::C3));
+            items.push_back(MakeSidebarItem(GetDisplayName(target, child, SHGDN_NORMAL), drivePidl.get()));
         });
 
         Pidl recycleBin = GetKnownFolderPidl(FOLDERID_RecycleBinFolder);
-        items.push_back(MakeSidebarItem(PidlToTypeablePath(recycleBin.get()), recycleBin.get(), Category::C3));
+        items.push_back(MakeSidebarItem(PidlToTypeablePath(recycleBin.get()), recycleBin.get()));
     }
-    else if (cat == Category::C2){
+    else if (category == 2){
         Pidl quickAccess = GetKnownFolderPidl(L"shell:::{679F85CB-0220-4080-B29B-5540CC05AAB6}");
         
         IterateFolder(quickAccess, SHCONTF_FOLDERS | SHCONTF_NAVIGATION_ENUM, [&](IShellFolder* target, PITEMID_CHILD child) {
             Pidl pinnedPidl = CombineChild(quickAccess.get(), child);
-            items.push_back(MakeSidebarItem(GetDisplayName(target, child, SHGDN_NORMAL), pinnedPidl.get(), Category::C2));
+            items.push_back(MakeSidebarItem(GetDisplayName(target, child, SHGDN_NORMAL), pinnedPidl.get()));
         });
     }
-    else if (cat == Category::C1){    
-        items.push_back(MakeSidebarItem(PidlToTypeablePath(home.get()), home.get(), Category::C1));
-        std::vector<Sidebar::Item> accounts = GetOneDriveAccounts();
+    else if (category == 1){    
+        items.push_back(MakeSidebarItem(PidlToTypeablePath(home.get()), home.get()));
+        std::vector<ItemLite> accounts = GetOneDriveAccounts();
         for (auto& account : accounts){
             items.push_back(std::move(account));
         }
         Pidl documents = GetKnownFolderPidl(FOLDERID_Documents);
         Pidl downloads = GetKnownFolderPidl(FOLDERID_Downloads);
-        items.push_back(MakeSidebarItem(GetDisplayName(documents.get()), documents.get(), Category::C1));
-        items.push_back(MakeSidebarItem(GetDisplayName(downloads.get()), downloads.get(), Category::C1));
+        items.push_back(MakeSidebarItem(GetDisplayName(documents.get()), documents.get()));
+        items.push_back(MakeSidebarItem(GetDisplayName(downloads.get()), downloads.get()));
     }
 
     return items;
@@ -489,8 +488,8 @@ std::vector<NewMenuItem> WShell::EnumerateNewMenu(){
     
 }
 
-std::vector<Sidebar::Item> Sidebar::GetOneDriveAccounts(){
-    std::vector<Sidebar::Item> accounts;
+std::vector<ItemLite> WShell::GetOneDriveAccounts(){
+    std::vector<ItemLite> accounts;
 
     HKEY hKeyRoot = nullptr;
     if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\OneDrive\\Accounts", 0, KEY_READ, &hKeyRoot) != ERROR_SUCCESS){
@@ -510,7 +509,7 @@ std::vector<Sidebar::Item> Sidebar::GetOneDriveAccounts(){
         DWORD folderSize = sizeof(userFolder);
         LONG folderResult = RegQueryValueExW(hKeyAccount, L"UserFolder", nullptr, nullptr, (LPBYTE)userFolder, &folderSize);
         if (folderResult == ERROR_SUCCESS && userFolder[0] != L'\0'){
-            Sidebar::Item account;
+            ItemLite account;
 
             account.pidl = TypeablePathToPidl(userFolder);   
             if (account.pidl){
