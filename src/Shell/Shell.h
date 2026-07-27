@@ -65,18 +65,14 @@ namespace WShell{
         std::string displayName;    // E.g: Text document
         std::string extension;      // .txt
         Pidl templatePath;
-
-        mutable u32 iconKeyCache = 0; 
-        mutable bool iconKeyResolved = false;
-
         NewItemAction action = NewItemAction::EmptyFile;
+
+        Lazy<u32> iconKey;
         u32 IconKey() const {
-            if (!iconKeyResolved){
-                iconKeyCache = Icons::GetIconIndex(nullptr, Str::Utf8ToWide(extension.c_str()), FILE_ATTRIBUTE_NORMAL, SHGFI_ICON | SHGFI_SMALLICON | SHGFI_USEFILEATTRIBUTES);
-                iconKeyResolved = true;
-            }
-            return iconKeyCache;
-        };
+            return iconKey.Get([&]{
+                return (u32) Icons::GetIconIndex(nullptr, Str::Utf8ToWide(extension.c_str()), FILE_ATTRIBUTE_NORMAL, SHGFI_ICON | SHGFI_SMALLICON | SHGFI_USEFILEATTRIBUTES);
+            });
+        }
     };
 
     enum class FolderAccess {
@@ -95,44 +91,29 @@ namespace WShell{
         FILETIME lastWriteTime{}; // 8
         SFGAOF attributes = 0;  // 4
         
-        mutable u32 iconKeyCache = 0; 
-        mutable bool iconKeyResolved = false;
+        Lazy<u32> iconKey;
         u32 IconKey() const {
-            if (!iconKeyResolved){
-                iconKeyCache = (u32) Icons::GetIconIndex(pidl.get(), nullptr, 0, SHGFI_PIDL | SHGFI_SYSICONINDEX | SHGFI_SMALLICON);
-                iconKeyResolved = true;
-            }
-            return iconKeyCache;
-        };
+            return iconKey.Get([&]{
+                return (u32) Icons::GetIconIndex(pidl.get(), nullptr, 0, SHGFI_PIDL | SHGFI_SYSICONINDEX | SHGFI_SMALLICON);
+            });
+        }
     };
 
     struct ItemLite{   // just a stripped down version of ShellItem
         std::string name; // 24
         Pidl pidl;    // 8
 
-        mutable TriState subFolderState = TriState::Unknown;
-        
-        mutable u32 iconKeyCache = 0; 
-        mutable bool iconKeyResolved = false;
-        
-        bool HasSubFolders() const { 
-            if (subFolderState == TriState::Unknown){
-                if (PidlHasSubFolders(pidl.get())){
-                    subFolderState = TriState::True;
-                }   else{
-                    subFolderState = TriState::False;   
-                }
-            }
-            return subFolderState == TriState::True;
+        Lazy<u32> iconKey;
+        u32 IconKey() const {
+            return iconKey.Get([&]{
+                return (u32) Icons::GetIconIndex(pidl.get(), nullptr, 0, SHGFI_PIDL | SHGFI_SYSICONINDEX | SHGFI_SMALLICON);
+            });
         }
 
-        u32 IconKey() const {
-            if (!iconKeyResolved){
-                iconKeyCache = (u32) Icons::GetIconIndex(pidl.get(), nullptr, 0, SHGFI_PIDL | SHGFI_SYSICONINDEX | SHGFI_SMALLICON);
-                iconKeyResolved = true;
-            }
-            return iconKeyCache;
-        };
+        Lazy<bool> hasSubFolders;
+        bool HasSubFolders() const {
+            return hasSubFolders.Get([&]{ return PidlHasSubFolders(pidl.get()); });
+        }
     };
 
     enum class SortMode { Name, DateModified, Type, Size};
