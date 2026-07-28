@@ -149,6 +149,48 @@ void UI::Helpers::DrawCenteredWrappedText(const char* text, float columnWidth, f
     }
 }
 
+void UI::Helpers::DrawSingleLineTruncatedText(const char* text, float maxWidth) {
+    if (!text || *text == '\0') return;
+
+    ImFont* font = ImGui::GetFont();
+    float fontSize = ImGui::GetFontSize();
+
+    // 1. Check if the full text fits
+    ImVec2 fullSize = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, text);
+    if (fullSize.x <= maxWidth) {
+        ImGui::TextUnformatted(text);
+        return;
+    }
+
+    const char* ellipsis = "...";
+    float ellipsisWidth = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, ellipsis).x;
+
+    // If even the ellipsis cannot fit, render as much as possible or just nothing/ellipsis
+    if (ellipsisWidth > maxWidth) {
+        // Option A: Render just ellipsis truncated by clipping, or return early
+        ImGui::TextUnformatted(ellipsis);
+        return;
+    }
+
+    // Available width left for the text prefix before appending "..."
+    float targetWidth = maxWidth - ellipsisWidth;
+
+    // 2. Fast step: Find the cut-off point using ImGui's built-in line breaker
+    // CalcTextSizeA natively handles UTF-8 characters properly.
+    const char* remaining = nullptr;
+    font->CalcTextSizeA(fontSize, targetWidth, 0.0f, text, nullptr, &remaining);
+
+    // 'remaining' points to the start of the first character that did NOT fit within 'targetWidth'
+    if (remaining > text) {
+        ImGui::TextUnformatted(text, remaining);
+        ImGui::SameLine(0, 0);
+        ImGui::TextUnformatted(ellipsis);
+    } else {
+        // Fallback if not even 1 character fits with the ellipsis
+        ImGui::TextUnformatted(ellipsis);
+    }
+}
+
 int UI::Helpers::GetWrappedLineCount(const char* text, float maxTextWidth, int maxLines) {
     ImFont* font = ImGui::GetFont();
     float fontSize = ImGui::GetFontSize();

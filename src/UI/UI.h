@@ -76,6 +76,7 @@ namespace UI::Helpers{
     bool IconAndTextButton(const char* str_id, const char* icon, const char* label, const ImVec4& icon_color = UI::Colors::AccentBlue);
     int GetWrappedLineCount(const char* text, float maxTextWidth, int maxLines);
     void DrawCenteredWrappedText(const char* text, float columnWidth, float maxTextWidth, int maxLines);
+    void DrawSingleLineTruncatedText(const char* text, float maxWidth);
     void AlignCursorVertically(f32 containerHeightPx, f32 itemHeightPx = ImGui::GetFrameHeight());
     void TextCentered(const char* text);
     bool IconButton(const char* iconLabel, f32 sizePx, bool disabled = false);
