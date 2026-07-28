@@ -24,9 +24,10 @@ bool IconManager::Init(ID3D11Device* device, ID3D11DeviceContext* context){
     HRESULT hrLarge = SHGetImageList(SHIL_LARGE, IID_PPV_ARGS(&imgListLarge));
     HRESULT hrExtra = SHGetImageList(SHIL_EXTRALARGE, IID_PPV_ARGS(&imgListExtraLarge));
     HRESULT hrJumbo = SHGetImageList(SHIL_JUMBO, IID_PPV_ARGS(&imgListJumbo));
+    (void)hrJumbo; (void)hrSmall;
 
     // Fail if at least small or large failed (Jumbo is safe on Vista+)
-    if (FAILED(hrSmall) || FAILED(hrLarge)) {
+    if (FAILED(hrExtra) || FAILED(hrLarge)) {
         return false;
     }
 
@@ -50,7 +51,7 @@ ImTextureID IconManager::GetTexture(const IconKey& key) {
 
     // create texture if not found
     HICON hIcon = nullptr;
-    HRESULT hr = imgList->GetIcon(static_cast<int>(key.iIcon), ILD_TRANSPARENT, &hIcon);
+    imgList->GetIcon(static_cast<int>(key.iIcon), ILD_TRANSPARENT, &hIcon);
     if (!hIcon) return 0;
 
     auto iconScope = std::unique_ptr<HICON__, decltype(&DestroyIcon)>(hIcon, DestroyIcon);

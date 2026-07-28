@@ -1,6 +1,6 @@
 #include "Navigation.h"
 #include <wrl/client.h>
-#include "..\Str\Str.h"
+#include "Str.h"
 
 using Microsoft::WRL::ComPtr;
 using namespace Navigation;

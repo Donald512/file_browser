@@ -74,7 +74,8 @@ namespace AddressBar{
 
 namespace UI::Helpers{
     bool IconAndTextButton(const char* str_id, const char* icon, const char* label, const ImVec4& icon_color = UI::Colors::AccentBlue);
-    void DrawCenteredWrappedText(const char* text, float columnWidth, int maxLines);
+    int GetWrappedLineCount(const char* text, float maxTextWidth, int maxLines);
+    void DrawCenteredWrappedText(const char* text, float columnWidth, float maxTextWidth, int maxLines);
     void AlignCursorVertically(f32 containerHeightPx, f32 itemHeightPx = ImGui::GetFrameHeight());
     void TextCentered(const char* text);
     bool IconButton(const char* iconLabel, f32 sizePx, bool disabled = false);
@@ -88,9 +89,15 @@ namespace CommandBar{
 namespace FileView{
     enum class ViewMode { ExtraLarge, Large, Medium, Small, List, Details, Tiles, Content };
     inline f32 IconSize   = 48.0f;
-    constexpr f32 XPadding = 32.0f;
 
-    inline ViewMode currentView = ViewMode::Medium;   // same pattern as your existing `inline f32 IconSize`
+    constexpr ImVec2 WindowPadding{10.0f, 5.0f};
+    constexpr f32 ImageToContainerRatio = 0.9f;
+    constexpr f32 TextToContainerWidthRatio = 0.85f;
+    constexpr f32 XGap = 3.0f;
+    constexpr f32 XPadding = 32.0f;
+    constexpr f32 EachLineHeight = 15.0f;
+
+    inline ViewMode currentView = ViewMode::Medium; 
     inline bool showFileExtensions = true;
 
     void Render(AppContext& ctx);

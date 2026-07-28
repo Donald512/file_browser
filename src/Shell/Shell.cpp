@@ -1,8 +1,7 @@
 #include "Shell.h"
 #include <Shlwapi.h>
-#include "..\Str\Str.h"
-// #include "Str.h"
-#include "Icons/IconLookup.h"   // Icons::GetIconIndex only — no renderer dependency
+#include "Str.h"
+#include "Icons.h"  
 #include <wrl/client.h>
 #include <PortableDeviceApi.h>
 #pragma comment(lib, "PortableDeviceGuids.lib")

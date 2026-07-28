@@ -1,5 +1,5 @@
 #include "UI.h"
-#include "..\Str\Str.h"
+#include "Str.h"
 
 using namespace AddressBar;
 namespace Helpers = UI::Helpers;

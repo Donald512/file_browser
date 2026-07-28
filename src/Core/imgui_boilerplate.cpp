@@ -43,50 +43,42 @@ void InitializeImGui(AppContext &ctx){
     ImGui_ImplWin32_Init(ctx.gfx.hwnd);
     ImGui_ImplDX11_Init(ctx.gfx.d3dDevice.Get(), ctx.gfx.d3dContext.Get());
 
-    // todo ApplyWindows11DarkTheme();
 }
 
 static void BuildFonts(AppContext& ctx, ImFontAtlas* atlas){
     if (atlas == nullptr) return;
-
     atlas->Clear();
 
-    // 1. Base Font (Text)
-    ctx.ui.mainFont = atlas->AddFontFromFileTTF("C:\\Windows\\Fonts\\segoeui.ttf", 16.0f * ctx.ui.dpiScale);
-
-    // 2. Fluent Icons (Merged directly into Base Font)
-    ImFontConfig icon_config;
-    icon_config.MergeMode = true;
-    icon_config.GlyphOffset.y = 2.0f* ctx.ui.dpiScale; // ion know why, but it put the chevrons on the same line as the breadcrumbs
-    icon_config.PixelSnapH = true;
-    icon_config.GlyphMinAdvanceX = 16.0f * ctx.ui.dpiScale; 
-    
     static const ImWchar icon_ranges[] = { (ImWchar)ICON_MIN_REG, (ImWchar)ICON_MAX_REG, 0 };
-    ctx.ui.iconFont = atlas->AddFontFromFileTTF("thirdparty\\fontstuff\\FluentSystemIcons-Regular.ttf", 12.0f * ctx.ui.dpiScale, &icon_config, icon_ranges);
-
-    // 3. Emoji Fallback (Merged directly into Base Font)
-    ImFontConfig emoji_config;
-    emoji_config.MergeMode = true;
-    emoji_config.FontDataOwnedByAtlas = false; // Prevents ImGui from attempting to call free() on system file data
-
     static const ImWchar32 emoji_ranges[] = {
-        0x2000, 0x206F,   // General Punctuation
-        0x2600, 0x26FF,   // Misc Symbols (Sun, Moon, etc)
-        0x2700, 0x27BF,   // Dingbats
-        0x1F300, 0x1F64F, // Emojis & Pictographs
-        0x1F680, 0x1F6FF, // Transport & Map
-        0x1F900, 0x1F9FF, // Supplemental Emojis
-        0
+        0x2000, 0x206F, 0x2600, 0x26FF, 0x2700, 0x27BF,
+        0x1F300, 0x1F64F, 0x1F680, 0x1F6FF, 0x1F900, 0x1F9FF, 0
     };
 
-    atlas->AddFontFromFileTTF("C:\\Windows\\Fonts\\seguiemj.ttf", 16.0f * ctx.ui.dpiScale, &emoji_config, emoji_ranges);
+    ImFontConfig icon_config;
+    icon_config.MergeMode = true;
+    icon_config.GlyphOffset.y = 2.0f * ctx.ui.dpiScale;
+    icon_config.PixelSnapH = true;
+    icon_config.GlyphMinAdvanceX = 16.0f * ctx.ui.dpiScale;
 
-    // 4. DPI Style Scaling
+    ImFontConfig emoji_config;
+    emoji_config.MergeMode = true;
+    emoji_config.FontDataOwnedByAtlas = false;
+
+    f32 dpi = ctx.ui.dpiScale;
+    // mainFont + its merged icons/emoji ---
+    ctx.ui.mainFont = atlas->AddFontFromFileTTF("C:\\Windows\\Fonts\\segoeui.ttf", 16.0f * dpi);
+    atlas->AddFontFromFileTTF("thirdparty\\fontstuff\\FluentSystemIcons-Regular.ttf", 14.0f * dpi, &icon_config, icon_ranges);
+    atlas->AddFontFromFileTTF("C:\\Windows\\Fonts\\seguiemj.ttf", 16.0f * dpi, &emoji_config, emoji_ranges);
+
+    ctx.ui.smallFont = atlas->AddFontFromFileTTF("C:\\Windows\\Fonts\\segoeui.ttf", 15.0f * dpi);
+    atlas->AddFontFromFileTTF("thirdparty\\fontstuff\\FluentSystemIcons-Regular.ttf", 12.0f * dpi, &icon_config, icon_ranges);
+    atlas->AddFontFromFileTTF("C:\\Windows\\Fonts\\seguiemj.ttf", 12.0f * dpi, &emoji_config, emoji_ranges);
+
     ImGuiStyle& style = ImGui::GetStyle();
-    style.ScaleAllSizes(ctx.ui.dpiScale);    
-    style.FontScaleDpi = ctx.ui.dpiScale;    
+    // style.ScaleAllSizes(ctx.ui.dpiScale);
+    style.FontScaleDpi = 1.0f;
 }
-
 void ImGui_Backend_NewFrame(){
     // B. Tell ImGui you are starting a new frame
     ImGui_ImplDX11_NewFrame();

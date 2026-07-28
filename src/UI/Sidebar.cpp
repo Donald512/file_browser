@@ -94,6 +94,7 @@ namespace Sidebar {
             return;
         }
 
+
         ImGui::Dummy(ImVec2(0.0f, 4.0f));
         for (auto& item : ctx.items1){
             ImTextureID tex = ctx.icons.GetTexture({item.IconKey(), SHIL_LARGE});

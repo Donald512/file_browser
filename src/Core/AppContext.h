@@ -30,6 +30,7 @@ struct GraphicsContext{
 struct UiState{
     f32 dpiScale = 1.0f;
     ImFont* mainFont = nullptr;   // non-owning — ImGui's font atlas owns these
+    ImFont* smallFont = nullptr;   // non-owning — ImGui's font atlas owns these
     ImFont* iconFont = nullptr;
     ImVec4 clearColor = ImVec4(0.12f, 0.12f, 0.12f, 1.0f);
 };
