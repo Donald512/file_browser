@@ -38,11 +38,15 @@ static int ShilSizeFromViewMode(ViewMode viewMode){
     }
 }
 
-static bool HandleItemInteraction(AppContext& ctx, u64 index, const WShell::Item& item, bool isSelected, ImVec2 size, ImGuiSelectableFlags flags = ImGuiSelectableFlags_AllowDoubleClick){
+static bool HandleItemInteraction(AppContext& ctx, u64 index, const WShell::Item& item, bool isSelected, ImVec2 size, ImGuiSelectableFlags flags = ImGuiSelectableFlags_AllowDoubleClick, bool handleHover = true){
     if (ImGui::Selectable("##file_selectedbox", isSelected, flags, size)) {
         ctx.navigation.Contents().SelectIndex(index);
     }
-    
+    if (handleHover){
+        if (ImGui::IsItemHovered()){
+            ImGui::SetTooltip(item.TooltipInfo().c_str());
+        }
+    }
     if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
         ctx.navigation.Contents().SelectIndex(index);
     }
@@ -146,10 +150,6 @@ void RenderGrid(AppContext& ctx, GridViewParams& params){ // MAIN ONE
                         return;
                     }
 
-                    if (ImGui::IsItemHovered()){
-                        ImGui::SetTooltip(item.TooltipInfo().c_str());
-                    }
-
                     ImGui::SetCursorPos(ImVec2(startPos.x + (realCellWidth - iconSize) * 0.5f, startPos.y + (imageHeightRegion - iconSize) * 0.5f));
                     DrawItemIcon(ctx, item, iconSize, ShilSizeFromViewMode(currentView));
 
@@ -214,47 +214,22 @@ void RenderViewSmall(AppContext& ctx, GridViewParams& params){
                     ImGui::PushID((int)i);  
                     ImVec2 startPos = ImGui::GetCursorPos();
 
-                    // 1. Draw Selectable
-                    if (ImGui::Selectable("##file_selectedbox", isSelected, ImGuiSelectableFlags_AllowDoubleClick, ImVec2(realCellWidth, cellHeight))){
-                        ctx.navigation.Contents().SelectIndex(i);
+                    if (HandleItemInteraction(ctx, i, item, isSelected, ImVec2(realCellWidth, cellHeight))){
+                        ImGui::PopID();
+                        ImGui::EndTable();
+                        ImGui::PopStyleVar();
+                        ImGui::EndChild();
+                        return;
                     }
-                    if (ImGui::IsItemHovered()){
-                        ImGui::SetTooltip(item.TooltipInfo().c_str());
-                    }
-                    if (ImGui::IsItemClicked(ImGuiMouseButton_Left)){
-                        ctx.navigation.Contents().SelectIndex(i);
-                    }
-                    if ((ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && ImGui::IsItemHovered()) || (isSelected && ImGui::IsKeyPressed(ImGuiKey_Enter ))){
-                        if (isFolder){
-                            ctx.navigation.NavigateTo(dir[i].pidl);
-                            ImGui::PopID();
-                            ImGui::EndTable();
-                            ImGui::PopStyleVar();
-                            ImGui::EndChild();
-                            return;
-                        }
-                        else WShell::ExecuteFile(dir[i].pidl);
-                    }
-
+                    
                     // 2. Draw Icon (Calculated explicit exact position)
                     f32 iconPaddingX = 6.0f * dpi; 
                     f32 iconX = startPos.x + iconPaddingX;
                     f32 iconY = startPos.y + (cellHeight - iconSize) * 0.5f; // Perfect vertical center
                     
                     ImGui::SetCursorPos(ImVec2(iconX, iconY));
-                    
-                    ImTextureID iconTexture = ctx.icons.GetTexture({item.IconKey(), ShilSizeFromViewMode(currentView)});
-                    if (iconTexture){
-                        ImGui::Image(iconTexture, ImVec2(iconSize, iconSize));
-                    }
-                    else{
-                        ImVec2 p_min = ImGui::GetCursorScreenPos();
-                        ImVec2 p_max = ImVec2(p_min.x + iconSize, p_min.y + iconSize);
-                        ImU32 iconColor = isFolder ? IM_COL32(204, 165, 51, 255) : IM_COL32(76, 127, 178, 255);
-                        ImGui::GetWindowDrawList()->AddRectFilled(p_min, p_max, iconColor, 4.0f);
-                    }
+                    DrawItemIcon(ctx, item, iconSize, ShilSizeFromViewMode(currentView));
 
-                    // 3. Draw Text (Calculated explicit exact position)
                     f32 textGapX = 8.0f * dpi;
                     f32 textX = iconX + iconSize + textGapX;
                     f32 textY = startPos.y + (cellHeight - lineHeight) * 0.5f; // Perfect vertical center
@@ -307,7 +282,7 @@ void RenderViewList(AppContext& ctx, GridViewParams& params){
     
     // Set a minimum and maximum limit for column widths so they don't look ridiculous
     f32 minColWidth = 120.0f * dpi; 
-    f32 maxColWidth = params.width * dpi; // (e.g. 308px based on your GetGridParamsForMode)
+    f32 maxColWidth = params.width * dpi; 
 
     f32 availY = ImGui::GetContentRegionAvail().y;
     
@@ -325,7 +300,6 @@ void RenderViewList(AppContext& ctx, GridViewParams& params){
 
     int totalColumns = (totalItems + rowsPerColumn - 1) / rowsPerColumn; // Ceiling division
 
-    // --- FIX 2: DYNAMIC COLUMN WIDTH CALCULATION ---
     // Pass 1: Find the maximum width needed for each column
     std::vector<f32> colWidths(totalColumns, minColWidth);
     for (int i = 0; i < totalItems; i++) {
@@ -349,11 +323,10 @@ void RenderViewList(AppContext& ctx, GridViewParams& params){
     
     f32 totalVirtualWidth = colOffsets[totalColumns];
 
-    // --- ALLOCATE VIRTUAL SPACE ---
     // Now that we have the exact dynamic width, we force the scrollbar to match it!
     ImGui::Dummy(ImVec2(totalVirtualWidth, rowsPerColumn * cellHeight));
 
-    // --- CUSTOM HORIZONTAL CLIPPER ---
+    // -CUSTOM HORIZONTAL CLIPPER ---
     f32 scrollX = ImGui::GetScrollX();
     f32 windowX = ImGui::GetWindowWidth();
 
@@ -368,7 +341,7 @@ void RenderViewList(AppContext& ctx, GridViewParams& params){
         endCol++;
     }
 
-    // --- DRAW VISIBLE ITEMS ---
+    // -DRAW VISIBLE ITEMS ---
     for (int c = startCol; c < endCol; c++){
         
         f32 currentColWidth = colWidths[c];
@@ -391,39 +364,17 @@ void RenderViewList(AppContext& ctx, GridViewParams& params){
             ImGui::SetCursorPos(cellPos);
 
             // A. Draw Selectable bounding box
-            if (ImGui::Selectable("##file_selectedbox", isSelected, ImGuiSelectableFlags_AllowDoubleClick, ImVec2(currentColWidth, cellHeight))){
-                ctx.navigation.Contents().SelectIndex(i);
-            }
-            if (ImGui::IsItemHovered()){
-                ImGui::SetTooltip(item.TooltipInfo().c_str());
-            }
-            if (ImGui::IsItemClicked(ImGuiMouseButton_Left)){
-                ctx.navigation.Contents().SelectIndex(i);
-            }
-            if ((ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && ImGui::IsItemHovered()) || (isSelected && ImGui::IsKeyPressed(ImGuiKey_Enter ))){
-                if (isFolder){
-                    ctx.navigation.NavigateTo(dir[i].pidl);
-                    ImGui::PopID();
-                    ImGui::EndChild();
-                    return;
-                }
-                else WShell::ExecuteFile(dir[i].pidl);
+            if (HandleItemInteraction(ctx, i, item, isSelected, ImVec2(currentColWidth, cellHeight))){
+                ImGui::PopID();
+                ImGui::EndChild();
+                return;
             }
 
             // B. Draw Icon (Vertically centered)
             f32 iconY = cellPos.y + (cellHeight - iconSize) * 0.5f;
             ImGui::SetCursorPos(ImVec2(cellPos.x + xGap, iconY));
-            
-            ImTextureID iconTexture = ctx.icons.GetTexture({item.IconKey(), SHIL_SMALL});
-            if (iconTexture){
-                ImGui::Image(iconTexture, ImVec2(iconSize, iconSize));
-            }
-            else{
-                ImVec2 p_min = ImGui::GetCursorScreenPos();
-                ImVec2 p_max = ImVec2(p_min.x + iconSize, p_min.y + iconSize);
-                ImU32 iconColor = isFolder ? IM_COL32(204, 165, 51, 255) : IM_COL32(76, 127, 178, 255);
-                ImGui::GetWindowDrawList()->AddRectFilled(p_min, p_max, iconColor, 4.0f);
-            }
+
+            DrawItemIcon(ctx, item, iconSize, SHIL_SMALL);
 
             // C. Draw Text (Vertically centered, truncated if necessary)
             f32 textStartX = cellPos.x + xGap + iconSize + xGap;
@@ -496,30 +447,18 @@ void RenderViewDetails(AppContext& ctx, GridViewParams& params) {
                     // SpanAllColumns will now naturally STOP at the edge of the TableSpace child!
                     ImGuiSelectableFlags selectFlags = ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_AllowOverlap;
 
-                    if (ImGui::Selectable("##file_selectedbox", isSelected, selectFlags, ImVec2(0, cellHeight))){
-                        ctx.navigation.Contents().SelectIndex(row);
+                    if (HandleItemInteraction(ctx, row, item, isSelected, ImVec2(0, cellHeight), selectFlags, false)) {
+                        ImGui::PopID();
+                        ImGui::EndTable();
+                        ImGui::EndChild();
+                        ImGui::EndGroup();
+                        ImGui::PopStyleColor(2);
+                        return;
                     }
-                    
                     bool isRowHovered = ImGui::IsItemHovered();
 
                     if (isRowHovered && ImGui::TableGetHoveredColumn() == 0){
                         ImGui::SetTooltip(item.TooltipInfo().c_str());
-                    }
-                    
-                    if (ImGui::IsItemClicked(ImGuiMouseButton_Left)){
-                        ctx.navigation.Contents().SelectIndex(row);
-                    }
-                    if ((ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && ImGui::IsItemHovered()) || (isSelected && ImGui::IsKeyPressed(ImGuiKey_Enter ))){
-                        if (isFolder){
-                            ctx.navigation.NavigateTo(dir[row].pidl);
-                            ImGui::PopID();
-                            ImGui::EndTable();
-                            ImGui::EndChild();
-                            ImGui::EndGroup();
-                            ImGui::PopStyleColor(2);
-                            return;
-                        }
-                        else WShell::ExecuteFile(dir[row].pidl);
                     }
 
                     // Draw Icon 
@@ -527,15 +466,7 @@ void RenderViewDetails(AppContext& ctx, GridViewParams& params) {
                     f32 iconY = startPos.y + (cellHeight - iconSize) * 0.5f;
                     ImGui::SetCursorPos(ImVec2(startPos.x + iconPaddingX, iconY));
                     
-                    ImTextureID iconTexture = ctx.icons.GetTexture({item.IconKey(), SHIL_SMALL});
-                    if (iconTexture){
-                        ImGui::Image(iconTexture, ImVec2(iconSize, iconSize));
-                    } else {
-                        ImVec2 p_min = ImGui::GetCursorScreenPos();
-                        ImVec2 p_max = ImVec2(p_min.x + iconSize, p_min.y + iconSize);
-                        ImU32 iconColor = isFolder ? IM_COL32(204, 165, 51, 255) : IM_COL32(76, 127, 178, 255);
-                        ImGui::GetWindowDrawList()->AddRectFilled(p_min, p_max, iconColor, 4.0f);
-                    }
+                    DrawItemIcon(ctx, item, iconSize, SHIL_SMALL);
 
                     // Draw Text
                     f32 textGapX = 6.0f * dpi;

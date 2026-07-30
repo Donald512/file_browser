@@ -23,7 +23,7 @@ void UI::Render(AppContext& ctx){
         Sidebar::Render(ctx, sidebarWidth);
         ImGui::SameLine(0, 0);
 
-        f32 splitterWidth = 4.0f * ctx.ui.dpiScale;
+        f32 splitterWidth = 1.0f * ctx.ui.dpiScale;
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0)); // Make it invisible
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0, 0.47f, 0.83f, 1.0f)); // Blue when clicked
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.2f, 0.2f, 0.2f, 1.0f)); // Grey when hovered
