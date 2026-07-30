@@ -14,6 +14,8 @@ namespace WShell{
     bool PidlHasSubFolders(PCIDLIST_ABSOLUTE folder, bool accurate = false);
     std::string GetPidlTypeName(PCIDLIST_ABSOLUTE pidl);
     u64 GetPidlFileSize(PCIDLIST_ABSOLUTE pidl);
+    std::string FetchWindowsTooltip(PCIDLIST_ABSOLUTE pidl);
+    std::vector<std::string> FetchTileViewLines(PCIDLIST_ABSOLUTE pidl);
     
     class Pidl{
         public:
@@ -95,7 +97,7 @@ namespace WShell{
         mutable Lazy<u32> iconKey;
         u32 IconKey() const {
             return iconKey.Get([&]{
-                return (u32) Icons::GetIconIndex(pidl.get(), nullptr, 0, SHGFI_PIDL | SHGFI_SYSICONINDEX | SHGFI_SMALLICON);
+                return Icons::GetIconIndex(pidl.get(), nullptr, 0, SHGFI_PIDL | SHGFI_SYSICONINDEX | SHGFI_SMALLICON);
             });
         }
         
@@ -103,13 +105,35 @@ namespace WShell{
         u64 Size() const {
             // handle cases like virtual items, or folders recursively later
             if (attributes & SFGAO_FOLDER) return 0ULL;
-            return GetPidlFileSize(pidl.get());
+            return size.Get([&]{
+                return GetPidlFileSize(pidl.get());
+            });
         }
     
         mutable Lazy<std::string> typeName;
         std::string TypeName() const {
             // FALLBACK for Virtual items (e.g., "This PC", "Control Panel", "Recycle Bin")
-            return GetPidlTypeName(pidl.get());
+            return typeName.Get([&]{
+                return GetPidlTypeName(pidl.get());
+            });
+
+
+        }
+
+        mutable Lazy<std::string> tooltipInfo;
+        std::string TooltipInfo() const {
+            return tooltipInfo.Get([&]{
+                return FetchWindowsTooltip(pidl.get());
+            });
+
+        }
+
+        mutable Lazy<std::vector<std::string>> tileViewInfo;
+        std::vector<std::string> TileViewInfo() const {
+            return tileViewInfo.Get([&]{
+                return FetchTileViewLines(pidl.get());
+            });
+
         }
     };
 

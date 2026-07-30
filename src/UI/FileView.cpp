@@ -6,14 +6,13 @@
 namespace Style = UI::Style;
 namespace Colors = UI::Colors;
 namespace Helpers = UI::Helpers;
+
 using namespace FileView;
 
 struct GridViewParams {
     f32 width;
     f32 height;  
 };
-
-void RenderGrid(AppContext& ctx, const GridViewParams& params);
 
 static GridViewParams GetGridParamsForMode(ViewMode mode) {
     switch (mode) {
@@ -23,6 +22,7 @@ static GridViewParams GetGridParamsForMode(ViewMode mode) {
         case ViewMode::Small:      return {308.0f, 30.0f};
         case ViewMode::List:       return {308.0f, 30.0f};
         case ViewMode::Details:    return {308.0f, 30.0f};
+        case ViewMode::Tiles:      return {250.0f, 52.0f};
         default:                   return GetGridParamsForMode(ViewMode::Large);
     }
 }
@@ -37,6 +37,44 @@ static int ShilSizeFromViewMode(ViewMode viewMode){
         default:                             return SHIL_JUMBO;
     }
 }
+
+static bool HandleItemInteraction(AppContext& ctx, u64 index, const WShell::Item& item, bool isSelected, ImVec2 size, ImGuiSelectableFlags flags = ImGuiSelectableFlags_AllowDoubleClick){
+    if (ImGui::Selectable("##file_selectedbox", isSelected, flags, size)) {
+        ctx.navigation.Contents().SelectIndex(index);
+    }
+    
+    if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
+        ctx.navigation.Contents().SelectIndex(index);
+    }
+    
+    bool isFolder = (item.attributes & SFGAO_FOLDER) != 0;
+    
+    if ((ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && ImGui::IsItemHovered()) || 
+        (isSelected && ImGui::IsKeyPressed(ImGuiKey_Enter))) {
+        if (isFolder) {
+            ctx.navigation.NavigateTo(item.pidl);
+            return true; // Navigated!
+        } else {
+            WShell::ExecuteFile(item.pidl);
+        }
+    }
+    return false;
+}
+
+static void DrawItemIcon(AppContext& ctx, const WShell::Item& item, f32 iconSize, int shilSize){
+    ImTextureID iconTexture = ctx.icons.GetTexture({item.IconKey(), shilSize});
+    
+    if (iconTexture) {
+        ImGui::Image(iconTexture, ImVec2(iconSize, iconSize));
+    } else {
+        bool isFolder = (item.attributes & SFGAO_FOLDER) != 0;
+        ImVec2 p_min = ImGui::GetCursorScreenPos();
+        ImVec2 p_max = ImVec2(p_min.x + iconSize, p_min.y + iconSize);
+        ImU32 iconColor = isFolder ? IM_COL32(204, 165, 51, 255) : IM_COL32(76, 127, 178, 255);
+        ImGui::GetWindowDrawList()->AddRectFilled(p_min, p_max, iconColor, 4.0f);
+    }
+}
+
 void RenderGrid(AppContext& ctx, GridViewParams& params){ // MAIN ONE
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, WindowPadding);
     if (!ImGui::BeginChild("FileView", Style::AutoFillRemnantWindow, ImGuiChildFlags_Borders, ImGuiChildFlags_NavFlattened)){
@@ -100,45 +138,21 @@ void RenderGrid(AppContext& ctx, GridViewParams& params){ // MAIN ONE
                     ImGui::PushID((int)i);  
                     ImVec2 startPos = ImGui::GetCursorPos();
 
-                    // 1. Draw Selectable with the EXACT dynamic height
-                    if (ImGui::Selectable("##file_selectedbox", isSelected, ImGuiSelectableFlags_AllowDoubleClick, ImVec2(realCellWidth, selectableHeight))){
-                        ctx.navigation.Contents().SelectIndex(i);
+                    if (HandleItemInteraction(ctx, i, item, isSelected, ImVec2(realCellWidth, selectableHeight))){
+                        ImGui::PopID();
+                        ImGui::EndTable();
+                        ImGui::PopStyleVar();
+                        ImGui::EndChild();
+                        return;
                     }
 
                     if (ImGui::IsItemHovered()){
-                        ImGui::SetTooltip("Type: %s", isFolder ? "Folder" : "File");
-                    }
-                    if (ImGui::IsItemClicked(ImGuiMouseButton_Left)){
-                        ctx.navigation.Contents().SelectIndex(i);
-                    }
-                    if ((ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && ImGui::IsItemHovered()) || (isSelected && ImGui::IsKeyPressed(ImGuiKey_Enter ))){
-                        if (isFolder){
-                            ctx.navigation.NavigateTo(dir[i].pidl);
-                            ImGui::PopID();
-                            ImGui::EndTable();
-                            ImGui::PopStyleVar();
-                            ImGui::EndChild();
-                            return;
-                        }
-                        else WShell::ExecuteFile(dir[i].pidl);
+                        ImGui::SetTooltip(item.TooltipInfo().c_str());
                     }
 
-                    // 2. Draw Image perfectly centered in the imageHeightRegion
-                    ImGui::SetCursorPos(ImVec2(startPos.x + (realCellWidth - iconSize) * 0.5f, 
-                                               startPos.y + (imageHeightRegion - iconSize) * 0.5f));
+                    ImGui::SetCursorPos(ImVec2(startPos.x + (realCellWidth - iconSize) * 0.5f, startPos.y + (imageHeightRegion - iconSize) * 0.5f));
+                    DrawItemIcon(ctx, item, iconSize, ShilSizeFromViewMode(currentView));
 
-                    ImTextureID iconTexture = ctx.icons.GetTexture({item.IconKey(), ShilSizeFromViewMode(currentView)});
-                    if (iconTexture){
-                        ImGui::Image(iconTexture, ImVec2(iconSize, iconSize));
-                    }
-                    else{
-                        ImVec2 p_min = ImGui::GetCursorScreenPos();
-                        ImVec2 p_max = ImVec2(p_min.x + iconSize, p_min.y + iconSize);
-                        ImU32 iconColor = isFolder ? IM_COL32(204, 165, 51, 255) : IM_COL32(76, 127, 178, 255);
-                        ImGui::GetWindowDrawList()->AddRectFilled(p_min, p_max, iconColor, 4.0f);
-                    }
-                    
-                    // 3. Draw Text exactly below the image container
                     ImGui::SetCursorPos(ImVec2(startPos.x, startPos.y + imageHeightRegion));
                     Helpers::DrawCenteredWrappedText(item.name.c_str(), realCellWidth, actualMaxTextWidth, 4);
                     
@@ -205,7 +219,7 @@ void RenderViewSmall(AppContext& ctx, GridViewParams& params){
                         ctx.navigation.Contents().SelectIndex(i);
                     }
                     if (ImGui::IsItemHovered()){
-                        ImGui::SetTooltip("Type: %s", isFolder ? "Folder" : "File");
+                        ImGui::SetTooltip(item.TooltipInfo().c_str());
                     }
                     if (ImGui::IsItemClicked(ImGuiMouseButton_Left)){
                         ctx.navigation.Contents().SelectIndex(i);
@@ -381,7 +395,7 @@ void RenderViewList(AppContext& ctx, GridViewParams& params){
                 ctx.navigation.Contents().SelectIndex(i);
             }
             if (ImGui::IsItemHovered()){
-                ImGui::SetTooltip("Type: %s", isFolder ? "Folder" : "File");
+                ImGui::SetTooltip(item.TooltipInfo().c_str());
             }
             if (ImGui::IsItemClicked(ImGuiMouseButton_Left)){
                 ctx.navigation.Contents().SelectIndex(i);
@@ -489,7 +503,7 @@ void RenderViewDetails(AppContext& ctx, GridViewParams& params) {
                     bool isRowHovered = ImGui::IsItemHovered();
 
                     if (isRowHovered && ImGui::TableGetHoveredColumn() == 0){
-                        ImGui::SetTooltip("Type: %s", isFolder ? "Folder" : "File");
+                        ImGui::SetTooltip(item.TooltipInfo().c_str());
                     }
                     
                     if (ImGui::IsItemClicked(ImGuiMouseButton_Left)){

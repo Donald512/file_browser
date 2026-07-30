@@ -4,8 +4,12 @@
 #include "Icons.h"  
 #include <wrl/client.h>
 #include <PortableDeviceApi.h>
-#pragma comment(lib, "PortableDeviceGuids.lib")
+#include <shobjidl.h>
+#include <propsys.h>
+#include <propkey.h>
 
+#pragma comment(lib, "PortableDeviceGuids.lib")
+#pragma comment(lib, "propsys.lib")
 
 using Microsoft::WRL::ComPtr;
 using namespace WShell;
@@ -595,64 +599,105 @@ void WShell::Size(u64 sizeInBytes, char* outBuf, int outBufSize) {
     ::WideCharToMultiByte(CP_UTF8, 0, wbuf, -1, outBuf, outBufSize, nullptr, nullptr);
 }
 
+std::string WShell::FetchWindowsTooltip(PCIDLIST_ABSOLUTE pidl){
+    std::string tooltipStr = "";
+    
+    // Create an IShellItem from the PIDL
+    IShellItem* pItem = nullptr;
+    if (SUCCEEDED(SHCreateItemFromIDList(pidl, IID_PPV_ARGS(&pItem)))) {
+        
+        // Ask the Shell for the UI object that handles InfoTips (Tooltips)
+        IQueryInfo* pQueryInfo = nullptr;
+        if (SUCCEEDED(pItem->BindToHandler(NULL, BHID_SFUIObject, IID_PPV_ARGS(&pQueryInfo)))) {
+            
+            wchar_t* pwszTip = nullptr;
+            
+            // QITIPF_DEFAULT gets standard properties. 
+            // QITIPF_USENAME includes the filename at the very top (like your 3rd screenshot).
+            if (SUCCEEDED(pQueryInfo->GetInfoTip(QITIPF_DEFAULT, &pwszTip)) && pwszTip) {
+                
+                std::wstring wstr(pwszTip);
+                wstr.erase(std::remove_if(wstr.begin(), wstr.end(), [](wchar_t c) {
+                    return c == L'\r' || c == 0x200E || c == 0x200F || c == 0x202A || c == 0x202B || c == 0x202C;
+                }), wstr.end());
 
+                tooltipStr = Str::WideToString(wstr.c_str());
+                
+                CoTaskMemFree(pwszTip);
+            }
+            pQueryInfo->Release();
+        }
+        pItem->Release();
+    }
+    
+    return tooltipStr;
+}
 
-/*
-This PC                             :    10110000000000000000000101110100
-Network                             :    10110000000001000000000001100100
-Donald's S20 FE                     :    11110000100000000000000001001101
-Linux                               :    10100000100000000000000001001101
-31, 29, 6, 2
+std::vector<std::string> WShell::FetchTileViewLines(PCIDLIST_ABSOLUTE pidl) {
+    std::vector<std::string> lines;
+    
+    // We need IShellItem2 to access the Property System
+    IShellItem2* pItem2 = nullptr;
+    if (FAILED(SHCreateItemFromIDList(pidl, IID_PPV_ARGS(&pItem2)))) {
+        return lines;
+    }
 
-Home                                :    10100000000000000000000000000100
-Gallery                             :    00110000100000000000000100000100
-Donald - Personal                   :    11110000100000000000000001001101
-Somtochukwu - University of Windsor :    11110000100000000000000001001101
-
-This PC                             :    10110000000000000000000101110100
-Network                             :    10110000000001000000000001100100
-Recycle Bin                         :    00100000000000000000000101010100
-Control Panel                       :    10100000000000000000000000100100
-Donald Udeh                         :    11110000100000000000000100101101
-Libraries                           :    10110000100000000000000100001101
-Music                               :    11110000100000000000000001001101
-Downloads                           :    11110000100000000000000001001101
-Pictures                            :    11110000100000000000000001001101
-Control Panel                       :    00000000000000000000000000100100
-Videos                              :    11110000100000000000000001001101
-Documents                           :    11110000100000000000000001001101
-Linux                               :    10100000100000000000000001001101
-Desktop                             :    11110000100000000000000001001101
-Gallery                             :    00110000100000000000000100000100
-Home                                :    10100000000000000000000000000100
-Donald - Personal                   :    11110000100000000000000001001101
-Somtochukwu - University of Windsor :    11110000100000000000000001001101
-Learn about this picture            :    00000000000000000000000000000000
-Donald's S20 FE                     :    11110000100000000000000001001101
-Arduino IDE                         :    01000000010000010000000101110111
-Command Prompt                      :    01000000010000010000000101110111
-Desktop                             :    01110000100000000000000101111111
-Discord                             :    01000000010000010000000101110111
-Dynamic Theme                       :    01000000010000010000000101110111
-Firefox.exe                         :    01000000010000000000000101110111
-GitHub Desktop                      :    01000000010000010000000101110111
-IOLab                               :    01000000010000010000000101110111
-JDownloader 2                       :    01000000010000010000000101110111
-Old Firefox Data                    :    11110000100000000000000101111111
-SignalRgb                           :    01000000010000010000000101110111
-Stacher7                            :    01000000010000010000000101110111
-udeh - Chrome                       :    01000000010000010000000101110111
-Visual Studio Code-Donalds-PC       :    01000000010000010000000101110111
-Visual Studio Code                  :    01000000010000010000000101110111
-VsCode.code-workspace               :    01000000010000000000000101110111
-WECDSB Student AI Hub               :    01000000010000010000000101110111
-Accessibility Insights For Windows  :    01000000010000010000000101110111
-Adobe Acrobat                       :    01000000010000010000000101110111
-AirDroid                            :    01000000010000010000000101110111
-Google Chrome                       :    01000000010000010000000101110111
-Hasleo Backup Suite                 :    01000000010000010000000101110111
-KiCad 10.0                          :    01000000010000010000000101110111
-Microsoft Edge                      :    01000000010000010000000101110111
-VLC media player                    :    01000000010000010000000101110111
-VMware Workstation Pro              :    01000000010000010000000101110111
-*/
+    // 1. Ask the Shell: "What properties should I show in the Tile view for this file type?"
+    wchar_t* pwszPropList = nullptr;
+    HRESULT hr = pItem2->GetString(PKEY_PropList_TileInfo, &pwszPropList);
+    
+    if (SUCCEEDED(hr) && pwszPropList) {
+        // 2. Parse the returned string into a Property Description List
+        IPropertyDescriptionList* pDescList = nullptr;
+        if (SUCCEEDED(PSGetPropertyDescriptionListFromString(pwszPropList, IID_PPV_ARGS(&pDescList)))) {
+            
+            // 3. Get the actual Property Store to read the file's values
+            IPropertyStore* pStore = nullptr;
+            if (SUCCEEDED(pItem2->GetPropertyStore(GPS_DEFAULT, IID_PPV_ARGS(&pStore)))) {
+                
+                UINT count = 0;
+                pDescList->GetCount(&count);
+                
+                // 4. Loop through the requested properties (Usually 2 lines)
+                for (UINT i = 0; i < count; i++) {
+                    IPropertyDescription* pDesc = nullptr;
+                    if (SUCCEEDED(pDescList->GetAt(i, IID_PPV_ARGS(&pDesc)))) {
+                        
+                        PROPERTYKEY pkey;
+                        if (SUCCEEDED(pDesc->GetPropertyKey(&pkey))) {
+                            
+                            PROPVARIANT propvar;
+                            PropVariantInit(&propvar);
+                            
+                            // 5. Read the raw value
+                            if (SUCCEEDED(pStore->GetValue(pkey, &propvar))) {
+                                wchar_t* pwszDisplay = nullptr;
+                                
+                                // 6. Format it cleanly (e.g., bytes -> "KB", or resolving the Company Name)
+                                if (SUCCEEDED(pDesc->FormatForDisplay(propvar, PDFF_DEFAULT, &pwszDisplay)) && pwszDisplay) {
+                                    if (wcslen(pwszDisplay) > 0) {
+                                        lines.push_back(Str::WideToString(pwszDisplay)); 
+                                    }
+                                    CoTaskMemFree(pwszDisplay);
+                                }
+                            }
+                            PropVariantClear(&propvar);
+                        }
+                        pDesc->Release();
+                    }
+                }
+                pStore->Release();
+            }
+            pDescList->Release();
+        }
+        CoTaskMemFree(pwszPropList);
+    }
+    else {
+        // FALLBACK: If the registry doesn't specify TileInfo for a file type, 
+        // Windows Explorer defaults to showing Type and Size.
+        // (You can manually query PKEY_ItemTypeText and PKEY_Size here using pItem2->GetString / GetUInt64 if you want to be exhaustive)
+    }
+    
+    pItem2->Release();
+    return lines;
+}
