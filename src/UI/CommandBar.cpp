@@ -174,12 +174,12 @@ static void DrawViewMenuDropdown(AppContext& ctx){
     if (CustomMenuItem(ICON_REG_LIST " List", FileView::currentView == FileView::ViewMode::List)) FileView::currentView = FileView::ViewMode::List;
     if (CustomMenuItem(ICON_REG_DOCUMENT_BULLET_LIST " Details", FileView::currentView == FileView::ViewMode::Details)) FileView::currentView = FileView::ViewMode::Details;
     if (CustomMenuItem(ICON_REG_APPS_LIST_DETAIL " Tiles", FileView::currentView == FileView::ViewMode::Tiles)) FileView::currentView = FileView::ViewMode::Tiles;
-    if (CustomMenuItem(ICON_REG_APPS_LIST " Content", FileView::currentView == FileView::ViewMode::Content)) FileView::currentView = FileView::ViewMode::Content;
+    // if (CustomMenuItem(ICON_REG_APPS_LIST " Content", FileView::currentView == FileView::ViewMode::Content)) FileView::currentView = FileView::ViewMode::Content;
     
     ImGui::Separator();
     
-    if (CustomMenuItem(ICON_REG_PANEL_LEFT " Details pane", FileView::currentView == FileView::ViewMode::Tiles)) FileView::currentView = FileView::ViewMode::Tiles;
-    if (CustomMenuItem(ICON_REG_PANEL_RIGHT " Preview pane", FileView::currentView == FileView::ViewMode::Content)) FileView::currentView = FileView::ViewMode::Content;
+    if (CustomMenuItem(ICON_REG_PANEL_LEFT " Details pane", false)) void;
+    if (CustomMenuItem(ICON_REG_PANEL_RIGHT " Preview pane", false)) void;
     
     ImGui::Separator();
     

@@ -32,11 +32,12 @@ static int ShilSizeFromViewMode(ViewMode viewMode){
     switch (viewMode) {
         case FileView::ViewMode::ExtraLarge: return SHIL_JUMBO;
         case FileView::ViewMode::Large:      return SHIL_JUMBO;
-        case FileView::ViewMode::Medium:     return SHIL_JUMBO;
+        case FileView::ViewMode::Medium:     return SHIL_EXTRALARGE;
         case FileView::ViewMode::Small:      return SHIL_LARGE;
-        case FileView::ViewMode::List:       return SHIL_LARGE;
-        case FileView::ViewMode::Details:    return SHIL_JUMBO;
-        default:                             return SHIL_JUMBO;
+        case FileView::ViewMode::List:       return SHIL_EXTRALARGE;
+        case FileView::ViewMode::Details:    return SHIL_EXTRALARGE;
+        case FileView::ViewMode::Tiles:      return SHIL_EXTRALARGE;
+        default:                             return SHIL_EXTRALARGE;
     }
 }
 
@@ -566,6 +567,8 @@ void RenderViewTiles(AppContext& ctx, GridViewParams& params){
                     auto& item = dir[i];
                     bool isFolder = item.attributes & SFGAO_FOLDER;
                     bool isSelected = (ctx.navigation.Contents().Selected() == i);
+
+                    std::string moreInfo = item.ContentViewInfo();
                 
                     ImGui::PushID((int)i);  
                     ImVec2 startPos = ImGui::GetCursorPos();
@@ -629,6 +632,7 @@ void RenderViewTiles(AppContext& ctx, GridViewParams& params){
     ImGui::PopStyleVar();
     ImGui::EndChild();
 }
+
 
 void FileView::Render(AppContext& ctx){
     GridViewParams params = GetGridParamsForMode(FileView::currentView);

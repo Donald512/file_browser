@@ -89,7 +89,7 @@ namespace CommandBar{
 }
 
 namespace FileView{
-    enum class ViewMode { ExtraLarge, Large, Medium, Small, List, Details, Tiles, Content };
+    enum class ViewMode { ExtraLarge, Large, Medium, Small, List, Details, Tiles};
     inline f32 IconSize   = 48.0f;
 
     constexpr ImVec2 WindowPadding{10.0f, 5.0f};

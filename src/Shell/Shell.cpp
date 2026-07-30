@@ -7,6 +7,7 @@
 #include <shobjidl.h>
 #include <propsys.h>
 #include <propkey.h>
+#include <algorithm>
 
 #pragma comment(lib, "PortableDeviceGuids.lib")
 #pragma comment(lib, "propsys.lib")
@@ -135,6 +136,8 @@ bool WShell::Directory::Load(PCIDLIST_ABSOLUTE folder){
     items = WShell::EnumFolder(folder);
     access = WShell::GetFolderAccess(folder);
     selectedIndex = -1;
+
+    ResortItems();
     return true;
 }
 // =======================================
@@ -720,4 +723,13 @@ Cleanup:
     if (pItem2)        pItem2->Release();
 
     return result;
+}
+
+
+void WShell::Directory::ResortItems(){
+    std::sort(items.begin(), items.end(), [this](const Item& a, const Item& b)){
+
+        // Always keep Folders at the top, regardless of sort mode/direction
+        bool aIsFolder = (a.attributes & SFGAO_FOLDER) != 0;
+    }
 }
