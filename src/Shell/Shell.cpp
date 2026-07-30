@@ -727,9 +727,52 @@ Cleanup:
 
 
 void WShell::Directory::ResortItems(){
-    std::sort(items.begin(), items.end(), [this](const Item& a, const Item& b)){
+    std::sort(items.begin(), items.end(), [this](const Item& a, const Item& b){
 
         // Always keep Folders at the top, regardless of sort mode/direction
         bool aIsFolder = (a.attributes & SFGAO_FOLDER) != 0;
-    }
+        bool bIsFolder = (b.attributes & SFGAO_FOLDER) != 0;
+
+        if (aIsFolder != bIsFolder){
+            return aIsFolder;
+        }
+
+        // compare based on selected sortmode
+        int cmp = 0;
+        switch (sortMode) {
+            case SortMode::Name:{
+                // _stricmp does a case-insensitive ASCII comparison.
+                cmp = _stricmp(a.name.c_str(), b.name.c_str());
+            }
+                break;
+
+            case SortMode::DateModified:{
+                // CompareFileTime returns -1, 0, or 1
+                cmp = ::CompareFileTime(&a.lastWriteTime, &b.lastWriteTime);
+            }
+                break;
+
+            case SortMode::Type:{
+                cmp = _stricmp(a.TypeName().c_str(), b.TypeName().c_str());
+            }
+                break;
+
+            case SortMode::Size:{
+                if (a.Size() < b.Size()) cmp = -1;
+                else if (a.Size() > b.Size()) cmp = 1;
+            }
+            break;
+    
+        }
+
+        //  Strict Weak Ordering: If the primary condition is a tie, fallback to Name
+        if (cmp == 0) {
+            cmp = _stricmp(a.name.c_str(), b.name.c_str());
+        }
+
+        if (sortDirection == SortDirection::Descending){
+            return cmp > 0;
+        }
+        return cmp < 0;
+    });
 }

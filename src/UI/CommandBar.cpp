@@ -7,6 +7,7 @@ namespace Style = UI::Style;
 static void DrawNewMenuDropdown(AppContext& ctx);
 static void PositionPopupBelowWindow(const char* popupId, float dpiScale, float offsetPxY);
 static void DrawViewMenuDropdown(AppContext& ctx);
+static void DrawSortMenuDropdown(AppContext& ctx);
 
 void CommandBar::Render(AppContext& ctx){
     if (!ImGui::BeginChild("CommandBar", ImVec2(0, Height * ctx.ui.dpiScale), ImGuiChildFlags_None, TopBar::Flags) ){
@@ -79,6 +80,7 @@ void CommandBar::Render(AppContext& ctx){
     }
 
     if (ImGui::BeginPopup(sortMenuPopupId)){
+        DrawSortMenuDropdown(ctx);
         ImGui::EndPopup();
     }
     // ============================
@@ -165,6 +167,47 @@ static bool CustomMenuItem(const char* label, bool selected, bool isRadioStyle =
 }
 
 
+
+
+static void DrawSortMenuDropdown(AppContext& ctx){
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f * ctx.ui.dpiScale, 8.0f * ctx.ui.dpiScale));
+    if (ImGui::MenuItem(" Name ", nullptr, ctx.navigation.Contents().GetSort() == WShell::SortMode::Name)){
+        ctx.navigation.Contents().SetSort(WShell::SortMode::Name, ctx.navigation.Contents().GetSortDir());
+    }
+    if (ImGui::MenuItem(" Date Modified ", nullptr, ctx.navigation.Contents().GetSort() == WShell::SortMode::DateModified)){
+        ctx.navigation.Contents().SetSort(WShell::SortMode::DateModified, ctx.navigation.Contents().GetSortDir());
+    }
+    if (ImGui::MenuItem(" Type ", nullptr, ctx.navigation.Contents().GetSort() == WShell::SortMode::Type)){
+        ctx.navigation.Contents().SetSort(WShell::SortMode::Type, ctx.navigation.Contents().GetSortDir());
+    }
+    if (ImGui::BeginMenu(" More ")){
+        if (ImGui::MenuItem(" Size ", nullptr, ctx.navigation.Contents().GetSort() == WShell::SortMode::Size)){ 
+            ctx.navigation.Contents().SetSort(WShell::SortMode::Size, ctx.navigation.Contents().GetSortDir());
+        }
+        ImGui::EndMenu();
+    }
+
+    ImGui::Separator();
+        
+    if (ImGui::MenuItem(" Ascending ", nullptr, ctx.navigation.Contents().GetSortDir() == WShell::SortDirection::Ascending)){
+        ctx.navigation.Contents().SetSort(ctx.navigation.Contents().GetSort(), WShell::SortDirection::Ascending);
+    }
+
+    if (ImGui::MenuItem(" Descending ", nullptr, ctx.navigation.Contents().GetSortDir() == WShell::SortDirection::Descending)){
+        ctx.navigation.Contents().SetSort(ctx.navigation.Contents().GetSort(), WShell::SortDirection::Descending);
+    }
+    
+    ImGui::Separator();
+    
+    // The "Show >" sub-menu
+    if (ImGui::BeginMenu("Group by")) {
+        ImGui::EndMenu();
+    }
+
+    ImGui::PopStyleVar();
+    
+}
+
 static void DrawViewMenuDropdown(AppContext& ctx){
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f * ctx.ui.dpiScale, 8.0f * ctx.ui.dpiScale));
     if (CustomMenuItem(ICON_REG_DESKTOP_28 " Extra large icons", FileView::currentView == FileView::ViewMode::ExtraLarge)) FileView::currentView = FileView::ViewMode::ExtraLarge;
@@ -178,8 +221,8 @@ static void DrawViewMenuDropdown(AppContext& ctx){
     
     ImGui::Separator();
     
-    if (CustomMenuItem(ICON_REG_PANEL_LEFT " Details pane", false)) void;
-    if (CustomMenuItem(ICON_REG_PANEL_RIGHT " Preview pane", false)) void;
+    CustomMenuItem(ICON_REG_PANEL_LEFT " Details pane", false);
+    CustomMenuItem(ICON_REG_PANEL_RIGHT " Preview pane", false);
     
     ImGui::Separator();
     

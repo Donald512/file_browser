@@ -137,13 +137,13 @@ namespace WShell{
 
         }
 
-        mutable Lazy<std::string> contentViewInfo;
-        std::string ContentViewInfo() const {
-            return contentViewInfo.Get([&]{
-                return FetchContentViewLines(pidl.get());
-            });
+        // mutable Lazy<std::string> contentViewInfo;
+        // std::string ContentViewInfo() const {
+        //     return contentViewInfo.Get([&]{
+        //         return FetchContentViewLines(pidl.get());
+        //     });
 
-        }
+        // }
     };
 
     struct ItemLite{   // just a stripped down version of ShellItem
@@ -178,9 +178,18 @@ namespace WShell{
             u64 Selected() const {return (u64) selectedIndex; }
 
             void SetSort(SortMode mode, SortDirection dir){
-                sortMode = mode;
-                sortDirection = dir;
-                ResortItems();  
+                if (sortMode != mode || dir != sortDirection){    
+                    sortMode = mode;
+                    sortDirection = dir;
+                    ResortItems();  
+                }
+            }
+
+            SortMode GetSort(){
+                return sortMode;
+            }
+            SortDirection GetSortDir(){
+                return sortDirection;
             }
 
             void setShowHidden(bool show){

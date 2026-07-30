@@ -126,7 +126,6 @@ void RenderGrid(AppContext& ctx, GridViewParams& params){ // MAIN ONE
 
                     f32 realCellWidth = ImGui::GetContentRegionAvail().x;
                     auto& item = dir[i];
-                    bool isFolder = item.attributes & SFGAO_FOLDER;
                     bool isSelected = (ctx.navigation.Contents().Selected() == i);
                     
                     //  PREVENT CUT-OFF: Ensure text doesn't bleed out of small columns ---
@@ -211,7 +210,6 @@ void RenderViewSmall(AppContext& ctx, GridViewParams& params){
 
                     f32 realCellWidth = ImGui::GetContentRegionAvail().x;
                     auto& item = dir[i];
-                    bool isFolder = item.attributes & SFGAO_FOLDER;
                     bool isSelected = (ctx.navigation.Contents().Selected() == i);
                 
                     ImGui::PushID((int)i);  
@@ -355,7 +353,6 @@ void RenderViewList(AppContext& ctx, GridViewParams& params){
             if (i >= totalItems) break; // Reached the end of the files!
 
             auto& item = dir[i];
-            bool isFolder = item.attributes & SFGAO_FOLDER;
             bool isSelected = (ctx.navigation.Contents().Selected() == i);
 
             ImGui::PushID(i);
@@ -537,7 +534,6 @@ void RenderViewTiles(AppContext& ctx, GridViewParams& params){
 
     f32 dpi = ctx.ui.dpiScale;
     f32 xGap = XGap * dpi;
-    f32 lineHeight = ImGui::GetTextLineHeight();
     
     f32 cellHeight = params.height * dpi;
     f32 iconSize = cellHeight * ImageToContainerRatio; 
@@ -565,11 +561,8 @@ void RenderViewTiles(AppContext& ctx, GridViewParams& params){
 
                     f32 realCellWidth = ImGui::GetContentRegionAvail().x;
                     auto& item = dir[i];
-                    bool isFolder = item.attributes & SFGAO_FOLDER;
                     bool isSelected = (ctx.navigation.Contents().Selected() == i);
 
-                    std::string moreInfo = item.ContentViewInfo();
-                
                     ImGui::PushID((int)i);  
                     ImVec2 startPos = ImGui::GetCursorPos();
                     ImVec2 startScreenPos = ImGui::GetCursorScreenPos();
@@ -592,16 +585,13 @@ void RenderViewTiles(AppContext& ctx, GridViewParams& params){
 
                     f32 textGapX = 8.0f * dpi;
                     f32 rightGapX = 8.0f * dpi;
-                    f32 textYPadding = 0.0f * dpi;
 
                     f32 textX = iconX + iconSize + textGapX;
-                    // f32 textY = startPos.y + textYPadding;
                     f32 textY = iconY;
 
                     ImGui::SetCursorPos(ImVec2(textX, textY));
 
                     f32 textAvailWidth = (startPos.x + realCellWidth) - textX - rightGapX;
-                    f32 textMaxHeight = cellHeight - textYPadding;
 
                     std::string textToShow = item.name + '\n' + item.TileViewInfo();
                     
