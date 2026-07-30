@@ -15,7 +15,7 @@ namespace WShell{
     std::string GetPidlTypeName(PCIDLIST_ABSOLUTE pidl);
     u64 GetPidlFileSize(PCIDLIST_ABSOLUTE pidl);
     std::string FetchWindowsTooltip(PCIDLIST_ABSOLUTE pidl);
-    std::vector<std::string> FetchTileViewLines(PCIDLIST_ABSOLUTE pidl);
+    std::string FetchTileViewLines(PCIDLIST_ABSOLUTE pidl);
     
     class Pidl{
         public:
@@ -128,8 +128,8 @@ namespace WShell{
 
         }
 
-        mutable Lazy<std::vector<std::string>> tileViewInfo;
-        std::vector<std::string> TileViewInfo() const {
+        mutable Lazy<std::string> tileViewInfo;
+        std::string TileViewInfo() const {
             return tileViewInfo.Get([&]{
                 return FetchTileViewLines(pidl.get());
             });

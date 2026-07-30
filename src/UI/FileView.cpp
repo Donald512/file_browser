@@ -17,7 +17,7 @@ struct GridViewParams {
 static GridViewParams GetGridParamsForMode(ViewMode mode) {
     switch (mode) {
         case ViewMode::ExtraLarge: return {271.0f, 260.0f};
-        case ViewMode::Large:      return {105.0f, 100.0f };
+        case ViewMode::Large:      return {105.0f, 100.0f};
         case ViewMode::Medium:     return {74.00f, 52.0f};
         case ViewMode::Small:      return {308.0f, 30.0f};
         case ViewMode::List:       return {308.0f, 30.0f};
@@ -32,8 +32,10 @@ static int ShilSizeFromViewMode(ViewMode viewMode){
     switch (viewMode) {
         case FileView::ViewMode::ExtraLarge: return SHIL_JUMBO;
         case FileView::ViewMode::Large:      return SHIL_JUMBO;
-        case FileView::ViewMode::Medium:     return SHIL_EXTRALARGE;
+        case FileView::ViewMode::Medium:     return SHIL_JUMBO;
         case FileView::ViewMode::Small:      return SHIL_LARGE;
+        case FileView::ViewMode::List:       return SHIL_LARGE;
+        case FileView::ViewMode::Details:    return SHIL_JUMBO;
         default:                             return SHIL_JUMBO;
     }
 }
@@ -490,7 +492,7 @@ void RenderViewDetails(AppContext& ctx, GridViewParams& params) {
                     ImGui::TableNextColumn();
                     if (!isFolder) {
                         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (cellHeight - ImGui::GetTextLineHeight()) * 0.5f);
-                        char sizeBuf[32];
+                        char sizeBuf[32] = {};
                         WShell::Size(item.Size(), sizeBuf, sizeof(sizeBuf));
                         f32 colWidth = ImGui::GetContentRegionAvail().x;
                         f32 sizeTextWidth = ImGui::CalcTextSize(sizeBuf).x;
@@ -522,6 +524,112 @@ void RenderViewDetails(AppContext& ctx, GridViewParams& params) {
     ImGui::PopStyleColor(2);
 }
 
+
+void RenderViewTiles(AppContext& ctx, GridViewParams& params){
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, WindowPadding);
+    if (!ImGui::BeginChild("FileView", Style::AutoFillRemnantWindow, ImGuiChildFlags_Borders, ImGuiChildFlags_NavFlattened)){
+        ImGui::PopStyleVar();
+        ImGui::EndChild();
+        return;
+    }
+    ImGui::PopStyleVar();
+
+    f32 dpi = ctx.ui.dpiScale;
+    f32 xGap = XGap * dpi;
+    f32 lineHeight = ImGui::GetTextLineHeight();
+    
+    f32 cellHeight = params.height * dpi;
+    f32 iconSize = cellHeight * ImageToContainerRatio; 
+    
+    f32 availWidth = ImGui::GetContentRegionAvail().x;
+    u16 columnsCount = (u16)(availWidth / ((params.width + XGap) * dpi));
+    columnsCount = (std::max)(columnsCount, (u16)1);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(xGap * 0.5f, xGap * 0.5f));
+
+    if (ImGui::BeginTable("ExplorerGrid", columnsCount, ImGuiTableFlags_NoSavedSettings)){
+        auto &dir = ctx.navigation.Contents().Items();
+        u16 totalRows = (u16)(std::ceil((f32)dir.size() / columnsCount));
+
+        ImGuiListClipper clipper;
+        clipper.Begin(totalRows, cellHeight); 
+
+        while (clipper.Step()){
+            for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++){
+                u64 startIdx = (u64) row * columnsCount;
+                u64 endIdx = (std::min)((u64)(startIdx + columnsCount), (u64)dir.size());
+
+                for (u64 i = startIdx; i < endIdx; i++){
+                    ImGui::TableNextColumn();
+
+                    f32 realCellWidth = ImGui::GetContentRegionAvail().x;
+                    auto& item = dir[i];
+                    bool isFolder = item.attributes & SFGAO_FOLDER;
+                    bool isSelected = (ctx.navigation.Contents().Selected() == i);
+                
+                    ImGui::PushID((int)i);  
+                    ImVec2 startPos = ImGui::GetCursorPos();
+                    ImVec2 startScreenPos = ImGui::GetCursorScreenPos();
+
+                    if (HandleItemInteraction(ctx, i, item, isSelected, ImVec2(realCellWidth, cellHeight))){
+                        ImGui::PopID();
+                        ImGui::EndTable();
+                        ImGui::PopStyleVar();
+                        ImGui::EndChild();
+                        return;
+                    }
+                    
+                    // 2. Draw Icon (Calculated explicit exact position)
+                    f32 iconPaddingX = 6.0f * dpi; 
+                    f32 iconX = startPos.x + iconPaddingX;
+                    f32 iconY = startPos.y + (cellHeight - iconSize) * 0.5f; // Perfect vertical center
+                    
+                    ImGui::SetCursorPos(ImVec2(iconX, iconY));
+                    DrawItemIcon(ctx, item, iconSize, ShilSizeFromViewMode(currentView));
+
+                    f32 textGapX = 8.0f * dpi;
+                    f32 rightGapX = 8.0f * dpi;
+                    f32 textYPadding = 0.0f * dpi;
+
+                    f32 textX = iconX + iconSize + textGapX;
+                    // f32 textY = startPos.y + textYPadding;
+                    f32 textY = iconY;
+
+                    ImGui::SetCursorPos(ImVec2(textX, textY));
+
+                    f32 textAvailWidth = (startPos.x + realCellWidth) - textX - rightGapX;
+                    f32 textMaxHeight = cellHeight - textYPadding;
+
+                    std::string textToShow = item.name + '\n' + item.TileViewInfo();
+                    
+                    ImVec2 screenPos = ImGui::GetCursorScreenPos(); 
+                    ImVec2 clipMin = startScreenPos;
+                    ImVec2 clipMax = ImVec2(clipMin.x + realCellWidth, clipMin.y + cellHeight);
+
+                    ImGui::PushClipRect(clipMin, clipMax, true);
+                    
+                    // Enable text wrapping at our available width limit
+                    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + textAvailWidth);
+                    
+                    ImGui::TextUnformatted(textToShow.c_str());
+                    
+                    ImGui::PopTextWrapPos();
+                    ImGui::PopClipRect();
+
+
+                    // 4. Safely advance layout cursor
+                    ImGui::SetCursorPos(startPos);
+                    ImGui::Dummy(ImVec2(realCellWidth, cellHeight));
+                    ImGui::PopID();
+                }
+            }
+        }
+        ImGui::EndTable();
+    }
+    ImGui::PopStyleVar();
+    ImGui::EndChild();
+}
+
 void FileView::Render(AppContext& ctx){
     GridViewParams params = GetGridParamsForMode(FileView::currentView);
     switch (currentView){
@@ -539,6 +647,10 @@ void FileView::Render(AppContext& ctx){
         break;
         case ViewMode::Details:{
             RenderViewDetails(ctx, params);
+        }
+        break;
+        case ViewMode::Tiles:{
+            RenderViewTiles(ctx, params);
         }
         break;
     }

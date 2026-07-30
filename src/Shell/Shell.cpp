@@ -577,23 +577,31 @@ u64 WShell::GetPidlFileSize(PCIDLIST_ABSOLUTE pidl) {
 }
 
 void WShell::FileTime(const FILETIME& ft, char* outBuf, int outBufSize) {
+    // Zeroed FILETIME means "no timestamp" (e.g. drive roots) — don't even try to convert it.
+    if (ft.dwLowDateTime == 0 && ft.dwHighDateTime == 0) {
+        if (outBufSize > 0) outBuf[0] = '\0';
+        return;
+    }
+
     FILETIME localFt;
     SYSTEMTIME st;
-    ::FileTimeToLocalFileTime(&ft, &localFt);
-    ::FileTimeToSystemTime(&localFt, &st);
+    if (!::FileTimeToLocalFileTime(&ft, &localFt) || !::FileTimeToSystemTime(&localFt, &st)) {
+        if (outBufSize > 0) outBuf[0] = '\0';
+        return;
+    }
 
-    char dateBuf[32];
+    char dateBuf[32] = {};
+    char timeBuf[32] = {};
     ::GetDateFormatA(LOCALE_USER_DEFAULT, DATE_SHORTDATE, &st, nullptr, dateBuf, sizeof(dateBuf));
-
-    char timeBuf[32];
     ::GetTimeFormatA(LOCALE_USER_DEFAULT, TIME_NOSECONDS, &st, nullptr, timeBuf, sizeof(timeBuf));
 
-    // Use snprintf or sprintf_s for char* buffers
     ::sprintf_s(outBuf, outBufSize, "%s %s", dateBuf, timeBuf);
 }
 
 // Converts uint64_t size directly into human readable UTF-8 buffer (e.g., "14.2 MB")
 void WShell::Size(u64 sizeInBytes, char* outBuf, int outBufSize) {
+    if (!outBuf || outBufSize <= 0) return;
+    outBuf[0] = '\0';
     wchar_t wbuf[32] = {};
     ::StrFormatByteSizeW(static_cast<LONGLONG>(sizeInBytes), wbuf, 32);
     ::WideCharToMultiByte(CP_UTF8, 0, wbuf, -1, outBuf, outBufSize, nullptr, nullptr);
@@ -615,13 +623,13 @@ std::string WShell::FetchWindowsTooltip(PCIDLIST_ABSOLUTE pidl){
             // QITIPF_DEFAULT gets standard properties. 
             // QITIPF_USENAME includes the filename at the very top (like your 3rd screenshot).
             if (SUCCEEDED(pQueryInfo->GetInfoTip(QITIPF_DEFAULT, &pwszTip)) && pwszTip) {
-                
+
                 std::wstring wstr(pwszTip);
                 wstr.erase(std::remove_if(wstr.begin(), wstr.end(), [](wchar_t c) {
                     return c == L'\r' || c == 0x200E || c == 0x200F || c == 0x202A || c == 0x202B || c == 0x202C;
                 }), wstr.end());
 
-                tooltipStr = Str::WideToString(wstr.c_str());
+                tooltipStr = Str::SanitizeWString(wstr.c_str());
                 
                 CoTaskMemFree(pwszTip);
             }
@@ -633,71 +641,83 @@ std::string WShell::FetchWindowsTooltip(PCIDLIST_ABSOLUTE pidl){
     return tooltipStr;
 }
 
-std::vector<std::string> WShell::FetchTileViewLines(PCIDLIST_ABSOLUTE pidl) {
-    std::vector<std::string> lines;
+
+
+std::string WShell::FetchTileViewLines(PCIDLIST_ABSOLUTE pidl) {
+    std::string result = "";
     
-    // We need IShellItem2 to access the Property System
+    // Declarations for COM pointers and allocations so cleanup is straightforward
     IShellItem2* pItem2 = nullptr;
+    wchar_t* pwszPropList = nullptr;
+    IPropertyDescriptionList* pDescList = nullptr;
+    IPropertyStore* pStore = nullptr;
+
+    // 1. Create ShellItem2
     if (FAILED(SHCreateItemFromIDList(pidl, IID_PPV_ARGS(&pItem2)))) {
-        return lines;
+        return result;
     }
 
-    // 1. Ask the Shell: "What properties should I show in the Tile view for this file type?"
-    wchar_t* pwszPropList = nullptr;
-    HRESULT hr = pItem2->GetString(PKEY_PropList_TileInfo, &pwszPropList);
-    
-    if (SUCCEEDED(hr) && pwszPropList) {
-        // 2. Parse the returned string into a Property Description List
-        IPropertyDescriptionList* pDescList = nullptr;
-        if (SUCCEEDED(PSGetPropertyDescriptionListFromString(pwszPropList, IID_PPV_ARGS(&pDescList)))) {
-            
-            // 3. Get the actual Property Store to read the file's values
-            IPropertyStore* pStore = nullptr;
-            if (SUCCEEDED(pItem2->GetPropertyStore(GPS_DEFAULT, IID_PPV_ARGS(&pStore)))) {
-                
-                UINT count = 0;
-                pDescList->GetCount(&count);
-                
-                // 4. Loop through the requested properties (Usually 2 lines)
-                for (UINT i = 0; i < count; i++) {
-                    IPropertyDescription* pDesc = nullptr;
-                    if (SUCCEEDED(pDescList->GetAt(i, IID_PPV_ARGS(&pDesc)))) {
-                        
-                        PROPERTYKEY pkey;
-                        if (SUCCEEDED(pDesc->GetPropertyKey(&pkey))) {
-                            
-                            PROPVARIANT propvar;
-                            PropVariantInit(&propvar);
-                            
-                            // 5. Read the raw value
-                            if (SUCCEEDED(pStore->GetValue(pkey, &propvar))) {
-                                wchar_t* pwszDisplay = nullptr;
-                                
-                                // 6. Format it cleanly (e.g., bytes -> "KB", or resolving the Company Name)
-                                if (SUCCEEDED(pDesc->FormatForDisplay(propvar, PDFF_DEFAULT, &pwszDisplay)) && pwszDisplay) {
-                                    if (wcslen(pwszDisplay) > 0) {
-                                        lines.push_back(Str::WideToString(pwszDisplay)); 
-                                    }
-                                    CoTaskMemFree(pwszDisplay);
-                                }
-                            }
-                            PropVariantClear(&propvar);
-                        }
-                        pDesc->Release();
-                    }
-                }
-                pStore->Release();
-            }
-            pDescList->Release();
+    // 2. Fetch the TileInfo property list string from registry
+    if (FAILED(pItem2->GetString(PKEY_PropList_TileInfo, &pwszPropList)) || !pwszPropList) {
+        // FALLBACK: If the registry doesn't specify TileInfo for this file type,
+        // you could query default properties (e.g., PKEY_ItemTypeText / PKEY_Size) here.
+        goto Cleanup;
+    }
+
+    // 3. Parse into Description List
+    if (FAILED(PSGetPropertyDescriptionListFromString(pwszPropList, IID_PPV_ARGS(&pDescList)))) {
+        goto Cleanup;
+    }
+
+    // 4. Bind to Property Store
+    if (FAILED(pItem2->GetPropertyStore(GPS_DEFAULT, IID_PPV_ARGS(&pStore)))) {
+        goto Cleanup;
+    }
+
+    UINT count = 0;
+    if (FAILED(pDescList->GetCount(&count))) {
+        goto Cleanup;
+    }
+
+    // 5. Loop through properties and append to the final string
+    for (UINT i = 0; i < count; i++) {
+        IPropertyDescription* pDesc = nullptr;
+        if (FAILED(pDescList->GetAt(i, IID_PPV_ARGS(&pDesc)))) {
+            continue;
         }
-        CoTaskMemFree(pwszPropList);
+
+        PROPERTYKEY pkey;
+        if (SUCCEEDED(pDesc->GetPropertyKey(&pkey))) {
+            PROPVARIANT propvar;
+            PropVariantInit(&propvar);
+
+            if (SUCCEEDED(pStore->GetValue(pkey, &propvar))) {
+                wchar_t* pwszDisplay = nullptr;
+
+                if (SUCCEEDED(pDesc->FormatForDisplay(propvar, PDFF_DEFAULT, &pwszDisplay)) && pwszDisplay) {
+                    
+                    std::string cleanLine = Str::SanitizeWString(pwszDisplay);
+
+                    if (!cleanLine.empty()){
+                        if (!result.empty()) {
+                            result += '\n';
+                        }
+                        result += cleanLine;
+                    }
+                    CoTaskMemFree(pwszDisplay);
+                }
+            }
+            PropVariantClear(&propvar);
+        }
+        pDesc->Release();
     }
-    else {
-        // FALLBACK: If the registry doesn't specify TileInfo for a file type, 
-        // Windows Explorer defaults to showing Type and Size.
-        // (You can manually query PKEY_ItemTypeText and PKEY_Size here using pItem2->GetString / GetUInt64 if you want to be exhaustive)
-    }
-    
-    pItem2->Release();
-    return lines;
+
+// Single cleanup site keeps resource leaks from creeping in
+Cleanup:
+    if (pStore)        pStore->Release();
+    if (pDescList)     pDescList->Release();
+    if (pwszPropList)  CoTaskMemFree(pwszPropList);
+    if (pItem2)        pItem2->Release();
+
+    return result;
 }

@@ -61,4 +61,11 @@ namespace Str{
         return newString;
     }
 
+    std::string SanitizeWString(const wchar_t* wide){
+        std::wstring wstr(wide);
+        wstr.erase(std::remove_if(wstr.begin(), wstr.end(), [](wchar_t c) {
+            return c == L'\r' || c == 0x200E || c == 0x200F || c == 0x202A || c == 0x202B || c == 0x202C;
+        }), wstr.end());
+        return WideToString(wstr.c_str());
+    }
 }
