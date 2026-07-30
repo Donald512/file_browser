@@ -97,6 +97,29 @@ std::vector<Item> WShell::EnumFolder(PCIDLIST_ABSOLUTE folder){
         item.attributes = SFGAO_FOLDER | SFGAO_CANRENAME | SFGAO_CANDELETE;
         pTarget->GetAttributesOf(1, (LPCITEMIDLIST*)&child, &item.attributes);
 
+        bool isFolder = (item.attributes & SFGAO_FOLDER);
+
+        WIN32_FIND_DATAW wfd{};
+        if (SUCCEEDED(SHGetDataFromIDListW(pTarget, child, SHGDFIL_FINDDATA, &wfd, sizeof(wfd)))){
+            if (!isFolder){
+                item.size.value = (static_cast<u64>(wfd.nFileSizeHigh) << 32) | wfd.nFileSizeLow;
+                item.size.resolved = true;
+            } else{
+                item.size.value = 0;
+                item.size.resolved = true;
+            }
+            item.lastWriteTime = wfd.ftLastWriteTime;
+
+            SHFILEINFOW sfi = {};
+            DWORD dwAttr = (item.attributes & SFGAO_FOLDER) ? FILE_ATTRIBUTE_DIRECTORY : FILE_ATTRIBUTE_NORMAL;
+            if (SHGetFileInfoW(wfd.cFileName, dwAttr, &sfi, sizeof(sfi), SHGFI_TYPENAME | SHGFI_USEFILEATTRIBUTES)) {
+                item.typeName.value = Str::WideToString(sfi.szTypeName);
+                item.typeName.resolved = true;
+            }
+        }
+        // VIRTUAL PATH: If SHGetDataFromIDListW failed (e.g. "This PC"), 
+        // item.size and item.typeName remain unresolved (resolved = false) 
+        // and will naturally execute their fallback lambdas if accessed.
         items.push_back(std::move(item));
     });
 
@@ -518,6 +541,61 @@ std::vector<ItemLite> WShell::GetOneDriveAccounts(){
     RegCloseKey(hKeyRoot);
     return accounts;
 }
+
+std::string WShell::GetPidlTypeName(PCIDLIST_ABSOLUTE pidl) {
+    if (!pidl) return "";
+
+    SHFILEINFOW sfi = {};
+    // Passing SHGFI_PIDL | SHGFI_TYPENAME asks Windows to return 
+    // the localized display string (e.g., "File folder", "Application", "Text Document")
+    if (SHGetFileInfoW(reinterpret_cast<LPCWSTR>(pidl), 0, &sfi, sizeof(sfi), SHGFI_PIDL | SHGFI_TYPENAME)){
+        return Str::WideToString(sfi.szTypeName);
+    }
+
+    return "";
+}
+
+u64 WShell::GetPidlFileSize(PCIDLIST_ABSOLUTE pidl) {
+    if (!pidl) return 0;
+
+    // 1. FAST PATH: Physical disk file
+    wchar_t* szPath = nullptr;
+    if (SUCCEEDED(SHGetNameFromIDList(pidl, SIGDN_FILESYSPATH, &szPath))) {
+        WIN32_FILE_ATTRIBUTE_DATA fileData = {};
+        u64 size = 0;
+        if (GetFileAttributesExW(szPath, GetFileExInfoStandard, &fileData)) {
+            size = (static_cast<u64>(fileData.nFileSizeHigh) << 32) | fileData.nFileSizeLow;
+        }
+        CoTaskMemFree(szPath);
+        return size;
+    }
+    return 0;
+}
+
+void WShell::FileTime(const FILETIME& ft, char* outBuf, int outBufSize) {
+    FILETIME localFt;
+    SYSTEMTIME st;
+    ::FileTimeToLocalFileTime(&ft, &localFt);
+    ::FileTimeToSystemTime(&localFt, &st);
+
+    char dateBuf[32];
+    ::GetDateFormatA(LOCALE_USER_DEFAULT, DATE_SHORTDATE, &st, nullptr, dateBuf, sizeof(dateBuf));
+
+    char timeBuf[32];
+    ::GetTimeFormatA(LOCALE_USER_DEFAULT, TIME_NOSECONDS, &st, nullptr, timeBuf, sizeof(timeBuf));
+
+    // Use snprintf or sprintf_s for char* buffers
+    ::sprintf_s(outBuf, outBufSize, "%s %s", dateBuf, timeBuf);
+}
+
+// Converts uint64_t size directly into human readable UTF-8 buffer (e.g., "14.2 MB")
+void WShell::Size(u64 sizeInBytes, char* outBuf, int outBufSize) {
+    wchar_t wbuf[32] = {};
+    ::StrFormatByteSizeW(static_cast<LONGLONG>(sizeInBytes), wbuf, 32);
+    ::WideCharToMultiByte(CP_UTF8, 0, wbuf, -1, outBuf, outBufSize, nullptr, nullptr);
+}
+
+
 
 /*
 This PC                             :    10110000000000000000000101110100

@@ -38,4 +38,27 @@ namespace Str{
         return new_string;
     }
 
+    char* WideToUtf8(const wchar_t* wide) {
+        if (!wide) return nullptr;
+
+        int sizeNeeded = ::WideCharToMultiByte(CP_UTF8, 0, wide, -1, nullptr, 0, nullptr, nullptr);
+
+        if (sizeNeeded <= 0) {
+            printf("Error in WideCharToMultiByte. Error: %lu\n", ::GetLastError());
+            return nullptr;
+        }
+
+        char* newString = (char*)malloc(sizeof(char) * sizeNeeded);
+        if (!newString) return nullptr;
+
+        int result = ::WideCharToMultiByte(CP_UTF8, 0, wide, -1, newString, sizeNeeded, nullptr, nullptr);
+        if (result == 0) {
+            printf("Error in WideCharToMultiByte conversion. Error: %lu\n", ::GetLastError());
+            free(newString);
+            return nullptr;
+        }
+
+        return newString;
+    }
+
 }

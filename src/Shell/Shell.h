@@ -12,6 +12,9 @@
 namespace WShell{
 
     bool PidlHasSubFolders(PCIDLIST_ABSOLUTE folder, bool accurate = false);
+    std::string GetPidlTypeName(PCIDLIST_ABSOLUTE pidl);
+    u64 GetPidlFileSize(PCIDLIST_ABSOLUTE pidl);
+    
     class Pidl{
         public:
             Pidl() = default;
@@ -86,16 +89,27 @@ namespace WShell{
     struct Item{
         std::string name; // 24
         Pidl pidl;    // 8
-
-        u64 fileSize = 0;   // 8
-        FILETIME lastWriteTime{}; // 8
         SFGAOF attributes = 0;  // 4
+        FILETIME lastWriteTime{}; // 8
         
-        Lazy<u32> iconKey;
+        mutable Lazy<u32> iconKey;
         u32 IconKey() const {
             return iconKey.Get([&]{
                 return (u32) Icons::GetIconIndex(pidl.get(), nullptr, 0, SHGFI_PIDL | SHGFI_SYSICONINDEX | SHGFI_SMALLICON);
             });
+        }
+        
+        mutable Lazy<u64> size;
+        u64 Size() const {
+            // handle cases like virtual items, or folders recursively later
+            if (attributes & SFGAO_FOLDER) return 0ULL;
+            return GetPidlFileSize(pidl.get());
+        }
+    
+        mutable Lazy<std::string> typeName;
+        std::string TypeName() const {
+            // FALLBACK for Virtual items (e.g., "This PC", "Control Panel", "Recycle Bin")
+            return GetPidlTypeName(pidl.get());
         }
     };
 
@@ -125,8 +139,8 @@ namespace WShell{
 
             const std::vector<Item>& Items() const { return items; }
             FolderAccess Access() const { return access; }
-            void SelectIndex(u64 i) {
-                if (i < items.size()) selectedIndex = (i64) i;
+            void SelectIndex(i64 i) {
+                if (i < (i64)items.size()) selectedIndex = i;
             };
             u64 Selected() const {return (u64) selectedIndex; }
 
@@ -164,6 +178,8 @@ namespace WShell{
     std::vector<NewMenuItem> EnumerateNewMenu();
     std::vector<ItemLite> GetOneDriveAccounts();
     std::vector<ItemLite> GetSidebarItems(int category);
+    void FileTime(const FILETIME& ft, char* outBuf, int outBufSize);
+    void Size(u64 sizeInBytes, char* outBuf, int outBufSize);
 
 
     // Resolves a well-known folder (This PC, Desktop, Recycle Bin, ...) to a Pidl.

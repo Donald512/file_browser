@@ -1,6 +1,7 @@
 #include "UI.h"
 #include <algorithm>
 #include <cmath>
+#include "imgui_internal.h"
 
 namespace Style = UI::Style;
 namespace Colors = UI::Colors;
@@ -21,6 +22,7 @@ static GridViewParams GetGridParamsForMode(ViewMode mode) {
         case ViewMode::Medium:     return {74.00f, 52.0f};
         case ViewMode::Small:      return {308.0f, 30.0f};
         case ViewMode::List:       return {308.0f, 30.0f};
+        case ViewMode::Details:    return {308.0f, 30.0f};
         default:                   return GetGridParamsForMode(ViewMode::Large);
     }
 }
@@ -425,6 +427,156 @@ void RenderViewList(AppContext& ctx, GridViewParams& params){
     ImGui::EndChild();
 }
 
+void RenderViewDetails(AppContext& ctx, GridViewParams& params) {
+    // Push these colors before the early returns so we don't leak state
+    ImGui::PushStyleColor(ImGuiCol_TableHeaderBg, IM_COL32(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_TableBorderLight, IM_COL32(0, 0, 0, 0));
+
+    // Begin a group to keep our tight Table Child and Empty Space Child on the same horizontal plane
+    ImGui::BeginGroup();
+
+    // 1. TIGHT CHILD WINDOW: We use AutoResizeX so the child wraps perfectly around the columns!
+    ImGuiChildFlags tableChildFlags = ImGuiChildFlags_AutoResizeX | ImGuiChildFlags_NavFlattened;
+    if (ImGui::BeginChild("FileViewDetails_TableSpace", Style::AutoFillRemnantWindow, tableChildFlags, ImGuiWindowFlags_None)) {
+        
+        f32 dpi = ctx.ui.dpiScale;
+        f32 cellHeight = params.height * dpi;
+        f32 iconSize = cellHeight * ImageToContainerRatio; 
+        
+        f32 nameWidth = params.width * dpi;  
+        f32 dateWidth = 150.0f * dpi;
+        f32 typeWidth = 120.0f * dpi;
+        f32 sizeWidth = 100.0f * dpi;
+
+        ImGuiTableFlags flags = 
+            ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | 
+            ImGuiTableFlags_Sortable | ImGuiTableFlags_ScrollY | ImGuiTableFlags_PadOuterX | 
+            ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_NoBordersInBody;
+
+        if (ImGui::BeginTable("DetailsGrid", 4, flags)) {
+            
+            ImGui::TableSetupScrollFreeze(0, 1); 
+            ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_WidthFixed, nameWidth);
+            ImGui::TableSetupColumn("Date modified", ImGuiTableColumnFlags_WidthFixed, dateWidth);
+            ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, typeWidth);
+            ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, sizeWidth);
+            ImGui::TableHeadersRow();
+
+            auto &dir = ctx.navigation.Contents().Items();
+            ImGuiListClipper clipper;
+            clipper.Begin((int)dir.size(), cellHeight); 
+
+            while (clipper.Step()){
+                for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++){
+                    auto& item = dir[row];
+                    bool isFolder = item.attributes & SFGAO_FOLDER;
+                    bool isSelected = (ctx.navigation.Contents().Selected() == row);
+
+                    ImGui::PushID(row);
+                    ImGui::TableNextRow(ImGuiTableRowFlags_None, cellHeight);
+                    ImGui::TableNextColumn();
+
+                    f32 availWidth = ImGui::GetContentRegionAvail().x;
+                    ImVec2 startPos = ImGui::GetCursorPos();
+
+                    // SpanAllColumns will now naturally STOP at the edge of the TableSpace child!
+                    ImGuiSelectableFlags selectFlags = ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_AllowOverlap;
+
+                    if (ImGui::Selectable("##file_selectedbox", isSelected, selectFlags, ImVec2(0, cellHeight))){
+                        ctx.navigation.Contents().SelectIndex(row);
+                    }
+                    
+                    bool isRowHovered = ImGui::IsItemHovered();
+
+                    if (isRowHovered && ImGui::TableGetHoveredColumn() == 0){
+                        ImGui::SetTooltip("Type: %s", isFolder ? "Folder" : "File");
+                    }
+                    
+                    if (ImGui::IsItemClicked(ImGuiMouseButton_Left)){
+                        ctx.navigation.Contents().SelectIndex(row);
+                    }
+                    if ((ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && ImGui::IsItemHovered()) || (isSelected && ImGui::IsKeyPressed(ImGuiKey_Enter ))){
+                        if (isFolder){
+                            ctx.navigation.NavigateTo(dir[row].pidl);
+                            ImGui::PopID();
+                            ImGui::EndTable();
+                            ImGui::EndChild();
+                            ImGui::EndGroup();
+                            ImGui::PopStyleColor(2);
+                            return;
+                        }
+                        else WShell::ExecuteFile(dir[row].pidl);
+                    }
+
+                    // Draw Icon 
+                    f32 iconPaddingX = 4.0f * dpi; 
+                    f32 iconY = startPos.y + (cellHeight - iconSize) * 0.5f;
+                    ImGui::SetCursorPos(ImVec2(startPos.x + iconPaddingX, iconY));
+                    
+                    ImTextureID iconTexture = ctx.icons.GetTexture({item.IconKey(), SHIL_SMALL});
+                    if (iconTexture){
+                        ImGui::Image(iconTexture, ImVec2(iconSize, iconSize));
+                    } else {
+                        ImVec2 p_min = ImGui::GetCursorScreenPos();
+                        ImVec2 p_max = ImVec2(p_min.x + iconSize, p_min.y + iconSize);
+                        ImU32 iconColor = isFolder ? IM_COL32(204, 165, 51, 255) : IM_COL32(76, 127, 178, 255);
+                        ImGui::GetWindowDrawList()->AddRectFilled(p_min, p_max, iconColor, 4.0f);
+                    }
+
+                    // Draw Text
+                    f32 textGapX = 6.0f * dpi;
+                    f32 textX = startPos.x + iconPaddingX + iconSize + textGapX;
+                    f32 textY = startPos.y + (cellHeight - ImGui::GetTextLineHeight()) * 0.5f;
+                    ImGui::SetCursorPos(ImVec2(textX, textY));
+                    
+                    f32 maxTextWidth = availWidth - (textX - startPos.x);
+                    UI::Helpers::DrawSingleLineTruncatedText(item.name.c_str(), maxTextWidth);
+
+                    ImGui::TableNextColumn();
+                    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (cellHeight - ImGui::GetTextLineHeight()) * 0.5f);
+                    char dateBuf[64];
+                    WShell::FileTime(item.lastWriteTime, dateBuf, sizeof(dateBuf));
+                    UI::Helpers::DrawTableTextWithTooltip(dateBuf, isRowHovered);
+
+                    ImGui::TableNextColumn();
+                    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (cellHeight - ImGui::GetTextLineHeight()) * 0.5f);
+                    UI::Helpers::DrawTableTextWithTooltip(item.TypeName().c_str(), isRowHovered);
+
+                    ImGui::TableNextColumn();
+                    if (!isFolder) {
+                        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (cellHeight - ImGui::GetTextLineHeight()) * 0.5f);
+                        char sizeBuf[32];
+                        WShell::Size(item.Size(), sizeBuf, sizeof(sizeBuf));
+                        f32 colWidth = ImGui::GetContentRegionAvail().x;
+                        f32 sizeTextWidth = ImGui::CalcTextSize(sizeBuf).x;
+                        if (colWidth > sizeTextWidth) {
+                            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (colWidth - sizeTextWidth) - (4.0f * dpi));
+                        }
+                        UI::Helpers::DrawTableTextWithTooltip(sizeBuf, isRowHovered);
+                    }
+
+                    ImGui::PopID();
+                }
+            }
+            ImGui::EndTable();
+        }
+    }
+    ImGui::EndChild();
+
+    // To make the hover hug the last column
+    ImGui::SameLine(0, 0);
+    if (ImGui::BeginChild("FileViewDetails_EmptySpace", Style::AutoFillRemnantWindow, ImGuiChildFlags_None, ImGuiWindowFlags_None)) {
+        if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+            ctx.navigation.Contents().SelectIndex(-1);
+        }
+
+    }
+    ImGui::EndChild();
+    ImGui::EndGroup();
+
+    ImGui::PopStyleColor(2);
+}
+
 void FileView::Render(AppContext& ctx){
     GridViewParams params = GetGridParamsForMode(FileView::currentView);
     switch (currentView){
@@ -438,6 +590,10 @@ void FileView::Render(AppContext& ctx){
         break;
         case ViewMode::List:{
             RenderViewList(ctx, params);
+        }
+        break;
+        case ViewMode::Details:{
+            RenderViewDetails(ctx, params);
         }
         break;
     }

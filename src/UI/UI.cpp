@@ -222,6 +222,19 @@ int UI::Helpers::GetWrappedLineCount(const char* text, float maxTextWidth, int m
     return currentLine;
 }
 
+// Draws text. If it exceeds the column width, it adds "..." and provides a tooltip!
+void UI::Helpers::DrawTableTextWithTooltip(const char* text, bool isRowHovered) {
+    f32 availWidth = ImGui::GetContentRegionAvail().x;
+    f32 textWidth = ImGui::CalcTextSize(text).x;
+
+    DrawSingleLineTruncatedText(text, availWidth);
+    
+    // If the text is too long, the mouse is on this row, AND the mouse is in this specific column:
+    if (textWidth > availWidth && isRowHovered && ImGui::TableGetHoveredColumn() == ImGui::TableGetColumnIndex()) {
+        ImGui::SetTooltip("%s", text);
+    }
+}
+
 void UI::Helpers::AlignCursorVertically(f32 containerHeightPx, f32 itemHeightPx){
     f32 centerY = (containerHeightPx - itemHeightPx) * 0.5f;
     // Prevent negative offsets if the item is somehow bigger than the container

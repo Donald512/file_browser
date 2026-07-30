@@ -126,64 +126,55 @@ void SetBackgroundColor(AppContext& ctx, float r, float g, float b, float a) {  
 }
 
 
-void ApplyWindows11DarkTheme(){
+void ApplyWindows11DarkTheme() {
     ImGuiStyle& style = ImGui::GetStyle();
     ImVec4* colors = style.Colors;
 
-    // - - - Windown and Panel Layout Properties 
-    style.WindowRounding    = 7.0f;  // Windows 11 signature slightly rounded corners
+    // --- 1. Layout Properties ---
+    style.WindowRounding    = 7.0f;  // Signature Windows 11 rounded corners
     style.FrameRounding     = 4.0f;
     style.PopupRounding     = 6.0f;
     style.ChildRounding     = 4.0f;
-    style.WindowBorderSize  = 1.0f;  // Thin borders separating panels
+    style.WindowBorderSize  = 1.0f;
     style.ChildBorderSize   = 1.0f;
     style.FrameBorderSize   = 1.0f;
     style.ItemSpacing       = ImVec2(8.0f, 6.0f);
 
-    // --- 2. The Exact Windows 11 Color Tokens ---
-    // Top-level app background (Mica / Acrylic dark slate)
-    colors[ImGuiCol_WindowBg]             = ImVec4(0.12f, 0.12f, 0.12f, 1.00f); // #1E1E1E
-    
-    // Left Sidebar / Navigation Pane (Slightly darker for depth)
-    colors[ImGuiCol_ChildBg]              = ImVec4(0.10f, 0.10f, 0.10f, 1.00f); // #1A1A1A
-    
-    // Popups, Dropdowns, and Dialogs
-    colors[ImGuiCol_PopupBg]              = ImVec4(0.14f, 0.14f, 0.14f, 0.98f); // #242424
+    // --- 2. Color Tokens ---
+    // Top-level background
+    colors[ImGuiCol_WindowBg]             = ImVec4(0.098f, 0.098f, 0.098f, 1.00f); // #191919
+    colors[ImGuiCol_ChildBg]              = ImVec4(0.10f,  0.10f,  0.10f,  1.00f); // #1A1A1A
+    colors[ImGuiCol_PopupBg]              = ImVec4(0.14f,  0.14f,  0.14f,  0.98f); // #242424
 
     // Subtle divider lines and panel borders
     colors[ImGuiCol_Border]               = ImVec4(0.18f, 0.18f, 0.18f, 1.00f); // #2E2E2E
     colors[ImGuiCol_BorderShadow]         = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
 
-    // Text (Off-white / Light grey)
+    // Text
     colors[ImGuiCol_Text]                 = ImVec4(0.90f, 0.90f, 0.90f, 1.00f); // #E6E6E6
     colors[ImGuiCol_TextDisabled]         = ImVec4(0.50f, 0.50f, 0.50f, 1.00f); // #808080
 
-    // --- 3. Interactive States (Buttons, Selectables, Hovers) ---
-    // The classic Windows Accent Blue (#0078D4 or updated Win11 #005A9E variant)
-    ImVec4 winAccentBlue = ImVec4(0.00f, 0.45f, 0.83f, 1.00f); 
-    
-    // Normal button / background elements
-    colors[ImGuiCol_FrameBg]              = ImVec4(0.16f, 0.16f, 0.16f, 1.00f); // #292929
+    // --- 3. Interactive States (Neutral Grays - No Accent Blue) ---
+    colors[ImGuiCol_FrameBg]              = ImVec4(0.16f, 0.16f, 0.16f, 1.00f);
     colors[ImGuiCol_FrameBgHovered]       = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
-    colors[ImGuiCol_FrameBgActive]        = ImVec4(0.24f, 0.24f, 0.24f, 1.00f);
+    colors[ImGuiCol_FrameBgActive]        = ImVec4(0.26f, 0.26f, 0.26f, 1.00f); // Bright gray click
 
-    // Folder selectables and Header rows (Light highlight on hover)
-    colors[ImGuiCol_Header]               = ImVec4(0.18f, 0.18f, 0.18f, 1.00f); // #2E2E2E
-    colors[ImGuiCol_HeaderHovered]        = ImVec4(0.22f, 0.22f, 0.22f, 1.00f); // #383838
-    colors[ImGuiCol_HeaderActive]         = winAccentBlue;
+    // Selectable Headers & Items (Active click is bright neutral gray)
+    colors[ImGuiCol_Header]               = ImVec4(0.22f, 0.22f, 0.22f, 1.00f); // Selected item bg
+    colors[ImGuiCol_HeaderHovered]        = ImVec4(0.20f, 0.20f, 0.20f, 1.00f); // Hovered item bg
+    colors[ImGuiCol_HeaderActive]         = ImVec4(0.28f, 0.28f, 0.28f, 1.00f); // Bright gray click state
 
-    // Address Bar Buttons & standard clickables
-    colors[ImGuiCol_Button]               = ImVec4(0.14f, 0.14f, 0.14f, 0.00f); // Invisible by default like Win11 toolbars
-    colors[ImGuiCol_ButtonHovered]        = ImVec4(0.22f, 0.22f, 0.22f, 1.00f); // Light grey on hover
-    colors[ImGuiCol_ButtonActive]         = ImVec4(0.26f, 0.26f, 0.26f, 1.00f);
+    // Buttons (Toolbar style)
+    colors[ImGuiCol_Button]               = ImVec4(0.14f, 0.14f, 0.14f, 0.00f);
+    colors[ImGuiCol_ButtonHovered]        = ImVec4(0.22f, 0.22f, 0.22f, 1.00f);
+    colors[ImGuiCol_ButtonActive]         = ImVec4(0.28f, 0.28f, 0.28f, 1.00f); // Bright gray click
 
     // Scrollbars
     colors[ImGuiCol_ScrollbarBg]          = ImVec4(0.10f, 0.10f, 0.10f, 0.00f);
-    colors[ImGuiCol_ScrollbarGrab]         = ImVec4(0.30f, 0.30f, 0.30f, 1.00f);
+    colors[ImGuiCol_ScrollbarGrab]        = ImVec4(0.30f, 0.30f, 0.30f, 1.00f);
     colors[ImGuiCol_ScrollbarGrabHovered]  = ImVec4(0.40f, 0.40f, 0.40f, 1.00f);
     colors[ImGuiCol_ScrollbarGrabActive]   = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
 }
-
 
 // !!!!!!---------------------------------------------------------------------------------------
 
