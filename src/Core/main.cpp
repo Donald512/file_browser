@@ -57,6 +57,7 @@ int main (void){
             CreateRenderTarget(ctx);
         }
 
+        ctx.tasks.RunMainThreadJobs();
         ctx.icons.NextFrame(); 
         ImGui_Backend_NewFrame();
         ImGui::NewFrame();
@@ -75,7 +76,7 @@ int main (void){
 
 }
 
-
+// ! Check if Virtual is worth eliminating in threading 
 
 
 /*  ImGuiListClipper for only previewing visible items

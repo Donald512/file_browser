@@ -132,6 +132,7 @@ std::vector<Item> WShell::EnumFolder(PCIDLIST_ABSOLUTE folder){
 }
 
 bool WShell::Directory::Load(PCIDLIST_ABSOLUTE folder){
+
     if (!folder) return false;
     items = WShell::EnumFolder(folder);
     access = WShell::GetFolderAccess(folder);

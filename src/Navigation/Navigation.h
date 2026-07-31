@@ -78,10 +78,12 @@ namespace Navigation{
     
             
         private:
-           WShell::Pidl currentFolder;
-           WShell::Directory contents;
+            WShell::Pidl currentFolder;
+            WShell::Directory contents;
             Navigation::Breadcrumbs breadcrumbs;
             Navigation::History paths;
+
+            std::atomic<u64> currentGeneration{ 0 };
     };
 
 }

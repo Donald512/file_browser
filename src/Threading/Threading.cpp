@@ -1,76 +1,88 @@
-#include "Types.h"
-#include <Threading.h>
+#include "Threading.h"
+#include <combaseapi.h>
 
-namespace Threading{
-    void Init(u32 numThreads){
-    ThreadPool &pool = ctx.threadPool;
-    pool.terminate = false;
-    code
-    Code
-    for (u32 i = 0; i < numThreads; i++){
-            // push_back expects a fully formed object, but we are constructing while appending
-            pool.workers.emplace_back([&pool]() {   // lambda function that captures the pool reference, has access to queue, alarmclock, etc  
-                Utils::InitCOM();   // this is the beginning of the function in each lambda 
+#pragma comment(lib, "Ole32.lib")
 
-                while (true){
-                    Job currentJob;
-                    {
-                        std::unique_lock<std::mutex> lock(pool.queueMutex); // Workers takes the lock, and is the only one accessing the queue atp
-                        // - Critical Section
-                        pool.alarmClock.wait(lock, [&pool](){  // Go to sleep Until there is work OR they are terminated
-                            return pool.terminate || !pool.queue.empty();   // sleep, until program is shutting down, or queue is not empty
-                        });
-                        
-                        if (pool.terminate && pool.queue.empty()){   // if the app is closing and queue is empty, break out of infinite loop
-                            break;
-                        }
+using namespace Threading;
 
-                        // Grab the job from the front of the queue
-                        currentJob = std::move(pool.queue.front()); // std::move doesnt copy functions, it transfers ownership
-                        pool.queue.pop();   // remove the first item from queue
-                        // - Critical Section -  End
-                    }// RAII doesnt trust me, so i dont trust RAII
+ThreadPool::ThreadPool(u32 numThreads) {
+    // Fall back to at least 1 worker if hardware_concurrency returns 0
+    if (numThreads == 0) {
+        numThreads = 1;     // todo check implication of changing to 4
+    }
 
-                    if (currentJob.task){   // this just checks if the task is not empty
-                        currentJob.task();  // this happen outside the lock or else only worker can be in the kitchen at any time, which is stupid, we only protecting the todo list
+    workers.reserve(numThreads);
+
+    for (u32 i = 0; i < numThreads; ++i) {
+        workers.emplace_back([this]() {
+            // Initialize COM library on this thread
+            HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+            const bool comInitialized = SUCCEEDED(hr);
+
+            while (true) {
+                JobFunction currentJob;
+                {
+                    std::unique_lock<std::mutex> lock(queueMutex);
+
+                    cv.wait(lock, [this]() {
+                        return terminate || !jobQueue.empty();
+                    });
+
+                    if (terminate && jobQueue.empty()) {
+                        break;
                     }
+
+                    currentJob = std::move(jobQueue.front());
+                    jobQueue.pop();
                 }
 
-                // clean up COM when thread dies
-                CoUninitialize();
-            });   
-        }   
-    }   
-
-    void Enqueue(AppContext& ctx, u64 generation, std::function<void()> task) {
-        ThreadPool& pool = ctx.threadPool;
-        {
-            // Grab the lock to safely push to the queue
-            std::unique_lock<std::mutex> lock(pool.queueMutex);
-            if (pool.terminate) return;
-
-            pool.queue.push(Job{ generation, task });
-        }
-        
-        // Ring the alarm clock to wake up exactly ONE sleeping worker
-        pool.alarmClock.notify_one(); 
-    }
-
-    void Destroy(AppContext& ctx) {
-        ThreadPool& pool = ctx.threadPool;
-        {
-            std::unique_lock<std::mutex> lock(pool.queueMutex);
-            pool.terminate = true;
-        }
-        
-        // Ring the alarm clock for ALL workers so they wake up and see they are fired
-        pool.alarmClock.notify_all();
-
-        // Wait for all workers to finish their current job and exit safely
-        for (std::thread& worker : pool.workers) {
-            if (worker.joinable()) {
-                worker.join();
+                if (currentJob) {
+                    currentJob();
+                }
             }
+
+            // Only uninitialize if COM was successfully initialized on this thread
+            if (comInitialized) {
+                CoUninitialize();
+            }
+        });
+    }
+}
+
+ThreadPool::~ThreadPool() {
+    Shutdown();
+}
+
+void ThreadPool::Enqueue(JobFunction task) {
+    if (!task) return;
+
+    {
+        std::unique_lock<std::mutex> lock(queueMutex);
+        if (terminate) {
+            return; // Ignore enqueues after shutdown
+        }
+        jobQueue.push(std::move(task));
+    }
+
+    cv.notify_one();
+}
+
+void ThreadPool::Shutdown() {
+    {
+        std::unique_lock<std::mutex> lock(queueMutex);
+        if (terminate) {
+            return; // Prevent multiple shutdowns
+        }
+        terminate = true;
+    }
+
+    cv.notify_all();
+
+    for (std::thread& worker : workers) {
+        if (worker.joinable()) {
+            worker.join();
         }
     }
+
+    workers.clear();
 }
