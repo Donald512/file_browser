@@ -27,7 +27,14 @@ namespace WShell{
     // NOTE: This exists because of a side effect of asynchronous programming, if fileview pushes a request to get the iconKey, but someone clicks sort and the ordering changes, it gives the wrong item a wrong Pidl
     // but using ILIsEqual to compare 5000 items everytime we need the iconIndex is a slow API call, so compare by a hash they each hold 
     template <typename TCollection, typename  TApply>
-    bool PatchByHash(TCollection& items, PCIDLIST_ABSOLUTE pidl, u64 hash, TApply&& apply){
+    bool PatchByHash(TCollection& items, PCIDLIST_ABSOLUTE pidl, u64 hash, size_t hintIndex, TApply&& apply){
+        // O(1) try
+        // if hintIndex is 0, doesnt matter, just 1 check, could mean a valid index or just random 
+        if (hintIndex < items.size() && items[hintIndex].hash == hash){
+            apply(items[hintIndex]);
+            return true;
+        }
+        // Fallback to O(N) 
         for (auto& item: items){
             if (item.hash == hash){
                 // for the quintillionth chance of a hash collision
@@ -242,9 +249,9 @@ namespace WShell{
             // never call this anywhere except a RunAsync onDone callback, it mutates item directly and assumes its on the main thread
 
             template <typename TApply>
-            bool PatchItem(PCIDLIST_ABSOLUTE targetPidl, u64 targetHash, u64 forGeneration, TApply&& apply){
+            bool PatchItem(PCIDLIST_ABSOLUTE targetPidl, u64 targetHash, u64 hintIndex, u64 forGeneration, TApply&& apply){
                 if (forGeneration != loadGeneration) return false;
-                return PatchByHash(items, targetPidl, targetHash, std::forward<TApply>(apply));
+                return PatchByHash(items, targetPidl, targetHash, hintIndex, std::forward<TApply>(apply));
             }
         private:
             i64 selectedIndex = -1;

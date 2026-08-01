@@ -44,6 +44,7 @@ static int ShilSizeFromViewMode(ViewMode viewMode){
 static bool HandleItemInteraction(AppContext& ctx, u64 index, const WShell::Item& item, bool isSelected, ImVec2 size, ImGuiSelectableFlags flags = ImGuiSelectableFlags_AllowDoubleClick, bool handleHover = true){
     if (ImGui::Selectable("##file_selectedbox", isSelected, flags, size)) {
         ctx.navigation.Contents().SelectIndex(index);
+        // change to select by hash
     }
     if (handleHover){
         if (ImGui::IsItemHovered()){
@@ -51,7 +52,7 @@ static bool HandleItemInteraction(AppContext& ctx, u64 index, const WShell::Item
                 ImGui::SetTooltip(item.TooltipInfo().c_str());
             }
             else if (!item.tooltipRequestSent){
-                WShell::Async::RequestTooltip(ctx, item);
+                WShell::Async::RequestTooltip(ctx, item, index);
             }
         }
     }
@@ -73,14 +74,14 @@ static bool HandleItemInteraction(AppContext& ctx, u64 index, const WShell::Item
     return false;
 }
 
-static void DrawItemIcon(AppContext& ctx, const WShell::Item& item, f32 iconSize, int shilSize){
+static void DrawItemIcon(AppContext& ctx, const WShell::Item& item, size_t index, f32 iconSize, int shilSize){
     // Ask IconManager for a texture once the index was actually resolve
     ImTextureID iconTexture = 0;
     if (item.iconKey.resolved){
         iconTexture = ctx.icons.GetTexture({item.IconKey(), shilSize});
     }
     else if (!item.iconRequestSent){
-        WShell::Async::RequestIcon(ctx, item);
+        WShell::Async::RequestIcon(ctx, item, index);
     }
     
     if (iconTexture) {
@@ -165,7 +166,7 @@ void RenderGrid(AppContext& ctx, GridViewParams& params){
                     }
 
                     ImGui::SetCursorPos(ImVec2(startPos.x + (realCellWidth - iconSize) * 0.5f, startPos.y + (imageHeightRegion - iconSize) * 0.5f));
-                    DrawItemIcon(ctx, item, iconSize, ShilSizeFromViewMode(currentView));
+                    DrawItemIcon(ctx, item, i, iconSize, ShilSizeFromViewMode(currentView));
 
                     ImGui::SetCursorPos(ImVec2(startPos.x, startPos.y + imageHeightRegion));
                     Helpers::DrawCenteredWrappedText(item.name.c_str(), realCellWidth, actualMaxTextWidth, 4);
@@ -242,7 +243,7 @@ void RenderViewSmall(AppContext& ctx, GridViewParams& params){
                     f32 iconY = startPos.y + (cellHeight - iconSize) * 0.5f; // Perfect vertical center
                     
                     ImGui::SetCursorPos(ImVec2(iconX, iconY));
-                    DrawItemIcon(ctx, item, iconSize, ShilSizeFromViewMode(currentView));
+                    DrawItemIcon(ctx, item, i, iconSize, ShilSizeFromViewMode(currentView));
 
                     f32 textGapX = 8.0f * dpi;
                     f32 textX = iconX + iconSize + textGapX;
@@ -388,7 +389,7 @@ void RenderViewList(AppContext& ctx, GridViewParams& params){
             f32 iconY = cellPos.y + (cellHeight - iconSize) * 0.5f;
             ImGui::SetCursorPos(ImVec2(cellPos.x + xGap, iconY));
 
-            DrawItemIcon(ctx, item, iconSize, SHIL_SMALL);
+            DrawItemIcon(ctx, item, i, iconSize, SHIL_SMALL);
 
             // C. Draw Text (Vertically centered, truncated if necessary)
             f32 textStartX = cellPos.x + xGap + iconSize + xGap;
@@ -476,7 +477,7 @@ void RenderViewDetails(AppContext& ctx, GridViewParams& params) {
                         if (item.tooltipInfo.resolved){
                             ImGui::SetTooltip("%s", item.tooltipInfo.value.c_str());
                         } else if (!item.tooltipRequestSent){
-                            WShell::Async::RequestTooltip(ctx, item);
+                            WShell::Async::RequestTooltip(ctx, item, row);
                         }
                     }
 
@@ -485,7 +486,7 @@ void RenderViewDetails(AppContext& ctx, GridViewParams& params) {
                     f32 iconY = startPos.y + (cellHeight - iconSize) * 0.5f;
                     ImGui::SetCursorPos(ImVec2(startPos.x + iconPaddingX, iconY));
                     
-                    DrawItemIcon(ctx, item, iconSize, SHIL_SMALL);
+                    DrawItemIcon(ctx, item, row, iconSize, SHIL_SMALL);
 
                     // Draw Text
                     f32 textGapX = 6.0f * dpi;
@@ -503,7 +504,7 @@ void RenderViewDetails(AppContext& ctx, GridViewParams& params) {
                     UI::Helpers::DrawTableTextWithTooltip(dateBuf, isRowHovered);
                     // TypeName()/Size() only actually resolve lazily for virtual items - EnumFolder fills both in sychronously for real filesystem items, so this request is most likely a no-op
                     if (!item.typeName.resolved && !item.metaRequestSent){
-                        WShell::Async::RequestMeta(ctx, item);
+                        WShell::Async::RequestMeta(ctx, item, row);
                     }
                     ImGui::TableNextColumn();
                     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (cellHeight - ImGui::GetTextLineHeight()) * 0.5f);
@@ -605,7 +606,7 @@ void RenderViewTiles(AppContext& ctx, GridViewParams& params){
                     f32 iconY = startPos.y + (cellHeight - iconSize) * 0.5f; // Perfect vertical center
                     
                     ImGui::SetCursorPos(ImVec2(iconX, iconY));
-                    DrawItemIcon(ctx, item, iconSize, ShilSizeFromViewMode(currentView));
+                    DrawItemIcon(ctx, item, row, iconSize, ShilSizeFromViewMode(currentView));
 
                     f32 textGapX = 8.0f * dpi;
                     f32 rightGapX = 8.0f * dpi;
@@ -618,7 +619,7 @@ void RenderViewTiles(AppContext& ctx, GridViewParams& params){
                     f32 textAvailWidth = (startPos.x + realCellWidth) - textX - rightGapX;
 
                     if (!item.tileViewInfo.resolved && !item.tileInfoRequestSent){
-                        WShell::Async::RequestTileInfo(ctx, item);
+                        WShell::Async::RequestTileInfo(ctx, item, row);
                     }
                     std::string textToShow = item.name + '\n' + (item.tileViewInfo.resolved ? item.tileViewInfo.value : std::string());
                     

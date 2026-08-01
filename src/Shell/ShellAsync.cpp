@@ -2,7 +2,7 @@
 
 using namespace WShell;
 
-void WShell::Async::RequestIcon(AppContext& ctx, const Item& item){
+void WShell::Async::RequestIcon(AppContext& ctx, const Item& item, size_t index){
     item.iconRequestSent = true;
     u64 gen = ctx.navigation.Contents().Generation();
     u64 targetHash = item.hash;
@@ -16,8 +16,8 @@ void WShell::Async::RequestIcon(AppContext& ctx, const Item& item){
             return std::make_pair(std::move(pidl), iIcon);
         },
         // main thread
-        [&ctx, gen, targetHash](std::pair<Pidl, u32> result) mutable {
-            ctx.navigation.Contents().PatchItem(result.first.get(), targetHash, gen, [&](Item& it){
+        [&ctx, gen, targetHash, index](std::pair<Pidl, u32> result) mutable {
+            ctx.navigation.Contents().PatchItem(result.first.get(), targetHash, index, gen, [&](Item& it){
                 it.iconKey.value = result.second;
                 it.iconKey.resolved = true;
             });
@@ -26,7 +26,7 @@ void WShell::Async::RequestIcon(AppContext& ctx, const Item& item){
 }
 
 
-void WShell::Async::RequestTooltip(AppContext& ctx, const Item& item){
+void WShell::Async::RequestTooltip(AppContext& ctx, const Item& item, size_t index){
     item.tooltipRequestSent = true;
     u64 gen = ctx.navigation.Contents().Generation();
     u64 targetHash = item.hash;
@@ -36,8 +36,8 @@ void WShell::Async::RequestTooltip(AppContext& ctx, const Item& item){
             std::string tip = FetchWindowsTooltip(pidl.get());
             return std::make_pair(std::move(pidl), std::move(tip));
         },
-        [&ctx, gen, targetHash](std::pair<Pidl, std::string> result) mutable {
-            ctx.navigation.Contents().PatchItem(result.first.get(), targetHash, gen, [&](Item& it){
+        [&ctx, gen, targetHash, index](std::pair<Pidl, std::string> result) mutable {
+            ctx.navigation.Contents().PatchItem(result.first.get(), targetHash, index, gen, [&](Item& it){
                 it.tooltipInfo.value = std::move(result.second);
                 it.tooltipInfo.resolved = true;
             });
@@ -46,7 +46,7 @@ void WShell::Async::RequestTooltip(AppContext& ctx, const Item& item){
 }
 
 
-void WShell::Async::RequestMeta(AppContext& ctx, const Item& item){
+void WShell::Async::RequestMeta(AppContext& ctx, const Item& item, size_t index){
     item.metaRequestSent = true;
     u64 gen = ctx.navigation.Contents().Generation();
     bool isFolder = (item.attributes & SFGAO_FOLDER) != 0;  // matching Item::Size()'s existing short circuit
@@ -62,8 +62,8 @@ void WShell::Async::RequestMeta(AppContext& ctx, const Item& item){
             r.pidl = std::move(pidl);
             return r;
         },
-        [&ctx, gen, targetHash](auto result) mutable {
-            ctx.navigation.Contents().PatchItem(result.pidl.get(), targetHash, gen, [&](Item& it){
+        [&ctx, gen, targetHash, index](auto result) mutable {
+            ctx.navigation.Contents().PatchItem(result.pidl.get(), targetHash, index, gen, [&](Item& it){
                 it.typeName.value = std::move(result.type);
                 it.typeName.resolved = true;
                 it.size.value = result.size;
@@ -73,7 +73,7 @@ void WShell::Async::RequestMeta(AppContext& ctx, const Item& item){
     );
 }
 
-void WShell::Async::RequestTileInfo(AppContext& ctx, const Item& item){
+void WShell::Async::RequestTileInfo(AppContext& ctx, const Item& item, size_t index){
     item.tileInfoRequestSent = true;
     u64 gen = ctx.navigation.Contents().Generation();
     u64 targetHash = item.hash;
@@ -83,8 +83,8 @@ void WShell::Async::RequestTileInfo(AppContext& ctx, const Item& item){
             std::string info = FetchTileViewLines(pidl.get());
             return std::make_pair(std::move(pidl), std::move(info));
         },
-        [&ctx, gen, targetHash](std::pair<Pidl, std::string> result) mutable {
-            ctx.navigation.Contents().PatchItem(result.first.get(), targetHash, gen, [&](Item& it){
+        [&ctx, gen, targetHash, index](std::pair<Pidl, std::string> result) mutable {
+            ctx.navigation.Contents().PatchItem(result.first.get(), targetHash, index, gen, [&](Item& it){
                 it.tileViewInfo.value = std::move(result.second);
                 it.tileViewInfo.resolved = true;
             });
@@ -95,6 +95,7 @@ void WShell::Async::RequestTileInfo(AppContext& ctx, const Item& item){
 
 
 // Sidebar's ItemLite requests. No Directory/generation concept applies here - staleness is handled by the fact that 'owner' (a sidebar node's children list, or one of ctx.items1/2/3) is a stable, never-erased vector for the life of the app; PatchByPidl's own "not found -> no-op" behavious covers the case where the specific item is gone (deleted on disk, or the node ws rebuilt from scratch)
+// intentionally ignoring hintIndex for LiteIcons, they are small enough to be O(N) and break in recursive
 void WShell::Async::RequestLiteIcon(AppContext& ctx, std::vector<ItemLite>& owner, ItemLite& item){
     item.iconRequestSent = true;
     u64 targetHash = item.hash;
@@ -105,7 +106,7 @@ void WShell::Async::RequestLiteIcon(AppContext& ctx, std::vector<ItemLite>& owne
             return std::make_pair(std::move(pidl), iIcon);
         },
         [&owner, targetHash](std::pair<Pidl, u32> result) mutable {
-            PatchByHash(owner, result.first.get(), targetHash, [&](ItemLite& it){
+            PatchByHash(owner, result.first.get(), targetHash, 0, [&](ItemLite& it){
                 it.iconKey.value = result.second;
                 it.iconKey.resolved = true;
             });
@@ -124,7 +125,7 @@ void WShell::Async::RequestHasSubFolders(AppContext& ctx, std::vector<ItemLite>&
             return std::make_pair(std::move(pidl), has);
         },
         [&owner, targetHash](std::pair<Pidl, bool> result) mutable {
-            PatchByHash(owner, result.first.get(), targetHash, [&](ItemLite& it){
+            PatchByHash(owner, result.first.get(), targetHash, 0, [&](ItemLite& it){
                 it.hasSubFolders.value = result.second;
                 it.hasSubFolders.resolved = true;
             });
