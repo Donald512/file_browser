@@ -2,6 +2,7 @@
 #include "imgui_boilerplate.h"
 #include "UI.h"
 #include <ShlDisp.h>
+#include "ShellAsync.h"
 
 
 // {f874310e-b6b7-47dc-bc84-b9e6b38f5903}
@@ -13,7 +14,8 @@ int main (void){
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     AppContext ctx{};
 
-    
+    // Must happen before the first NavigateTo (and before anything enqueues background work)
+    ctx.navigation.BindTaskSystem(ctx.tasks);
     // Get PIDL for "This PC"
     SHGetKnownFolderIDList(FOLDERID_ComputerFolder, 0, NULL, ctx.pidlThisPC.GetAddressOf());
     SHGetKnownFolderIDList(FOLDERID_Desktop, 0, NULL, ctx.pidlDesktop.GetAddressOf()); 
@@ -21,6 +23,8 @@ int main (void){
     SHParseDisplayName(L"shell:::{f874310e-b6b7-47dc-bc84-b9e6b38f5903}", NULL, ctx.pidlHome.GetAddressOf(), 0, NULL);
     SHParseDisplayName(L"shell:::{679F85CB-0220-4080-B29B-5540CC05AAB6}", NULL, ctx.pidlQuickAccess.GetAddressOf(), 0, NULL);
 
+
+    WShell::Async::RequestSidebarItems(ctx);
 
     ctx.navigation.NavigateTo(ctx.pidlThisPC.get());
 
@@ -77,6 +81,7 @@ int main (void){
 }
 
 // ! Check if Virtual is worth eliminating in threading 
+// ! \\192.168.1.5\SharedFolder try this in addressBar
 
 
 /*  ImGuiListClipper for only previewing visible items

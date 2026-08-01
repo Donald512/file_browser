@@ -42,6 +42,7 @@ cl /nologo /Z7 /W4 /MP /std:c++17 ^
    /I"src\Navigation" ^
    /I"src\Shell" ^
    /I"src\Str" ^
+   /I"src\Threading" ^
    /I"src\UI" ^
    /I"%imgui_root%" ^
    /I"%imgui_root%\backends" ^
@@ -51,7 +52,9 @@ cl /nologo /Z7 /W4 /MP /std:c++17 ^
    "src\Icons\icons.cpp" ^
    "src\Navigation\Navigation.cpp" ^
    "src\Shell\Shell.cpp" ^
+   "src\Shell\ShellAsync.cpp" ^
    "src\Str\Str.cpp" ^
+   "src\Threading\Threading.cpp" ^
    "src\UI\AddressBar.cpp" ^
    "src\UI\CommandBar.cpp" ^
    "src\UI\FileView.cpp" ^

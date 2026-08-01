@@ -1,7 +1,7 @@
 #include "UI.h"
 #include <algorithm>
 #include <cmath>
-#include "imgui_internal.h"
+#include "ShellAsync.h"
 
 namespace Style = UI::Style;
 namespace Colors = UI::Colors;
@@ -33,9 +33,9 @@ static int ShilSizeFromViewMode(ViewMode viewMode){
         case FileView::ViewMode::ExtraLarge: return SHIL_JUMBO;
         case FileView::ViewMode::Large:      return SHIL_JUMBO;
         case FileView::ViewMode::Medium:     return SHIL_EXTRALARGE;
-        case FileView::ViewMode::Small:      return SHIL_LARGE;
-        case FileView::ViewMode::List:       return SHIL_EXTRALARGE;
-        case FileView::ViewMode::Details:    return SHIL_EXTRALARGE;
+        case FileView::ViewMode::Small:      return SHIL_SMALL;
+        case FileView::ViewMode::List:       return SHIL_SMALL;
+        case FileView::ViewMode::Details:    return SHIL_SMALL;
         case FileView::ViewMode::Tiles:      return SHIL_EXTRALARGE;
         default:                             return SHIL_EXTRALARGE;
     }
@@ -47,7 +47,12 @@ static bool HandleItemInteraction(AppContext& ctx, u64 index, const WShell::Item
     }
     if (handleHover){
         if (ImGui::IsItemHovered()){
-            ImGui::SetTooltip(item.TooltipInfo().c_str());
+            if (item.tooltipInfo.resolved){
+                ImGui::SetTooltip(item.TooltipInfo().c_str());
+            }
+            else if (!item.tooltipRequestSent){
+                WShell::Async::RequestTooltip(ctx, item);
+            }
         }
     }
     if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
@@ -69,7 +74,14 @@ static bool HandleItemInteraction(AppContext& ctx, u64 index, const WShell::Item
 }
 
 static void DrawItemIcon(AppContext& ctx, const WShell::Item& item, f32 iconSize, int shilSize){
-    ImTextureID iconTexture = ctx.icons.GetTexture({item.IconKey(), shilSize});
+    // Ask IconManager for a texture once the index was actually resolve
+    ImTextureID iconTexture = 0;
+    if (item.iconKey.resolved){
+        iconTexture = ctx.icons.GetTexture({item.IconKey(), shilSize});
+    }
+    else if (!item.iconRequestSent){
+        WShell::Async::RequestIcon(ctx, item);
+    }
     
     if (iconTexture) {
         ImGui::Image(iconTexture, ImVec2(iconSize, iconSize));
@@ -82,7 +94,7 @@ static void DrawItemIcon(AppContext& ctx, const WShell::Item& item, f32 iconSize
     }
 }
 
-void RenderGrid(AppContext& ctx, GridViewParams& params){ // MAIN ONE
+void RenderGrid(AppContext& ctx, GridViewParams& params){
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, WindowPadding);
     if (!ImGui::BeginChild("FileView", Style::AutoFillRemnantWindow, ImGuiChildFlags_Borders, ImGuiChildFlags_NavFlattened)){
         ImGui::PopStyleVar();
@@ -185,7 +197,8 @@ void RenderViewSmall(AppContext& ctx, GridViewParams& params){
     f32 lineHeight = ImGui::GetTextLineHeight();
     
     f32 cellHeight = params.height * dpi;
-    f32 iconSize = cellHeight * ImageToContainerRatio; 
+    // f32 iconSize = cellHeight * ImageToContainerRatio; was this before, changing to prevent blurriness when i use SHIL_SMALL
+    f32 iconSize = 16.0f * dpi; 
     
     f32 availWidth = ImGui::GetContentRegionAvail().x;
     u16 columnsCount = (u16)(availWidth / ((params.width + XGap) * dpi));
@@ -279,7 +292,8 @@ void RenderViewList(AppContext& ctx, GridViewParams& params){
     
     f32 xGap = XGap * dpi;
     f32 cellHeight = params.height * dpi;
-    f32 iconSize = cellHeight * ImageToContainerRatio; 
+    // f32 iconSize = cellHeight * ImageToContainerRatio; was this before, changing to prevent blurriness when i use SHIL_SMALL
+    f32 iconSize = 16.0f * dpi; 
     
     // Set a minimum and maximum limit for column widths so they don't look ridiculous
     f32 minColWidth = 120.0f * dpi; 
@@ -406,7 +420,8 @@ void RenderViewDetails(AppContext& ctx, GridViewParams& params) {
         
         f32 dpi = ctx.ui.dpiScale;
         f32 cellHeight = params.height * dpi;
-        f32 iconSize = cellHeight * ImageToContainerRatio; 
+    // f32 iconSize = cellHeight * ImageToContainerRatio; was this before, changing to prevent blurriness when i use SHIL_SMALL
+    f32 iconSize = 16.0f * dpi; 
         
         f32 nameWidth = params.width * dpi;  
         f32 dateWidth = 150.0f * dpi;
@@ -458,7 +473,11 @@ void RenderViewDetails(AppContext& ctx, GridViewParams& params) {
                     bool isRowHovered = ImGui::IsItemHovered();
 
                     if (isRowHovered && ImGui::TableGetHoveredColumn() == 0){
-                        ImGui::SetTooltip(item.TooltipInfo().c_str());
+                        if (item.tooltipInfo.resolved){
+                            ImGui::SetTooltip("%s", item.tooltipInfo.value.c_str());
+                        } else if (!item.tooltipRequestSent){
+                            WShell::Async::RequestTooltip(ctx, item);
+                        }
                     }
 
                     // Draw Icon 
@@ -482,16 +501,21 @@ void RenderViewDetails(AppContext& ctx, GridViewParams& params) {
                     char dateBuf[64];
                     WShell::FileTime(item.lastWriteTime, dateBuf, sizeof(dateBuf));
                     UI::Helpers::DrawTableTextWithTooltip(dateBuf, isRowHovered);
-
+                    // TypeName()/Size() only actually resolve lazily for virtual items - EnumFolder fills both in sychronously for real filesystem items, so this request is most likely a no-op
+                    if (!item.typeName.resolved && !item.metaRequestSent){
+                        WShell::Async::RequestMeta(ctx, item);
+                    }
                     ImGui::TableNextColumn();
                     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (cellHeight - ImGui::GetTextLineHeight()) * 0.5f);
-                    UI::Helpers::DrawTableTextWithTooltip(item.TypeName().c_str(), isRowHovered);
+                    UI::Helpers::DrawTableTextWithTooltip(item.typeName.resolved ? item.typeName.value.c_str() : "", isRowHovered);
 
                     ImGui::TableNextColumn();
                     if (!isFolder) {
                         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (cellHeight - ImGui::GetTextLineHeight()) * 0.5f);
                         char sizeBuf[32] = {};
-                        WShell::Size(item.Size(), sizeBuf, sizeof(sizeBuf));
+                        if (item.size.resolved){
+                            WShell::Size(item.size.value, sizeBuf, sizeof(sizeBuf));
+                        }
                         f32 colWidth = ImGui::GetContentRegionAvail().x;
                         f32 sizeTextWidth = ImGui::CalcTextSize(sizeBuf).x;
                         if (colWidth > sizeTextWidth) {
@@ -593,7 +617,10 @@ void RenderViewTiles(AppContext& ctx, GridViewParams& params){
 
                     f32 textAvailWidth = (startPos.x + realCellWidth) - textX - rightGapX;
 
-                    std::string textToShow = item.name + '\n' + item.TileViewInfo();
+                    if (!item.tileViewInfo.resolved && !item.tileInfoRequestSent){
+                        WShell::Async::RequestTileInfo(ctx, item);
+                    }
+                    std::string textToShow = item.name + '\n' + (item.tileViewInfo.resolved ? item.tileViewInfo.value : std::string());
                     
                     ImVec2 screenPos = ImGui::GetCursorScreenPos(); 
                     ImVec2 clipMin = startScreenPos;

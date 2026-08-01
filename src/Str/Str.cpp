@@ -1,5 +1,7 @@
 #include "Str.h"
 
+
+// change all these to new from malloc
 namespace Str{
 
     std::string WideToString(const wchar_t* wide){

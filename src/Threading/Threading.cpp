@@ -8,7 +8,7 @@ using namespace Threading;
 ThreadPool::ThreadPool(u32 numThreads) {
     // Fall back to at least 1 worker if hardware_concurrency returns 0
     if (numThreads == 0) {
-        numThreads = 1;     // todo check implication of changing to 4
+        numThreads = 1;     // td check implication of changing to 4
     }
 
     workers.reserve(numThreads);

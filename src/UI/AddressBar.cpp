@@ -14,10 +14,11 @@ static std::vector<WShell::ItemLite> s_cachedPopupItems;
 
 static void PathEditor(AppContext& ctx){
     // if y parameter in below function changes, change it in inputHeight also, use variable later
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f * ctx.ui.dpiScale, 4.0f* ctx.ui.dpiScale));
+    const f32 verticalPadding = 4.0f * ctx.ui.dpiScale;
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f * ctx.ui.dpiScale, verticalPadding));
 
     // Center text input cursor vertically
-    f32 inputHeight = ImGui::GetFontSize() + (4.0f * ctx.ui.dpiScale * 2.0f);  // Font + (Top + Bottom)Padding
+    f32 inputHeight = ImGui::GetFontSize() + verticalPadding * 2.0f;  // Font + (Top + Bottom)Padding
     Helpers::AlignCursorVertically(Height * ctx.ui.dpiScale, inputHeight);
 
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);  // done to make textbox not the size of text

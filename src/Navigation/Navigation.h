@@ -1,9 +1,13 @@
 #pragma once
 #include "Types.h"
 #include "Shell.h"
+#include <atomic>
 
+// does not need to include AppContext.h because AppContext.h includes it back 
+struct TaskSystem;
 
 namespace Navigation{
+
     enum class Actions {
     Normal,     
     Back,   
@@ -50,6 +54,15 @@ namespace Navigation{
 
     class NavigationController{
         public:
+
+            // Called once, after AppContext is constructed, before the first NavigateTo. NavigateTo dispactches folder loads to this TaskSystem's thread pool instead of doing them inline
+            void BindTaskSystem(TaskSystem& t) { tasks = &t;}
+
+            // True while a navigation's breadcrumbs/contents are being fetched in the background. CurrentFolder()/Breadcrumbs/Contents() still return whatever the PREVIOUS navigation left behind until the new data arrives.
+            // td wire into UI (a spinner / dimmed view). but later later
+            bool IsLoading() const { return loading;}
+
+
             bool NavigateTo(PCIDLIST_ABSOLUTE dest, Actions action = Actions::Normal);
             bool CanGoBack() const {return paths.CanGoBack();}
             bool CanGoForward() const {return paths.CanGoForward();}
@@ -78,12 +91,17 @@ namespace Navigation{
     
             
         private:
+            TaskSystem* tasks = nullptr;
+            std::atomic<bool> loading{ false };
+            
             WShell::Pidl currentFolder;
             WShell::Directory contents;
             Navigation::Breadcrumbs breadcrumbs;
             Navigation::History paths;
 
-            std::atomic<u64> currentGeneration{ 0 };
+            // Incremented on every Navigation call. The value at the moment a given navigation was discared, goes with that navigation's background job. when the job finishes and is about to apply its results on the main thread, it compares its captured value against the currentGeneration's value at that time
+            std::atomic<u64> currentGeneration{0};
+
     };
 
 }

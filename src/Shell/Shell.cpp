@@ -69,7 +69,7 @@ namespace { // Anonymous namespace means these are private to this .cpp file
 
     // Combines a parent + child into a freshly-owned Pidl. Was written out by hand
     // (ILCombine(...) wrapped in WShell::Pidl(...)) at every single call site below.
-    Pidl CombineChild(PCIDLIST_ABSOLUTE parent, PITEMID_CHILD child) {
+    Pidl CombineChild(PCIDLIST_ABSOLUTE parent, PITEMID_CHILD child){
         return Pidl(ILCombine(parent, child));
     }
 
@@ -340,6 +340,25 @@ std::string WShell::PidlToTypeablePath(PCIDLIST_ABSOLUTE pidl){
         }
     }
     return std::string{};
+}
+
+// =======================================
+
+u64 WShell::HashPidl(PCIDLIST_ABSOLUTE pidl){
+    if (!pidl) return 0;
+
+    // Pure in-memory FNV-1a over the raw ITEMIDLIST bytes. ILGetSize() just walks the
+    // linked SHITEMID structure summing `cb` fields — no shell/COM call, no I/O — so this
+    // is cheap enough to call every frame and safe to call from any thread.
+    const unsigned char* bytes = reinterpret_cast<const unsigned char*>(pidl);
+    UINT size = ILGetSize(pidl);
+
+    u64 hash = 1469598103934665603ULL; // FNV offset basis
+    for (UINT i = 0; i < size; ++i){
+        hash ^= bytes[i];
+        hash *= 1099511628211ULL; // FNV prime
+    }
+    return hash;
 }
 
 // =======================================
@@ -754,13 +773,22 @@ void WShell::Directory::ResortItems(){
                 break;
 
             case SortMode::Type:{
-                cmp = _stricmp(a.TypeName().c_str(), b.TypeName().c_str());
+                // cmp = _stricmp(a.TypeName().c_str(), b.TypeName().c_str());
+                // Delibrately does not call .TypeName() here, those lazily resolve on first call, a sychronous shell call from inside a sort comparator. Unresolved items like virtual items that EnumFolder couldn't resolve up front just compare as "" until something  E.g: (a visible row's) WShell::Async::RequestMeta call) resolves them for real; sorting again afterward will then reflect the real type name.
+                std::string aType = a.typeName.resolved ? a.typeName.value : std::string();
+                std::string bType = b.typeName.resolved ? b.typeName.value : std::string();
+                cmp = _stricmp(aType.c_str(), bType.c_str());
             }
                 break;
 
             case SortMode::Size:{
-                if (a.Size() < b.Size()) cmp = -1;
-                else if (a.Size() > b.Size()) cmp = 1;
+                // if (a.Size() < b.Size()) cmp = -1;
+                // else if (a.Size() > b.Size()) cmp = 1;
+                // read the resolved value rather than call the lazy size() 
+                u64 aSize = a.size.resolved ? a.size.value : 0ULL;
+                u64 bSize = b.size.resolved ? b.size.value : 0ULL;
+                if (aSize < bSize) cmp = -1;
+                else if (aSize > bSize) cmp = 1;
             }
             break;
     

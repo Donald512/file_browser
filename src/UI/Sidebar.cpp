@@ -1,4 +1,5 @@
 #include "UI.h"
+#include "ShellAsync.h"
 #include <unordered_map>
 
 namespace Style = UI::Style;
@@ -7,11 +8,13 @@ namespace Colors = UI::Colors;
 namespace Sidebar {
     struct SidebarNodeState{
         bool isOpen = false;
-        bool childrenLoaded = false;
+        enum class LoadState {NotLoaded, Loading, Loaded} childState = LoadState::NotLoaded;
         std::vector<WShell::ItemLite> children;   // reuse the type you already built for breadcrumb popups
     };
 
-    static std::unordered_map<const void*, SidebarNodeState> s_nodeState; 
+    // Keyed by WShell::HashPidl(pidl) - content hash - Not by the pidl's raw address.
+
+    static std::unordered_map<u64, SidebarNodeState> s_nodeState; 
 
     // Helper function to draw a clean tree node with an icon
     bool RenderSidebarNode(AppContext& ctx, const char* label, ImTextureID icon, bool hasChildren, bool isSelected, bool* isOpen) {
@@ -60,27 +63,52 @@ namespace Sidebar {
         return clicked;
     }
 
-    void RenderNodeAndChildren(AppContext& ctx, const std::string& name, const WShell::Pidl& pidl, ImTextureID icon, bool hasChildren){
-        SidebarNodeState& state = s_nodeState[(const void*)pidl.get()];   // creates on first access, persists across frames
+    // 'owner' is whichever 'item' actually lives in one of ctx.items1/2/3 or a perent node's 'state.children' - passed through so an async icon/hasSubFolders request knows where to patch its result back into once it completes. 
+    // 'allowExpand' creates the behaviour where the Quick access section (items2) dont show an arrow regardless of whether the target has subfolder.
+    void RenderNodeAndChildren(AppContext& ctx, std::vector<WShell::ItemLite>& owner, WShell::ItemLite& item, bool allowExpand = true){
+        u64 key = WShell::HashPidl(item.pidl.get());
+        SidebarNodeState& state = s_nodeState[key];   // creates on first access, persists across frames
+        if (!item.iconKey.resolved && !item.iconRequestSent){
+            WShell::Async::RequestLiteIcon(ctx, owner, item);
+        }
+        // Intentionally SHIL_SMALL, not SHIL_LARGE because SHIL_LARGE produces a weird onedrive icon
+        ImTextureID icon = item.iconKey.resolved ? ctx.icons.GetTexture({item.iconKey.value, SHIL_SMALL}) : 0;
 
-        bool isSelected = ILIsEqual(ctx.navigation.CurrentFolder(), pidl.get());
-        bool clicked = RenderSidebarNode(ctx, name.c_str(), icon, hasChildren, isSelected, &state.isOpen);
+        bool hasChildren = false;
+        if (allowExpand){
+            if (!item.hasSubFolders.resolved && !item.hasSubFoldersRequestSent){
+                WShell::Async::RequestHasSubFolders(ctx, owner, item);
+            }
+            hasChildren = item.hasSubFolders.resolved && item.hasSubFolders.value;
+        }
+        bool isSelected = ILIsEqual(ctx.navigation.CurrentFolder(), item.pidl.get());
+        bool clicked = RenderSidebarNode(ctx, item.name.c_str(), icon, hasChildren, isSelected, &state.isOpen);
 
         if (clicked){
-            ctx.navigation.NavigateTo(pidl.get());   // clicking the row (not the arrow) still navigates, same as before
+            ctx.navigation.NavigateTo(item.pidl.get());   // clicking the row (not the arrow) still navigates, same as before
         }
 
         if (state.isOpen && hasChildren){
-            if (!state.childrenLoaded){
-                state.children = WShell::GetLiteItems(pidl.get());   // fetch ONCE, on first expand — not every frame
-                state.childrenLoaded = true;
+            if (state.childState == SidebarNodeState::LoadState::NotLoaded){
+                state.childState = SidebarNodeState::LoadState::Loading;
+                ctx.tasks.RunAsync(
+                    [pidl = item.pidl.Clone()]() mutable {
+                        return WShell::GetLiteItems(pidl.get());
+                    },
+                    [&state](std::vector<WShell::ItemLite> result) mutable {
+                        state.children = std::move(result);
+                        state.childState = SidebarNodeState::LoadState::Loaded;
+                    }
+                );
             }
-            ImGui::Indent();
-            for (auto& child : state.children){
-                ImTextureID childIcon = ctx.icons.GetTexture({child.IconKey(), SHIL_LARGE});
-                RenderNodeAndChildren(ctx, child.name, child.pidl, childIcon, child.HasSubFolders());   // recursion — a node's children are rendered the same way a node is
+            if (state.childState == SidebarNodeState::LoadState::Loaded){
+                ImGui::Indent();
+                for (auto& child : state.children){
+                    RenderNodeAndChildren(ctx, state.children, child); // recursion — a node's children are rendered the same way a node is
+                } 
+                ImGui::Unindent();
             }
-            ImGui::Unindent();
+            // else  Loading. Cosmetic filler
         }
     }
 
@@ -97,24 +125,21 @@ namespace Sidebar {
 
         ImGui::Dummy(ImVec2(0.0f, 4.0f));
         for (auto& item : ctx.items1){
-            ImTextureID tex = ctx.icons.GetTexture({item.IconKey(), SHIL_LARGE});
-            RenderNodeAndChildren(ctx, item.name, item.pidl, tex, item.HasSubFolders());
+            RenderNodeAndChildren(ctx, ctx.items1, item);
         }
         ImGui::Dummy(ImVec2(0.0f, SectionPaddingY));
         ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
 
         ImGui::Dummy(ImVec2(0.0f, SectionPaddingY));
         for (auto& item : ctx.items2){
-            ImTextureID tex = ctx.icons.GetTexture({item.IconKey(), SHIL_LARGE});
-            RenderNodeAndChildren(ctx, item.name, item.pidl, tex, false);
+            RenderNodeAndChildren(ctx, ctx.items2, item, false);   // Quick access: never expandable, same as before
         }
         ImGui::Dummy(ImVec2(0.0f, SectionPaddingY));
         ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
         
         ImGui::Dummy(ImVec2(0.0f, SectionPaddingY));
         for (auto& item : ctx.items3){
-            ImTextureID tex = ctx.icons.GetTexture({item.IconKey(), SHIL_LARGE});
-            RenderNodeAndChildren(ctx, item.name, item.pidl, tex, item.HasSubFolders());
+            RenderNodeAndChildren(ctx, ctx.items3, item);
         }
         ImGui::PopStyleVar(2);
         ImGui::EndChild();

@@ -1,5 +1,6 @@
 
 #include "UI.h"
+#include "ShellAsync.h"
 
 namespace Colors = UI::Colors;
 namespace Style = UI::Style;
@@ -125,7 +126,12 @@ static void DrawNewMenuDropdown(AppContext& ctx){
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f * ctx.ui.dpiScale, 8.0f * ctx.ui.dpiScale));
     for (auto& item : ctx.newMenuItems){
         ImGui::PushID(&item);
-        ImTextureID iconTex = ctx.icons.GetTexture({item.IconKey(), SHIL_LARGE});
+        ImTextureID iconTex = 0;
+        if (item.iconKey.resolved){
+            iconTex = ctx.icons.GetTexture({item.iconKey.value, SHIL_LARGE});
+        } else if (!item.iconRequestSent){
+            WShell::Async::RequestNewMenuIcon(ctx, item);
+        }
         if (iconTex){
             ImGui::Image(iconTex, ImVec2(16.0f, 16.0f));
             ImGui::SameLine();

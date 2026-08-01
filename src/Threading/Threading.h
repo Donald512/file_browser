@@ -15,38 +15,10 @@
 
 namespace Threading{
 
-    class MoveOnlyTask {
-        struct Concept {
-            virtual ~Concept() = default;
-            virtual void Call() = 0;
-        };
-
-        template<typename F>
-        struct Model final : Concept {
-            F func;
-            Model(F&& f) : func(std::move(f)) {}
-            void Call() override { func();}
-        };
-
-        std::unique_ptr<Concept> impl;
-
-    public :
-        MoveOnlyTask() = default;
-
-        template<typename F, typename = std::enable_if_t<!std::is_same_v<std::decay_t<F>, MoveOnlyTask>>>
-        MoveOnlyTask(F&& f) : impl(std::make_unique<Model<std::decay_t<F>>>(std::forward<F>(f))) {}
-
-        MoveOnlyTask(MoveOnlyTask&&) = default;
-        MoveOnlyTask& operator=(MoveOnlyTask&&) = default;
-
-        void operator()() {if (impl) impl->Call(); }
-        explicit operator bool() const {return impl != nullptr; }
-    };
-
     class ThreadPool {
         
     public:
-        using JobFunction = std::function<void()>;
+        using JobFunction = UniqueFunction;
     
         explicit ThreadPool(u32 numThreads = std::thread::hardware_concurrency());
         ~ThreadPool();
@@ -59,6 +31,14 @@ namespace Threading{
         void Shutdown();
     
     private:
+        // td plan to add timeout functionality to threads, so ill prolly make a 
+        /*
+        struct Job{
+            JobFunction task;
+            std::chrono::steady_clock::time_point timeout;
+            // random stuff like ID, priority etc
+        }
+        */
     
         std::vector<std::thread> workers;
         std::queue<JobFunction> jobQueue;
@@ -70,3 +50,6 @@ namespace Threading{
     };
 
 }
+
+// The threadpool has no idea what a "generation" is. 
+// cancellation/staleness is the caller's concern, whoever enques a job does its "is this still relevant" check

@@ -18,6 +18,24 @@ namespace WShell{
     std::string FetchTileViewLines(PCIDLIST_ABSOLUTE pidl);
     std::string FetchContentViewLines(PCIDLIST_ABSOLUTE pidl);
     
+
+    // A stable identity for a pidl based on its content, not its address. Pure in-memory hashing - ILGetSize() walks the linked SHITEMID structure summing  sizes, no shell/COM/IO calls involved - so this is cheap enough to call every frame and safe to call on any thread, Used as a key in std::unordered_map 
+    u64 HashPidl(PCIDLIST_ABSOLUTE pidl);
+
+    // Searches 'items' for the one whose pidl matches 'pidl' by content and if found, calls apply(item)- otherwise, does nothing. 
+    // td check if looping through items is neccessary
+    template <typename TCollection, typename  TApply>
+    bool PatchByPidl(TCollection& items, PCIDLIST_ABSOLUTE pidl, TApply&& apply){
+        for (auto& item: items){
+            if (ILIsEqual(item.pidl.get(), pidl)){
+                apply(item);
+                return true;
+            }
+        }
+        return false;
+    }
+
+
     class Pidl{
         public:
             Pidl() = default;
@@ -76,9 +94,13 @@ namespace WShell{
         Lazy<u32> iconKey;
         u32 IconKey() const {
             return iconKey.Get([&]{
-                return (u32) Icons::GetIconIndex(nullptr, Str::Utf8ToWide(extension.c_str()), FILE_ATTRIBUTE_NORMAL, SHGFI_ICON | SHGFI_SMALLICON | SHGFI_USEFILEATTRIBUTES);
+                wchar_t* wide = Str::Utf8ToWide(extension.c_str());
+                u32 idx = Icons::GetIconIndex(nullptr, wide, FILE_ATTRIBUTE_NORMAL, SHGFI_ICON | SHGFI_SMALLICON | SHGFI_USEFILEATTRIBUTES);
+                free(wide);
+                return idx;
             });
         }
+        mutable bool iconRequestSent = false;
     };
 
     enum class FolderAccess {
@@ -144,6 +166,11 @@ namespace WShell{
         //     });
 
         // }
+        // these track if an async request for this field is already in flight, checked by the render code before firing another one. Without these, a visible row would re-enque a fresh job for the same action, every frame until the result comes back 
+        mutable bool iconRequestSent = false;
+        mutable bool tooltipRequestSent = false;
+        mutable bool metaRequestSent = false;   // Covers typename + size together (virtual items only)
+        mutable bool tileInfoRequestSent = false;
     };
 
     struct ItemLite{   // just a stripped down version of ShellItem
@@ -161,6 +188,8 @@ namespace WShell{
         bool HasSubFolders() const {
             return hasSubFolders.Get([&]{ return PidlHasSubFolders(pidl.get()); });
         }
+        mutable bool iconRequestSent = false;
+        mutable bool hasSubFoldersRequestSent = false;
     };
 
     enum class SortMode { Name, DateModified, Type, Size};
@@ -192,10 +221,24 @@ namespace WShell{
                 return sortDirection;
             }
 
-            void setShowHidden(bool show){
+            bool GetShowHidden() const { return showHidden; }
+
+            void SetShowHidden(bool show){
                 showHidden = show;
             }
 
+            // tags this directory with the navigation generation it was loaded for, set when the background load's result is applied. Lets PatchItem() below reject a per-item asysnc result.
+            void SetLoadGeneration(u64 g) {loadGeneration = g; }
+            u64 Generation() const {return loadGeneration;}
+
+            // forGeneration is whatever Generation() returned at the moment the request was fired, if the directory has been replaced by  a newer navigation, the generations wont match, and result is dropped without scanning items for the matching pidl 
+            // never call this anywhere except a RunAsync onDone callback, it mutates item directly and assumes its on the main thread
+
+            template <typename TApply>
+            bool PatchItem(PCIDLIST_ABSOLUTE pidl, u64 forGeneration, TApply&& apply){
+                if (forGeneration != loadGeneration) return false;
+                return PatchByPidl(items, pidl, std::forward<TApply>(apply));
+            }
         private:
             i64 selectedIndex = -1;
 
@@ -208,9 +251,10 @@ namespace WShell{
             void ResortItems();
 
             bool showHidden = false;
+            u64 loadGeneration = 0;
     };
     
-    // NOTE: Typeable means it cincludes the names of virtual folders
+    // NOTE: Typeable means it includes the names of virtual folders
     std::vector<Item> EnumFolder(PCIDLIST_ABSOLUTE folder);
     std::vector<ItemLite> GetLiteItems(PCIDLIST_ABSOLUTE folder);
     bool ExecuteFile(PCIDLIST_ABSOLUTE file);
