@@ -97,6 +97,7 @@ std::vector<Item> WShell::EnumFolder(PCIDLIST_ABSOLUTE folder){
         Item item;
         item.name = GetDisplayName(pTarget, child, SHGDN_NORMAL);
         item.pidl = CombineChild(folder, child);
+        item.hash = HashPidl(item.pidl.get());
         
         // item.attributes = 0xFFFFFFFF;
         item.attributes = SFGAO_FOLDER | SFGAO_CANRENAME | SFGAO_CANDELETE;
@@ -151,6 +152,7 @@ std::vector<ItemLite>WShell::GetLiteItems(PCIDLIST_ABSOLUTE folder){
         ItemLite item;
         item.name = GetDisplayName(pTarget, child, SHGDN_NORMAL);
         item.pidl = CombineChild(folder, child);
+        item.hash = HashPidl(item.pidl.get());
         items.push_back(std::move(item));
     });
 
@@ -166,6 +168,7 @@ namespace {
         ItemLite item;
         item.name = std::move(name);
         item.pidl = WShell::Pidl(itemPidl);   // clones — caller keeps ownership of itemPidl
+        item.hash = HashPidl(item.pidl.get());
         return item;
     }
 }

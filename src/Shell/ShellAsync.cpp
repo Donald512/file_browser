@@ -5,6 +5,7 @@ using namespace WShell;
 void WShell::Async::RequestIcon(AppContext& ctx, const Item& item){
     item.iconRequestSent = true;
     u64 gen = ctx.navigation.Contents().Generation();
+    u64 targetHash = item.hash;
 
     ctx.tasks.RunAsync(
         // worker thread: only toouch its clone of the pidl
@@ -15,8 +16,8 @@ void WShell::Async::RequestIcon(AppContext& ctx, const Item& item){
             return std::make_pair(std::move(pidl), iIcon);
         },
         // main thread
-        [&ctx, gen](std::pair<Pidl, u32> result) mutable {
-            ctx.navigation.Contents().PatchItem(result.first.get(), gen, [&](Item& it){
+        [&ctx, gen, targetHash](std::pair<Pidl, u32> result) mutable {
+            ctx.navigation.Contents().PatchItem(result.first.get(), targetHash, gen, [&](Item& it){
                 it.iconKey.value = result.second;
                 it.iconKey.resolved = true;
             });
@@ -28,14 +29,15 @@ void WShell::Async::RequestIcon(AppContext& ctx, const Item& item){
 void WShell::Async::RequestTooltip(AppContext& ctx, const Item& item){
     item.tooltipRequestSent = true;
     u64 gen = ctx.navigation.Contents().Generation();
+    u64 targetHash = item.hash;
 
     ctx.tasks.RunAsync(
         [pidl = item.pidl.Clone()]() mutable {
             std::string tip = FetchWindowsTooltip(pidl.get());
             return std::make_pair(std::move(pidl), std::move(tip));
         },
-        [&ctx, gen](std::pair<Pidl, std::string> result) mutable {
-            ctx.navigation.Contents().PatchItem(result.first.get(), gen, [&](Item& it){
+        [&ctx, gen, targetHash](std::pair<Pidl, std::string> result) mutable {
+            ctx.navigation.Contents().PatchItem(result.first.get(), targetHash, gen, [&](Item& it){
                 it.tooltipInfo.value = std::move(result.second);
                 it.tooltipInfo.resolved = true;
             });
@@ -48,6 +50,8 @@ void WShell::Async::RequestMeta(AppContext& ctx, const Item& item){
     item.metaRequestSent = true;
     u64 gen = ctx.navigation.Contents().Generation();
     bool isFolder = (item.attributes & SFGAO_FOLDER) != 0;  // matching Item::Size()'s existing short circuit
+    u64 targetHash = item.hash;
+
 
     ctx.tasks.RunAsync(
         [pidl = item.pidl.Clone(), isFolder]() mutable {
@@ -58,8 +62,8 @@ void WShell::Async::RequestMeta(AppContext& ctx, const Item& item){
             r.pidl = std::move(pidl);
             return r;
         },
-        [&ctx, gen](auto result) mutable {
-            ctx.navigation.Contents().PatchItem(result.pidl.get(), gen, [&](Item& it){
+        [&ctx, gen, targetHash](auto result) mutable {
+            ctx.navigation.Contents().PatchItem(result.pidl.get(), targetHash, gen, [&](Item& it){
                 it.typeName.value = std::move(result.type);
                 it.typeName.resolved = true;
                 it.size.value = result.size;
@@ -72,14 +76,15 @@ void WShell::Async::RequestMeta(AppContext& ctx, const Item& item){
 void WShell::Async::RequestTileInfo(AppContext& ctx, const Item& item){
     item.tileInfoRequestSent = true;
     u64 gen = ctx.navigation.Contents().Generation();
- 
+    u64 targetHash = item.hash;
+
     ctx.tasks.RunAsync(
         [pidl = item.pidl.Clone()]() mutable {
             std::string info = FetchTileViewLines(pidl.get());
             return std::make_pair(std::move(pidl), std::move(info));
         },
-        [&ctx, gen](std::pair<Pidl, std::string> result) mutable {
-            ctx.navigation.Contents().PatchItem(result.first.get(), gen, [&](Item& it){
+        [&ctx, gen, targetHash](std::pair<Pidl, std::string> result) mutable {
+            ctx.navigation.Contents().PatchItem(result.first.get(), targetHash, gen, [&](Item& it){
                 it.tileViewInfo.value = std::move(result.second);
                 it.tileViewInfo.resolved = true;
             });
@@ -92,14 +97,15 @@ void WShell::Async::RequestTileInfo(AppContext& ctx, const Item& item){
 // Sidebar's ItemLite requests. No Directory/generation concept applies here - staleness is handled by the fact that 'owner' (a sidebar node's children list, or one of ctx.items1/2/3) is a stable, never-erased vector for the life of the app; PatchByPidl's own "not found -> no-op" behavious covers the case where the specific item is gone (deleted on disk, or the node ws rebuilt from scratch)
 void WShell::Async::RequestLiteIcon(AppContext& ctx, std::vector<ItemLite>& owner, ItemLite& item){
     item.iconRequestSent = true;
+    u64 targetHash = item.hash;
 
     ctx.tasks.RunAsync(
         [pidl = item.pidl.Clone()]() mutable {
             u32 iIcon = Icons::GetIconIndex(pidl.get(), nullptr, 0, SHGFI_PIDL | SHGFI_SYSICONINDEX | SHGFI_SMALLICON);
             return std::make_pair(std::move(pidl), iIcon);
         },
-        [&owner](std::pair<Pidl, u32> result) mutable {
-            PatchByPidl(owner, result.first.get(), [&](ItemLite& it){
+        [&owner, targetHash](std::pair<Pidl, u32> result) mutable {
+            PatchByHash(owner, result.first.get(), targetHash, [&](ItemLite& it){
                 it.iconKey.value = result.second;
                 it.iconKey.resolved = true;
             });
@@ -110,14 +116,15 @@ void WShell::Async::RequestLiteIcon(AppContext& ctx, std::vector<ItemLite>& owne
 
 void WShell::Async::RequestHasSubFolders(AppContext& ctx, std::vector<ItemLite>& owner, ItemLite& item){
     item.hasSubFoldersRequestSent = true;
+    u64 targetHash = item.hash;
  
     ctx.tasks.RunAsync(
         [pidl = item.pidl.Clone()]() mutable {
             bool has = PidlHasSubFolders(pidl.get());
             return std::make_pair(std::move(pidl), has);
         },
-        [&owner](std::pair<Pidl, bool> result) mutable {
-            PatchByPidl(owner, result.first.get(), [&](ItemLite& it){
+        [&owner, targetHash](std::pair<Pidl, bool> result) mutable {
+            PatchByHash(owner, result.first.get(), targetHash, [&](ItemLite& it){
                 it.hasSubFolders.value = result.second;
                 it.hasSubFolders.resolved = true;
             });

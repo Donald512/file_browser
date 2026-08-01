@@ -24,12 +24,17 @@ namespace WShell{
 
     // Searches 'items' for the one whose pidl matches 'pidl' by content and if found, calls apply(item)- otherwise, does nothing. 
     // td check if looping through items is neccessary
+    // NOTE: This exists because of a side effect of asynchronous programming, if fileview pushes a request to get the iconKey, but someone clicks sort and the ordering changes, it gives the wrong item a wrong Pidl
+    // but using ILIsEqual to compare 5000 items everytime we need the iconIndex is a slow API call, so compare by a hash they each hold 
     template <typename TCollection, typename  TApply>
-    bool PatchByPidl(TCollection& items, PCIDLIST_ABSOLUTE pidl, TApply&& apply){
+    bool PatchByHash(TCollection& items, PCIDLIST_ABSOLUTE pidl, u64 hash, TApply&& apply){
         for (auto& item: items){
-            if (ILIsEqual(item.pidl.get(), pidl)){
-                apply(item);
-                return true;
+            if (item.hash == hash){
+                // for the quintillionth chance of a hash collision
+                if (ILIsEqual(item.pidl.get(), pidl)){
+                    apply(item);
+                    return true;
+                }
             }
         }
         return false;
@@ -114,6 +119,7 @@ namespace WShell{
     struct Item{
         std::string name; // 24
         Pidl pidl;    // 8
+        u64 hash = 0;   // store Hash -  ID used to match item, shared_ptr/unique_ptr is slow (cache misses) and using ptr is risky because things can be ordered 
         SFGAOF attributes = 0;  // 4
         FILETIME lastWriteTime{}; // 8
         
@@ -176,6 +182,7 @@ namespace WShell{
     struct ItemLite{   // just a stripped down version of ShellItem
         std::string name; // 24
         Pidl pidl;    // 8
+        u64 hash = 0;
 
         Lazy<u32> iconKey;
         u32 IconKey() const {
@@ -235,9 +242,9 @@ namespace WShell{
             // never call this anywhere except a RunAsync onDone callback, it mutates item directly and assumes its on the main thread
 
             template <typename TApply>
-            bool PatchItem(PCIDLIST_ABSOLUTE pidl, u64 forGeneration, TApply&& apply){
+            bool PatchItem(PCIDLIST_ABSOLUTE targetPidl, u64 targetHash, u64 forGeneration, TApply&& apply){
                 if (forGeneration != loadGeneration) return false;
-                return PatchByPidl(items, pidl, std::forward<TApply>(apply));
+                return PatchByHash(items, targetPidl, targetHash, std::forward<TApply>(apply));
             }
         private:
             i64 selectedIndex = -1;
