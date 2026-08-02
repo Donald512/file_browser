@@ -20,63 +20,9 @@ Pidl home = GetKnownFolderPidl(L"shell:::{f874310e-b6b7-47dc-bc84-b9e6b38f5903}"
 
 namespace { // Anonymous namespace means these are private to this .cpp file
     
-    // Extracts a child's display name cleanly.
-    std::string GetDisplayName(IShellFolder* folder, PITEMID_CHILD child, SHGDNF flags) {
-        STRRET strName;
-        if (SUCCEEDED(folder->GetDisplayNameOf(child, flags, &strName))) {
-            wchar_t nameBuffer[MAX_PATH] = {};
-            StrRetToBufW(&strName, child, nameBuffer, MAX_PATH);
-            return Str::WideToString(nameBuffer);
-        }
-        return "";
-    }
-    std::string GetDisplayName(PCIDLIST_ABSOLUTE pidl ) {
-        wchar_t* niceName = nullptr;
-        if (SUCCEEDED(SHGetNameFromIDList(pidl, SIGDN_NORMALDISPLAY, &niceName))){
-            std::string name = Str::WideToString(niceName);
-            CoTaskMemFree(niceName);
-            return name;
-        }
-        return "";
-    }
 
-    // The universal COM enumeration loop — every "list a folder's children" call
-    // in this file goes through here instead of hand-rolling BindToObject/EnumObjects.
-    template <typename Func>
-    void IterateFolder(PCIDLIST_ABSOLUTE folder, DWORD shcontfFlags, Func&& callback) {
-        if (!folder) return;
 
-        ComPtr<IShellFolder> desktop, targetFolder;
-        if (FAILED(SHGetDesktopFolder(&desktop))) return;
 
-        if (ILIsEmpty(folder)) {
-            targetFolder = desktop;
-        } else {
-            if (FAILED(desktop->BindToObject(folder, nullptr, IID_PPV_ARGS(&targetFolder)))) return;
-        } 
-
-        ComPtr<IEnumIDList> enumerator;
-        if (FAILED(targetFolder->EnumObjects(nullptr, shcontfFlags, &enumerator))) return;
-
-        PITEMID_CHILD childPidl = nullptr;
-        ULONG fetched = 0;
-
-        while (enumerator->Next(1, &childPidl, &fetched) == S_OK) {
-            callback(targetFolder.Get(), childPidl);
-            CoTaskMemFree(childPidl);   
-        }
-    }
-
-    // Combines a parent + child into a freshly-owned Pidl. Was written out by hand
-    // (ILCombine(...) wrapped in WShell::Pidl(...)) at every single call site below.
-    Pidl CombineChild(PCIDLIST_ABSOLUTE parent, PITEMID_CHILD child){
-        return Pidl(ILCombine(parent, child));
-    }
-
-    // The "SHGFI_PIDL | SHGFI_SYSICONINDEX | <size>" combination was repeated
-    u32 GetSystemIconKey(PCIDLIST_ABSOLUTE pidl, UINT sizeFlag) {
-        return Icons::GetIconIndex(pidl, nullptr, 0, SHGFI_PIDL | SHGFI_SYSICONINDEX | sizeFlag);
-    }
 }
 
 Pidl WShell::GetKnownFolderPidl(REFKNOWNFOLDERID folderID){

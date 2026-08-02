@@ -44,6 +44,7 @@ namespace Icons{
 
             std::vector<CachedIcon> cachedIcons;
             u64 capacity = 256;
+            // td change to memory based capacity, 32MB where each imageList gets 8MB
             u32 currentFrame = 0;
 
             // HIMAGELIST hSystemImageList = nullptr;   // system-owned, never released by us
@@ -58,3 +59,20 @@ namespace Icons{
 
     u32 GetIconIndex(PCIDLIST_ABSOLUTE pidl, const wchar_t* pszPath, DWORD dwFileAttributes, UINT uFlags);
 }
+
+/*
+class IconManager {
+    private:
+        // Budget in bytes, split so no single tier can dominate GPU memory
+        static constexpr u64 kMemoryBudgetBytes = 32ull * 1024 * 1024; // 32 MB total, reasonable on integrated GPUs too
+
+        // Per-tier caches, each with its own count cap derived from the shared budget
+        struct TierCache {
+            std::vector<CachedIcon> entries;
+            u64 capacity; // computed from kMemoryBudgetBytes / bytesPerIcon for this tier
+        };
+        TierCache smallCache;      // 1 KB/icon  → budget/4 ≈ 8000 entries cap (never realistically hit)
+        TierCache largeCache;      // 4 KB/icon  → budget/4 ≈ 2000 entries cap
+        TierCache extraLargeCache;// 9 KB/icon  → budget/4 ≈ ~900 entries cap
+        TierCache jumboCache;     // 256 KB/icon → budget/4 ≈ 32 entries cap
+*/

@@ -23,3 +23,4 @@ namespace WShell::Async{
     void RequestNewMenuIcon(AppContext& ctx, WShell::NewMenuItem& item);
 
 }
+

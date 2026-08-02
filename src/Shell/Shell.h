@@ -5,19 +5,15 @@
 #include "icons.h"
 #include "Str.h"
 
+#include "ShellPidl.h"
+#include "ShellItems.h"
+
 #pragma comment(lib, "Shell32.lib") 
 #pragma comment(lib, "Shlwapi.lib") 
-#pragma comment(lib, "Advapi32.lib") 
+#pragma comment(lib, "Advapi32.lib")
+
 
 namespace WShell{
-
-    bool PidlHasSubFolders(PCIDLIST_ABSOLUTE folder, bool accurate = false);
-    std::string GetPidlTypeName(PCIDLIST_ABSOLUTE pidl);
-    u64 GetPidlFileSize(PCIDLIST_ABSOLUTE pidl);
-    std::string FetchWindowsTooltip(PCIDLIST_ABSOLUTE pidl);
-    std::string FetchTileViewLines(PCIDLIST_ABSOLUTE pidl);
-    std::string FetchContentViewLines(PCIDLIST_ABSOLUTE pidl);
-    
 
     // A stable identity for a pidl based on its content, not its address. Pure in-memory hashing - ILGetSize() walks the linked SHITEMID structure summing  sizes, no shell/COM/IO calls involved - so this is cheap enough to call every frame and safe to call on any thread, Used as a key in std::unordered_map 
     u64 HashPidl(PCIDLIST_ABSOLUTE pidl);
@@ -46,168 +42,6 @@ namespace WShell{
         }
         return false;
     }
-
-
-    class Pidl{
-        public:
-            Pidl() = default;
-            Pidl(std::nullptr_t) : ptr(nullptr) {}
-            explicit Pidl(PIDLIST_ABSOLUTE owned) : ptr(owned) {}
-            explicit Pidl(PCIDLIST_ABSOLUTE unowned) : ptr(unowned ? ILClone(unowned) : nullptr) {}
-
-            ~Pidl(){ if (ptr) ILFree(ptr); }
-
-            // no copying — a pidl has one owner. Use Clone() if you need a duplicate.
-            Pidl(const Pidl&) = delete;
-            Pidl& operator=(const Pidl&) = delete;
-
-            Pidl(Pidl&& other) noexcept : ptr(other.ptr) { other.ptr = nullptr; }
-            Pidl& operator=(Pidl&& other) noexcept{
-                if (this != &other){
-                    if (ptr) ILFree(ptr);
-                    ptr = other.ptr;
-                    other.ptr = nullptr;
-                }
-                return *this;
-            }
-
-            explicit operator bool() const { return ptr != nullptr; }
-
-            PCIDLIST_ABSOLUTE get() const { return ptr; }
-            operator PCIDLIST_ABSOLUTE() const { return ptr; } // lets it be passed anywhere a raw pidl is expected
-    
-            PIDLIST_ABSOLUTE* GetAddressOf(){
-                if (ptr){
-                    ILFree((LPITEMIDLIST)ptr);
-                    ptr = nullptr;
-                }
-                return &ptr;
-            }
-
-            Pidl Clone() const { return Pidl(ptr ? ILClone(ptr) : nullptr); }
-
-        private:
-            PIDLIST_ABSOLUTE ptr = nullptr;
-    };
-
-    enum class NewItemAction{
-        Folder, 
-        Shortcut, 
-        EmptyFile, 
-        FromTemplate
-    };
-
-    struct NewMenuItem{
-        std::string displayName;    // E.g: Text document
-        std::string extension;      // .txt
-        Pidl templatePath;
-        NewItemAction action = NewItemAction::EmptyFile;
-
-        Lazy<u32> iconKey;
-        u32 IconKey() const {
-            return iconKey.Get([&]{
-                wchar_t* wide = Str::Utf8ToWide(extension.c_str());
-                u32 idx = Icons::GetIconIndex(nullptr, wide, FILE_ATTRIBUTE_NORMAL, SHGFI_ICON | SHGFI_SMALLICON | SHGFI_USEFILEATTRIBUTES);
-                free(wide);
-                return idx;
-            });
-        }
-        mutable bool iconRequestSent = false;
-    };
-
-    enum class FolderAccess {
-        NoCreate,     // Hide "New" menu completely
-        Restricted,   // Only show New Folder
-        FullAccess    // Show full menu (cached ShellNew items)
-    };
-
-    enum class TriState{Unknown, True, False};
-
-    struct Item{
-        std::string name; // 24
-        Pidl pidl;    // 8
-        u64 hash = 0;   // store Hash -  ID used to match item, shared_ptr/unique_ptr is slow (cache misses) and using ptr is risky because things can be ordered 
-        SFGAOF attributes = 0;  // 4
-        FILETIME lastWriteTime{}; // 8
-        
-        mutable Lazy<u32> iconKey;
-        u32 IconKey() const {
-            return iconKey.Get([&]{
-                return Icons::GetIconIndex(pidl.get(), nullptr, 0, SHGFI_PIDL | SHGFI_SYSICONINDEX | SHGFI_SMALLICON);
-            });
-        }
-        
-        mutable Lazy<u64> size;
-        u64 Size() const {
-            // handle cases like virtual items, or folders recursively later
-            if (attributes & SFGAO_FOLDER) return 0ULL;
-            return size.Get([&]{
-                return GetPidlFileSize(pidl.get());
-            });
-        }
-    
-        mutable Lazy<std::string> typeName;
-        std::string TypeName() const {
-            // FALLBACK for Virtual items (e.g., "This PC", "Control Panel", "Recycle Bin")
-            return typeName.Get([&]{
-                return GetPidlTypeName(pidl.get());
-            });
-
-
-        }
-
-        mutable Lazy<std::string> tooltipInfo;
-        std::string TooltipInfo() const {
-            return tooltipInfo.Get([&]{
-                return FetchWindowsTooltip(pidl.get());
-            });
-
-        }
-
-        mutable Lazy<std::string> tileViewInfo;
-        std::string TileViewInfo() const {
-            return tileViewInfo.Get([&]{
-                return FetchTileViewLines(pidl.get());
-            });
-
-        }
-
-        // mutable Lazy<std::string> contentViewInfo;
-        // std::string ContentViewInfo() const {
-        //     return contentViewInfo.Get([&]{
-        //         return FetchContentViewLines(pidl.get());
-        //     });
-
-        // }
-        // these track if an async request for this field is already in flight, checked by the render code before firing another one. Without these, a visible row would re-enque a fresh job for the same action, every frame until the result comes back 
-        mutable bool iconRequestSent = false;
-        mutable bool tooltipRequestSent = false;
-        mutable bool metaRequestSent = false;   // Covers typename + size together (virtual items only)
-        mutable bool tileInfoRequestSent = false;
-    };
-
-    struct ItemLite{   // just a stripped down version of ShellItem
-        std::string name; // 24
-        Pidl pidl;    // 8
-        u64 hash = 0;
-
-        Lazy<u32> iconKey;
-        u32 IconKey() const {
-            return iconKey.Get([&]{
-                return (u32) Icons::GetIconIndex(pidl.get(), nullptr, 0, SHGFI_PIDL | SHGFI_SYSICONINDEX | SHGFI_SMALLICON);
-            });
-        }
-
-        Lazy<bool> hasSubFolders;
-        bool HasSubFolders() const {
-            return hasSubFolders.Get([&]{ return PidlHasSubFolders(pidl.get()); });
-        }
-        mutable bool iconRequestSent = false;
-        mutable bool hasSubFoldersRequestSent = false;
-    };
-
-    enum class SortMode { Name, DateModified, Type, Size};
-    enum class SortDirection {Ascending, Descending };
 
     class Directory{
         public:

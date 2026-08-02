@@ -51,8 +51,11 @@ cl /nologo /Z7 /W4 /MP /std:c++17 ^
    "src\Core\imgui_boilerplate.cpp" ^
    "src\Icons\icons.cpp" ^
    "src\Navigation\Navigation.cpp" ^
-   "src\Shell\Shell.cpp" ^
+   "src\Shell\ShellActions.cpp" ^
    "src\Shell\ShellAsync.cpp" ^
+   "src\Shell\ShellEnum.cpp" ^
+   "src\Shell\ShellMetadata.cpp" ^
+   "src\Shell\ShellPidl.cpp" ^
    "src\Str\Str.cpp" ^
    "src\Threading\Threading.cpp" ^
    "src\UI\AddressBar.cpp" ^
