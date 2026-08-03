@@ -1,6 +1,5 @@
 #pragma once
 
-// Use C++ header for fixed-width integer types to avoid includePath issues
 #include <cstdint>
 #include <string>
 #include <vector>

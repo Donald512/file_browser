@@ -1,13 +1,13 @@
 #pragma once
 
 #include <d3d11.h>
-#include <imgui.h>
+#include "imgui.h"
 #include <ShlObj.h>
 #include <string>
 #include <vector>
+#include <unordered_set>
 #include <wrl/client.h>
 
-#include "TaskSystem.h"
 
 #include "Types.h"
 #include "Shell.h"
@@ -15,9 +15,12 @@
 #include "icons.h"
 
 
+#include "TaskSystem.h"
 #include "Threading.h"
 #include <mutex>
 #include <queue>
+
+
 
 
 using Microsoft::WRL::ComPtr;
@@ -66,4 +69,20 @@ struct AppContext{
     std::vector<WShell::ItemLite> items3; 
 
     TaskSystem tasks;
+
+    ComPtr<IContextMenu> activeContextMenu;
+    std::vector<WShell::ContextMenuItem> activeContextMenuData;
+
+    void UpdateContextMenu(PCIDLIST_ABSOLUTE pidl){
+        activeContextMenuData = WShell::GetContextMenu(activeContextMenu, pidl, gfx.d3dDevice.Get());
+    }
+
+    std::unordered_set<u64> clipBoardCutItems{};
+    UINT cfDropEffect;
+    UINT cfShellIDList;
+
+    bool isFileCutOnClipBoard(u64 hashedPidl){
+        return clipBoardCutItems.find(hashedPidl) != clipBoardCutItems.end();
+    }
 };
+

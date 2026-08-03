@@ -49,6 +49,8 @@ cl /nologo /Z7 /W4 /MP /std:c++17 ^
    /I"%font_stuff%" ^
    "%source_file%" ^
    "src\Core\imgui_boilerplate.cpp" ^
+   "src\Core\Core.cpp" ^
+   "src\Core\ImGuiTheme.cpp" ^
    "src\Icons\icons.cpp" ^
    "src\Navigation\Navigation.cpp" ^
    "src\Shell\ShellActions.cpp" ^
@@ -60,6 +62,7 @@ cl /nologo /Z7 /W4 /MP /std:c++17 ^
    "src\Threading\Threading.cpp" ^
    "src\UI\AddressBar.cpp" ^
    "src\UI\CommandBar.cpp" ^
+   "src\UI\CtxMenu.cpp" ^
    "src\UI\FileView.cpp" ^
    "src\UI\NavBar.cpp" ^
    "src\UI\Sidebar.cpp" ^

@@ -72,16 +72,7 @@ namespace AddressBar{
     void Render(AppContext& ctx);
 }
 
-namespace UI::Helpers{
-    bool IconAndTextButton(const char* str_id, const char* icon, const char* label, const ImVec4& icon_color = UI::Colors::AccentBlue);
-    int GetWrappedLineCount(const char* text, float maxTextWidth, int maxLines);
-    void DrawCenteredWrappedText(const char* text, float columnWidth, float maxTextWidth, int maxLines);
-    void DrawSingleLineTruncatedText(const char* text, float maxWidth);
-    void DrawTableTextWithTooltip(const char* text, bool isRowHovered);
-    void AlignCursorVertically(f32 containerHeightPx, f32 itemHeightPx = ImGui::GetFrameHeight());
-    void TextCentered(const char* text);
-    bool IconButton(const char* iconLabel, f32 sizePx, bool disabled = false);
-}
+
 
 namespace CommandBar{
     constexpr f32 Height = 46.0f;
@@ -91,14 +82,14 @@ namespace CommandBar{
 namespace FileView{
     enum class ViewMode { ExtraLarge, Large, Medium, Small, List, Details, Tiles};
     inline f32 IconSize   = 48.0f;
-
+    
     constexpr ImVec2 WindowPadding{10.0f, 5.0f};
     constexpr f32 ImageToContainerRatio = 0.9f;
     constexpr f32 TextToContainerWidthRatio = 0.85f;
     constexpr f32 XGap = 3.0f;
     constexpr f32 XPadding = 32.0f;
     constexpr f32 EachLineHeight = 15.0f;
-
+    
     inline ViewMode currentView = ViewMode::Medium; 
     inline bool showFileExtensions = true;
 
@@ -111,3 +102,16 @@ namespace Sidebar{
     constexpr f32 SectionPaddingY = 20.0f;
     void Render(AppContext& ctx, f32 currentWidth);
 }
+namespace UI::Helpers{
+    bool IconAndTextButton(const char* str_id, const char* icon, const char* label, const ImVec4& icon_color = UI::Colors::AccentBlue);
+    int GetWrappedLineCount(const char* text, float maxTextWidth, int maxLines);
+    void DrawCenteredWrappedText(const char* text, float columnWidth, float maxTextWidth, int maxLines);
+    void DrawSingleLineTruncatedText(const char* text, float maxWidth);
+    void DrawTableTextWithTooltip(const char* text, bool isRowHovered);
+    void AlignCursorVertically(f32 containerHeightPx, f32 itemHeightPx = ImGui::GetFrameHeight());
+    void TextCentered(const char* text);
+    bool IconButton(const char* iconLabel, f32 sizePx, bool disabled = false);
+    
+}
+
+void RenderContextMenuStructure(AppContext& ctx, const std::vector<WShell::ContextMenuItem>& items);

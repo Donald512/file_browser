@@ -1,4 +1,5 @@
 #include "ShellAsync.h"
+#include "Str.h"
 
 using namespace WShell;
 

@@ -5,9 +5,7 @@
 #include <string>
 #include <vector>
 #include "ShellPidl.h"
-
-
-
+#include "Str.h"
 
 namespace WShell{
     bool PidlHasSubFolders(PCIDLIST_ABSOLUTE folder, bool accurate = false);
@@ -35,6 +33,20 @@ namespace WShell{
 
     enum class SortMode { Name, DateModified, Type, Size};
     enum class SortDirection {Ascending, Descending };
+
+    struct ContextMenuItem {
+        std::string text;
+        std::string verb;
+        UINT id;            // The offset ID to invoke the command later
+        bool isSeparator = false;
+        bool enabled = true;
+        bool checked = false;
+
+        ComPtr<ID3D11ShaderResourceView> srv; 
+        ImTextureID hIconTex{};      
+
+        std::vector<ContextMenuItem> subItems;  // for nested menus
+    };
 
 
     struct Item{

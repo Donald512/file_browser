@@ -2,6 +2,8 @@
 #include <Shlwapi.h>
 #include <propkey.h>
 #include "ShellInternal.h"
+#include "imgui_boilerplate.h"
+#include "Core.h"
 
 
 #pragma comment(lib, "propsys.lib")
@@ -397,4 +399,88 @@ std::string GetDisplayName(PCIDLIST_ABSOLUTE pidl ) {
         return name;
     }
     return "";
+}
+
+
+
+void WalkMenu(IContextMenu* pcm, HMENU hMenu, UINT idCmdFirst, UINT idCmdLast, std::vector<ContextMenuItem>& out, ID3D11Device* pDevice){
+    ComPtr<IContextMenu2> pcm2;
+    pcm->QueryInterface(IID_PPV_ARGS(&pcm2));
+    ComPtr<IContextMenu3> pcm3;
+    pcm->QueryInterface(IID_PPV_ARGS(&pcm3));
+
+    int count = GetMenuItemCount(hMenu);
+    for (int i = 0; i < count; i++) {
+        ContextMenuItem item{};
+        MENUITEMINFOW mii = {sizeof(mii)};
+        mii.fMask = MIIM_FTYPE | MIIM_STRING | MIIM_ID | MIIM_SUBMENU | MIIM_STATE | MIIM_BITMAP;
+
+        wchar_t textBuf[256] = {};
+        mii.dwTypeData = textBuf;
+        mii.cch = 256;
+
+        if (!GetMenuItemInfoW(hMenu, i, TRUE, &mii)) continue;
+
+        if (mii.fType & MFT_SEPARATOR) {
+            item.isSeparator = true;
+            out.push_back(item);
+            continue;
+        }
+
+        item.text = Str::WideToString(Str::CleanAmpersands(textBuf));
+        item.id = mii.wID;
+        item.enabled = !(mii.fState & MFS_DISABLED);
+        item.checked = (mii.fState & MFS_CHECKED) != 0;
+
+        if (mii.hbmpItem != nullptr && mii.hbmpItem != HBMMENU_CALLBACK){
+            int w = 0, h = 0;
+            std::vector<u8> pixels = BitmapToPixels(mii.hbmpItem, w, h);
+            
+            if (!pixels.empty() && pDevice != nullptr) {
+                item.srv = CreateTextureFromRGBA(pDevice, pixels, w, h);
+                item.hIconTex = (ImTextureID)item.srv.Get(); // Assign ImGui Handle
+            }
+        }
+
+        if (mii.hSubMenu) {
+            // Recurse now, while hSubMenu is still valid, and store
+            // parsed children instead of the handle itself.
+            WalkMenu(pcm, mii.hSubMenu, idCmdFirst, idCmdLast, item.subItems, pDevice);
+        } 
+        else if (mii.wID >= idCmdFirst) {
+            char verbBuf[256] = {};
+            UINT idOffset = mii.wID - idCmdFirst;
+            if (SUCCEEDED(pcm->GetCommandString(idOffset, GCS_VERBA, nullptr, verbBuf, sizeof(verbBuf))))
+                item.verb = verbBuf;
+        }
+        out.push_back(item);
+    }
+}
+
+std::vector<ContextMenuItem> WShell::GetContextMenu(ComPtr<IContextMenu>& outActiveMenu,  PCIDLIST_ABSOLUTE pidl, ID3D11Device* pDevice){
+    std::vector<ContextMenuItem> result{};
+    outActiveMenu.Reset();
+
+    if (!pidl) return result;
+
+    ComPtr<IShellItem> pItem;
+
+    if (FAILED(SHCreateItemFromIDList(pidl, IID_PPV_ARGS(&pItem)))) return result;
+
+    if (FAILED(pItem->BindToHandler(nullptr, BHID_SFUIObject, IID_PPV_ARGS(&outActiveMenu)))) return result;
+
+    // create a dummy HMENU and ask the shell to fill it
+    HMENU hMenu = CreatePopupMenu();
+    constexpr UINT idCmdFirst = 1;
+    constexpr UINT idCmdLast = 0x7FFF;
+    if (!hMenu) return result;
+    
+    UINT flags = CMF_NORMAL | CMF_EXPLORE | CMF_CANRENAME;
+    if (SUCCEEDED(outActiveMenu->QueryContextMenu(hMenu, 0, 1, 0x7FFF, flags))){
+        // Fill vector using recursive WalkMenu
+        WalkMenu(outActiveMenu.Get(), hMenu, idCmdFirst, idCmdLast, result, pDevice);
+    }
+    DestroyMenu(hMenu); 
+
+    return result;
 }

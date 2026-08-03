@@ -1,9 +1,10 @@
 #pragma once
+
 #include "Types.h"
 #include <utility>
 #include <ShlObj.h>
-#include "icons.h"
-#include "Str.h"
+// #include "icons.h"
+// #include "Str.h"
 
 #include "ShellPidl.h"
 #include "ShellItems.h"
@@ -114,7 +115,9 @@ namespace WShell{
     std::vector<ItemLite> GetSidebarItems(int category);
     void FileTime(const FILETIME& ft, char* outBuf, int outBufSize);
     void Size(u64 sizeInBytes, char* outBuf, int outBufSize);
-
+    
+    std::vector<ContextMenuItem> GetContextMenu(ComPtr<IContextMenu>& outActiveMenu,  PCIDLIST_ABSOLUTE pidl, ID3D11Device* pDevice);
+    void ExecuteContextMenuCommand(ComPtr<IContextMenu> menu, UINT id);
 
     // Resolves a well-known folder (This PC, Desktop, Recycle Bin, ...) to a Pidl.
     Pidl GetKnownFolderPidl(REFKNOWNFOLDERID folderID);

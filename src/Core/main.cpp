@@ -4,6 +4,7 @@
 #include <ShlDisp.h>
 #include "ShellAsync.h"
 
+#include "Core.h"
 
 // {f874310e-b6b7-47dc-bc84-b9e6b38f5903}
 constexpr CLSID CLSID_HOME = 
@@ -30,6 +31,10 @@ int main (void){
 
     WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"File Browser Window", nullptr };
     if (!CreateMyOSWindow(ctx, wc)) return 1;
+    AddClipboardFormatListener(ctx.gfx.hwnd);
+    QueryClipBoardCutItems(ctx);
+    ctx.cfDropEffect = RegisterClipboardFormat(CFSTR_PREFERREDDROPEFFECT);
+    ctx.cfShellIDList = RegisterClipboardFormat(CFSTR_SHELLIDLIST);
 
     if (!InitializeGraphicsAPI(ctx, wc)) return 1;
     ctx.icons.Init(ctx.gfx.d3dDevice.Get(), ctx.gfx.d3dContext.Get());
@@ -38,7 +43,6 @@ int main (void){
     ::UpdateWindow(ctx.gfx.hwnd); // irrelevant
 
     InitializeImGui(ctx);
-    // todo completely migrate from ImGui::Text to Direct2D + DirectWrite
 
     bool running = true;
     while (running) {

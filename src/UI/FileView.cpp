@@ -3,679 +3,292 @@
 #include <cmath>
 #include "ShellAsync.h"
 
-namespace Style = UI::Style;
-namespace Colors = UI::Colors;
-namespace Helpers = UI::Helpers;
-
+using namespace UI;
 using namespace FileView;
 
-struct GridViewParams {
-    f32 width;
-    f32 height;  
-};
+struct GridViewParams { f32 width, height; };
 
-static GridViewParams GetGridParamsForMode(ViewMode mode) {
-    switch (mode) {
-        case ViewMode::ExtraLarge: return {271.0f, 260.0f};
-        case ViewMode::Large:      return {105.0f, 100.0f};
-        case ViewMode::Medium:     return {74.00f, 52.0f};
-        case ViewMode::Small:      return {308.0f, 30.0f};
-        case ViewMode::List:       return {308.0f, 30.0f};
-        case ViewMode::Details:    return {308.0f, 30.0f};
-        case ViewMode::Tiles:      return {250.0f, 52.0f};
-        default:                   return GetGridParamsForMode(ViewMode::Large);
-    }
+
+static GridViewParams GetGridParamsForMode(ViewMode m) {
+    if (m == ViewMode::ExtraLarge) return {271.f, 260.f};
+    if (m == ViewMode::Medium) return {74.f, 52.f};
+    if (m == ViewMode::Small || m == ViewMode::List || m == ViewMode::Details) return {308.f, 30.f};
+    if (m == ViewMode::Tiles) return {250.f, 52.f};
+    return {105.f, 100.f};
 }
 
-static int ShilSizeFromViewMode(ViewMode viewMode){
-    // todo relook this
-    switch (viewMode) {
-        case FileView::ViewMode::ExtraLarge: return SHIL_JUMBO;
-        case FileView::ViewMode::Large:      return SHIL_JUMBO;
-        case FileView::ViewMode::Medium:     return SHIL_EXTRALARGE;
-        case FileView::ViewMode::Small:      return SHIL_SMALL;
-        case FileView::ViewMode::List:       return SHIL_SMALL;
-        case FileView::ViewMode::Details:    return SHIL_SMALL;
-        case FileView::ViewMode::Tiles:      return SHIL_EXTRALARGE;
-        default:                             return SHIL_EXTRALARGE;
-    }
+static int ShilSizeFromViewMode(ViewMode m) {
+    return (m == ViewMode::ExtraLarge || m == ViewMode::Large) ? SHIL_JUMBO :
+           (m == ViewMode::Small || m == ViewMode::List || m == ViewMode::Details) ? SHIL_SMALL : SHIL_EXTRALARGE;
 }
 
-static bool HandleItemInteraction(AppContext& ctx, u64 index, const WShell::Item& item, bool isSelected, ImVec2 size, ImGuiSelectableFlags flags = ImGuiSelectableFlags_AllowDoubleClick, bool handleHover = true){
-    if (ImGui::Selectable("##file_selectedbox", isSelected, flags, size)) {
-        ctx.navigation.Contents().SelectIndex(index);
-        // change to select by hash
+static bool HandleInteraction(AppContext& ctx, int i, const WShell::Item& item, f32 w, f32 h, bool& openMenu, ImGuiSelectableFlags flags = ImGuiSelectableFlags_AllowDoubleClick, bool hover = true) {
+    bool sel = ctx.navigation.Contents().Selected() == i;
+    if (ImGui::Selectable("##file_selectedbox", sel, flags, {w, h})) ctx.navigation.Contents().SelectIndex(i);
+    if (hover && ImGui::IsItemHovered()) {
+        if (item.tooltipInfo.resolved) ImGui::SetTooltip("%s", item.tooltipInfo.value.c_str());
+        else if (!item.tooltipRequestSent) WShell::Async::RequestTooltip(ctx, item, i);
     }
-    if (handleHover){
-        if (ImGui::IsItemHovered()){
-            if (item.tooltipInfo.resolved){
-                ImGui::SetTooltip(item.TooltipInfo().c_str());
-            }
-            else if (!item.tooltipRequestSent){
-                WShell::Async::RequestTooltip(ctx, item, index);
-            }
-        }
-    }
-    if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
-        ctx.navigation.Contents().SelectIndex(index);
+    if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) ctx.navigation.Contents().SelectIndex(i);
+    
+    if ((ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && ImGui::IsItemHovered()) || (sel && ImGui::IsKeyPressed(ImGuiKey_Enter))) {
+        if (item.attributes & SFGAO_FOLDER) { ctx.navigation.NavigateTo(item.pidl); return true; }
+        WShell::ExecuteFile(item.pidl);
     }
     
-    bool isFolder = (item.attributes & SFGAO_FOLDER) != 0;
-    
-    if ((ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && ImGui::IsItemHovered()) || 
-        (isSelected && ImGui::IsKeyPressed(ImGuiKey_Enter))) {
-        if (isFolder) {
-            ctx.navigation.NavigateTo(item.pidl);
-            return true; // Navigated!
-        } else {
-            WShell::ExecuteFile(item.pidl);
-        }
+    if (ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Right)){
+        // Select the item
+        ctx.navigation.Contents().SelectIndex(i);
+        ctx.UpdateContextMenu(item.pidl);
+        openMenu = true;
     }
     return false;
 }
 
-static void DrawItemIcon(AppContext& ctx, const WShell::Item& item, size_t index, f32 iconSize, int shilSize){
-    // Ask IconManager for a texture once the index was actually resolve
-    ImTextureID iconTexture = 0;
-    if (item.iconKey.resolved){
-        iconTexture = ctx.icons.GetTexture({item.IconKey(), shilSize});
+static void DrawIcon(AppContext& ctx, const WShell::Item& item, int i, f32 sz, int shil) {
+    bool isCut = ctx.isFileCutOnClipBoard(item.hash);
+    if (isCut){
+        ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.5f);
     }
-    else if (!item.iconRequestSent){
-        WShell::Async::RequestIcon(ctx, item, index);
+    if (ImTextureID tex = item.iconKey.resolved ? ctx.icons.GetTexture({item.IconKey(), shil}) : 0) {
+        ImGui::Image(tex, {sz, sz});
     }
-    
-    if (iconTexture) {
-        ImGui::Image(iconTexture, ImVec2(iconSize, iconSize));
-    } else {
-        bool isFolder = (item.attributes & SFGAO_FOLDER) != 0;
-        ImVec2 p_min = ImGui::GetCursorScreenPos();
-        ImVec2 p_max = ImVec2(p_min.x + iconSize, p_min.y + iconSize);
-        ImU32 iconColor = isFolder ? IM_COL32(204, 165, 51, 255) : IM_COL32(76, 127, 178, 255);
-        ImGui::GetWindowDrawList()->AddRectFilled(p_min, p_max, iconColor, 4.0f);
+    else {
+        if (!item.iconRequestSent) WShell::Async::RequestIcon(ctx, item, i);
+        ImVec2 p = ImGui::GetCursorScreenPos();
+        ImGui::GetWindowDrawList()->AddRectFilled(p, {p.x + sz, p.y + sz}, item.attributes & SFGAO_FOLDER ? 0xFF33A5CC : 0xFFB27F4C, 4.f);
     }
+    if (isCut){
+        ImGui::PopStyleVar();
+    }
+
 }
 
-void RenderGrid(AppContext& ctx, GridViewParams& params){
+template<typename F>
+static void RenderGridBase(AppContext& ctx, f32 w, f32 h, F renderCell) {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, WindowPadding);
-    if (!ImGui::BeginChild("FileView", Style::AutoFillRemnantWindow, ImGuiChildFlags_Borders, ImGuiChildFlags_NavFlattened)){
-        ImGui::PopStyleVar();
-        ImGui::EndChild();
-        return;
-    }
+    bool open = ImGui::BeginChild("FileView", Style::AutoFillRemnantWindow, ImGuiChildFlags_Borders, ImGuiChildFlags_NavFlattened);
     ImGui::PopStyleVar();
+    if (!open) { ImGui::EndChild(); return; }
 
-    f32 dpi = ctx.ui.dpiScale;
-    f32 xGap = XGap * dpi;
-    f32 lineHeight = ImGui::GetTextLineHeight();
+    f32 dpi = ctx.ui.dpiScale, xGap = XGap * dpi;
+    int cols = (std::max)(1, (int)(ImGui::GetContentRegionAvail().x / ((w + XGap) * dpi)));
     
-    f32 imageHeightRegion = params.height * dpi;
-    f32 iconSize = imageHeightRegion * ImageToContainerRatio; 
-    
-    // Calculate a STRICT max stride for the row so the ListClipper never overlaps items.
-    // The visual selectable box will be smaller than this, but the grid spacing must be consistent!
-    f32 maxRowHeight = imageHeightRegion + (4  * lineHeight) + (8.0f * dpi);
-
-    f32 availWidth = ImGui::GetContentRegionAvail().x;
-    u16 columnsCount = (u16)(availWidth / ((params.width + XGap) * dpi));
-    columnsCount = (std::max)(columnsCount, (u16)1);
-
-    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(xGap * 0.5f, xGap * 0.5f));
-
-    if (ImGui::BeginTable("ExplorerGrid", columnsCount, ImGuiTableFlags_NoSavedSettings)){
-        auto &dir = ctx.navigation.Contents().Items();
-        u16 totalRows = (u16)(std::ceil((f32)dir.size() / columnsCount));
-
-        ImGuiListClipper clipper;
-        // CRITICAL: We pass maxRowHeight so the clipper strides perfectly and prevents overlap!
-        clipper.Begin(totalRows, maxRowHeight); 
-
-        while (clipper.Step()){
-            for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++){
-                u64 startIdx = (u64) row * columnsCount;
-                u64 endIdx = (std::min)((u64)(startIdx + columnsCount), (u64)dir.size());
-
-                for (u64 i = startIdx; i < endIdx; i++){
+    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, {xGap * 0.5f, xGap * 0.5f});
+    if (ImGui::BeginTable("ExplorerGrid", cols, ImGuiTableFlags_NoSavedSettings)) {
+        auto& dir = ctx.navigation.Contents().Items();
+        ImGuiListClipper clipper; clipper.Begin(((int)dir.size() + cols - 1) / cols, h);
+        while (clipper.Step()) {
+            for (int r = clipper.DisplayStart; r < clipper.DisplayEnd; r++) {
+                for (int i = r * cols, end = (std::min)(i + cols, (int)dir.size()); i < end; i++) {
                     ImGui::TableNextColumn();
-
-                    f32 realCellWidth = ImGui::GetContentRegionAvail().x;
-                    auto& item = dir[i];
-                    bool isSelected = (ctx.navigation.Contents().Selected() == i);
-                    
-                    //  PREVENT CUT-OFF: Ensure text doesn't bleed out of small columns ---
-                    f32 idealTextWidth = TextToContainerWidthRatio * params.width * dpi;
-                    f32 actualMaxTextWidth = (std::min)(idealTextWidth, realCellWidth - (4.0f * dpi));
-
-                    // -DYNAMIC SELECTABLE SIZE ---
-                    // Peek at how many lines this specific item takes up to size its visual box!
-                    f32 rawTextHeight = ImGui::CalcTextSize(item.name.c_str(), NULL, false, actualMaxTextWidth).y;
-                    int actualLines = (int)std::ceil((float)rawTextHeight / ImGui::GetTextLineHeight());
-                    actualLines = std::clamp(actualLines, 1, 4); // clamp between 1 and 4 lines
-                    
-                    // The visual box is EXACTLY the image region + the lines of text.
-                    f32 selectableHeight = imageHeightRegion + (actualLines * lineHeight) + (4.0f * dpi);
-
-                    ImGui::PushID((int)i);  
-                    ImVec2 startPos = ImGui::GetCursorPos();
-
-                    if (HandleItemInteraction(ctx, i, item, isSelected, ImVec2(realCellWidth, selectableHeight))){
-                        ImGui::PopID();
-                        ImGui::EndTable();
-                        ImGui::PopStyleVar();
-                        ImGui::EndChild();
-                        return;
+                    if (renderCell(i, dir[i], ImGui::GetContentRegionAvail().x)) {
+                        ImGui::EndTable(); ImGui::PopStyleVar(); ImGui::EndChild(); return;
                     }
-
-                    ImGui::SetCursorPos(ImVec2(startPos.x + (realCellWidth - iconSize) * 0.5f, startPos.y + (imageHeightRegion - iconSize) * 0.5f));
-                    DrawItemIcon(ctx, item, i, iconSize, ShilSizeFromViewMode(currentView));
-
-                    ImGui::SetCursorPos(ImVec2(startPos.x, startPos.y + imageHeightRegion));
-                    Helpers::DrawCenteredWrappedText(item.name.c_str(), realCellWidth, actualMaxTextWidth, 4);
-                    
-                    ImGui::SetCursorPos(startPos);
-                    ImGui::Dummy(ImVec2(realCellWidth, maxRowHeight));
-                    
-                    ImGui::PopID();
                 }
             }
         }
         ImGui::EndTable();
     }
-    ImGui::PopStyleVar();
-    ImGui::EndChild();
+    ImGui::PopStyleVar(); ImGui::EndChild();
 }
 
-void RenderViewSmall(AppContext& ctx, GridViewParams& params){
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, WindowPadding);
-    if (!ImGui::BeginChild("FileView", Style::AutoFillRemnantWindow, ImGuiChildFlags_Borders, ImGuiChildFlags_NavFlattened)){
-        ImGui::PopStyleVar();
-        ImGui::EndChild();
-        return;
-    }
-    ImGui::PopStyleVar();
-
-    f32 dpi = ctx.ui.dpiScale;
-    f32 xGap = XGap * dpi;
-    f32 lineHeight = ImGui::GetTextLineHeight();
-    
-    f32 cellHeight = params.height * dpi;
-    // f32 iconSize = cellHeight * ImageToContainerRatio; was this before, changing to prevent blurriness when i use SHIL_SMALL
-    f32 iconSize = 16.0f * dpi; 
-    
-    f32 availWidth = ImGui::GetContentRegionAvail().x;
-    u16 columnsCount = (u16)(availWidth / ((params.width + XGap) * dpi));
-    columnsCount = (std::max)(columnsCount, (u16)1);
-
-    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(xGap * 0.5f, xGap * 0.5f));
-
-    if (ImGui::BeginTable("ExplorerGrid", columnsCount, ImGuiTableFlags_NoSavedSettings)){
-        auto &dir = ctx.navigation.Contents().Items();
-        u16 totalRows = (u16)(std::ceil((f32)dir.size() / columnsCount));
-
-        ImGuiListClipper clipper;
-        clipper.Begin(totalRows, cellHeight); 
-
-        while (clipper.Step()){
-            for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++){
-                u64 startIdx = (u64) row * columnsCount;
-                u64 endIdx = (std::min)((u64)(startIdx + columnsCount), (u64)dir.size());
-
-                for (u64 i = startIdx; i < endIdx; i++){
-                    ImGui::TableNextColumn();
-
-                    f32 realCellWidth = ImGui::GetContentRegionAvail().x;
-                    auto& item = dir[i];
-                    bool isSelected = (ctx.navigation.Contents().Selected() == i);
-                
-                    ImGui::PushID((int)i);  
-                    ImVec2 startPos = ImGui::GetCursorPos();
-
-                    if (HandleItemInteraction(ctx, i, item, isSelected, ImVec2(realCellWidth, cellHeight))){
-                        ImGui::PopID();
-                        ImGui::EndTable();
-                        ImGui::PopStyleVar();
-                        ImGui::EndChild();
-                        return;
-                    }
-                    
-                    // 2. Draw Icon (Calculated explicit exact position)
-                    f32 iconPaddingX = 6.0f * dpi; 
-                    f32 iconX = startPos.x + iconPaddingX;
-                    f32 iconY = startPos.y + (cellHeight - iconSize) * 0.5f; // Perfect vertical center
-                    
-                    ImGui::SetCursorPos(ImVec2(iconX, iconY));
-                    DrawItemIcon(ctx, item, i, iconSize, ShilSizeFromViewMode(currentView));
-
-                    f32 textGapX = 8.0f * dpi;
-                    f32 textX = iconX + iconSize + textGapX;
-                    f32 textY = startPos.y + (cellHeight - lineHeight) * 0.5f; // Perfect vertical center
-                    f32 textAvailWidth = (startPos.x + realCellWidth) - textX;
-
-                    ImGui::SetCursorPos(ImVec2(textX, textY));
-                    
-                    // Actually render the text this time!
-                    UI::Helpers::DrawSingleLineTruncatedText(item.name.c_str(), textAvailWidth);
-
-                    // 4. Safely advance layout cursor
-                    ImGui::SetCursorPos(startPos);
-                    ImGui::Dummy(ImVec2(realCellWidth, cellHeight));
-                    ImGui::PopID();
-                }
-            }
+static void RenderGrid(AppContext& ctx, GridViewParams p, bool& openMenu) {
+    f32 dpi = ctx.ui.dpiScale, imgH = p.height * dpi, iconSz = imgH * ImageToContainerRatio, rowH = imgH + 4 * ImGui::GetTextLineHeight() + 8.f * dpi;
+    RenderGridBase(ctx, p.width, rowH, [&](int i, const auto& item, f32 cellW) {
+        f32 maxTw = (std::min)(TextToContainerWidthRatio * p.width * dpi, cellW - 4.f * dpi);
+        int lines = std::clamp((int)std::ceil(ImGui::CalcTextSize(item.name.c_str(), 0, false, maxTw).y / ImGui::GetTextLineHeight()), 1, 4);
+        f32 selH = imgH + lines * ImGui::GetTextLineHeight() + 4.f * dpi;
+        
+        ImGui::PushID(i); ImVec2 pos = ImGui::GetCursorPos();
+        bool nav = HandleInteraction(ctx, i, item, cellW, selH, openMenu);
+        if (!nav) {
+            ImGui::SetCursorPos({pos.x + (cellW - iconSz) * 0.5f, pos.y + (imgH - iconSz) * 0.5f});
+            DrawIcon(ctx, item, i, iconSz, ShilSizeFromViewMode(currentView));
+            ImGui::SetCursorPos({pos.x, pos.y + imgH});
+            Helpers::DrawCenteredWrappedText(item.name.c_str(), cellW, maxTw, 4);
+            ImGui::SetCursorPos(pos); ImGui::Dummy({cellW, rowH});
         }
-        ImGui::EndTable();
-    }
-    ImGui::PopStyleVar();
-    ImGui::EndChild();
+        ImGui::PopID(); return nav;
+    });
 }
 
-void RenderViewList(AppContext& ctx, GridViewParams& params){
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, WindowPadding);
-    
-    // FIX 1: Separate Child Flags and Window Flags properly!
-    ImGuiChildFlags childFlags = ImGuiChildFlags_Borders | ImGuiChildFlags_NavFlattened;
-    ImGuiWindowFlags windowFlags = ImGuiWindowFlags_HorizontalScrollbar; // Force horizontal scroll
-    
-    if (!ImGui::BeginChild("FileViewList", Style::AutoFillRemnantWindow, childFlags, windowFlags)){
-        ImGui::PopStyleVar();
-        ImGui::EndChild();
-        return;
-    }
-    ImGui::PopStyleVar();
-
-    f32 dpi = ctx.ui.dpiScale;
-
-    // - Map vertical mouse wheel to horizontal scrolling ---
-    if (ImGui::IsWindowHovered() && ImGui::GetIO().MouseWheel != 0.0f) {
-        // Scroll speed: You can adjust the 60.0f to make it scroll faster or slower
-        f32 scrollAmount = ImGui::GetIO().MouseWheel * (60.0f * dpi); 
-        ImGui::SetScrollX(ImGui::GetScrollX() - scrollAmount);
-    }
-    
-    f32 xGap = XGap * dpi;
-    f32 cellHeight = params.height * dpi;
-    // f32 iconSize = cellHeight * ImageToContainerRatio; was this before, changing to prevent blurriness when i use SHIL_SMALL
-    f32 iconSize = 16.0f * dpi; 
-    
-    // Set a minimum and maximum limit for column widths so they don't look ridiculous
-    f32 minColWidth = 120.0f * dpi; 
-    f32 maxColWidth = params.width * dpi; 
-
-    f32 availY = ImGui::GetContentRegionAvail().y;
-    
-    // Calculate how many rows fit vertically.
-    int rowsPerColumn = (int)(availY / cellHeight);
-    if (rowsPerColumn < 1) rowsPerColumn = 1;
-
-    auto &dir = ctx.navigation.Contents().Items();
-    int totalItems = (int)dir.size();
-    
-    if (totalItems == 0) {
-        ImGui::EndChild();
-        return;
-    }
-
-    int totalColumns = (totalItems + rowsPerColumn - 1) / rowsPerColumn; // Ceiling division
-
-    // Pass 1: Find the maximum width needed for each column
-    std::vector<f32> colWidths(totalColumns, minColWidth);
-    for (int i = 0; i < totalItems; i++) {
-        int c = i / rowsPerColumn;
-        
-        // Measure text exactly as it will render (unformatted single line)
-        f32 textWidth = ImGui::CalcTextSize(dir[i].name.c_str()).x;
-        f32 requiredWidth = textWidth + iconSize + (xGap * 3.0f); // icon + text + padding
-        
-        // Keep the largest width, but clamp it to our maximum allowed width
-        if (requiredWidth > colWidths[c]) {
-            colWidths[c] = (std::min)(requiredWidth, maxColWidth);
+static void RenderViewSmall(AppContext& ctx, GridViewParams p, bool& openMenu) {
+    f32 dpi = ctx.ui.dpiScale, cellH = p.height * dpi, iconSz = 16.f * dpi;
+    RenderGridBase(ctx, p.width, cellH, [&](int i, const auto& item, f32 cellW) {
+        ImGui::PushID(i); ImVec2 pos = ImGui::GetCursorPos();
+        bool nav = HandleInteraction(ctx, i, item, cellW, cellH, openMenu);
+        if (!nav) {
+            ImGui::SetCursorPos({pos.x + 6.f * dpi, pos.y + (cellH - iconSz) * 0.5f});
+            DrawIcon(ctx, item, i, iconSz, SHIL_SMALL);
+            ImGui::SetCursorPos({pos.x + 14.f * dpi + iconSz, pos.y + (cellH - ImGui::GetTextLineHeight()) * 0.5f});
+            Helpers::DrawSingleLineTruncatedText(item.name.c_str(), cellW - (14.f * dpi + iconSz));
+            ImGui::SetCursorPos(pos); ImGui::Dummy({cellW, cellH});
         }
-    }
+        ImGui::PopID(); return nav;
+    });
+}
 
-    // Pass 2: Calculate the absolute starting X position (offset) for every column
-    std::vector<f32> colOffsets(totalColumns + 1, 0.0f);
-    for (int c = 0; c < totalColumns; c++) {
-        colOffsets[c + 1] = colOffsets[c] + colWidths[c];
-    }
-    
-    f32 totalVirtualWidth = colOffsets[totalColumns];
-
-    // Now that we have the exact dynamic width, we force the scrollbar to match it!
-    ImGui::Dummy(ImVec2(totalVirtualWidth, rowsPerColumn * cellHeight));
-
-    // -CUSTOM HORIZONTAL CLIPPER ---
-    f32 scrollX = ImGui::GetScrollX();
-    f32 windowX = ImGui::GetWindowWidth();
-
-    // Figure out which columns are currently visible on screen
-    int startCol = 0;
-    while (startCol < totalColumns && colOffsets[startCol + 1] < scrollX) {
-        startCol++;
-    }
-    
-    int endCol = startCol;
-    while (endCol < totalColumns && colOffsets[endCol] < scrollX + windowX) {
-        endCol++;
-    }
-
-    // -DRAW VISIBLE ITEMS ---
-    for (int c = startCol; c < endCol; c++){
-        
-        f32 currentColWidth = colWidths[c];
-        f32 currentColOffset = colOffsets[c];
-        
-        for (int r = 0; r < rowsPerColumn; r++){
-            int i = (c * rowsPerColumn) + r;
-            if (i >= totalItems) break; // Reached the end of the files!
-
-            auto& item = dir[i];
-            bool isSelected = (ctx.navigation.Contents().Selected() == i);
-
-            ImGui::PushID(i);
+static void RenderViewTiles(AppContext& ctx, GridViewParams p, bool& openMenu) {
+    f32 dpi = ctx.ui.dpiScale, cellH = p.height * dpi, iconSz = cellH * ImageToContainerRatio;
+    RenderGridBase(ctx, p.width, cellH, [&](int i, const auto& item, f32 cellW) {
+        ImGui::PushID(i); ImVec2 pos = ImGui::GetCursorPos(), sPos = ImGui::GetCursorScreenPos();
+        bool nav = HandleInteraction(ctx, i, item, cellW, cellH, openMenu);
+        if (!nav) {
+            ImGui::SetCursorPos({pos.x + 6.f * dpi, pos.y + (cellH - iconSz) * 0.5f});
+            DrawIcon(ctx, item, i, iconSz, ShilSizeFromViewMode(currentView));
+            ImGui::SetCursorPos({pos.x + 14.f * dpi + iconSz, pos.y + (cellH - iconSz) * 0.5f});
             
-            // Calculate absolute top-left coordinate of this specific cell
-            ImVec2 cellPos(currentColOffset, r * cellHeight);
+            if (!item.tileViewInfo.resolved && !item.tileInfoRequestSent) WShell::Async::RequestTileInfo(ctx, item, i);
+            std::string txt = item.name + '\n' + (item.tileViewInfo.resolved ? item.tileViewInfo.value : "");
             
-            // Move ImGui's layout cursor to this spot
-            ImGui::SetCursorPos(cellPos);
+            ImGui::PushClipRect(sPos, {sPos.x + cellW, sPos.y + cellH}, true);
+            ImGui::PushTextWrapPos(pos.x + cellW - 8.f * dpi);
+            ImGui::TextUnformatted(txt.c_str());
+            ImGui::PopTextWrapPos(); 
+            ImGui::PopClipRect();
+            
+            ImGui::SetCursorPos(pos); 
+            ImGui::Dummy({cellW, cellH});
+        }
+        ImGui::PopID(); 
+        return nav;
+    });
+}
 
-            // A. Draw Selectable bounding box
-            if (HandleItemInteraction(ctx, i, item, isSelected, ImVec2(currentColWidth, cellHeight))){
-                ImGui::PopID();
-                ImGui::EndChild();
+static void RenderViewList(AppContext& ctx, GridViewParams p, bool& openMenu) {
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, WindowPadding);
+    bool open = ImGui::BeginChild("List", Style::AutoFillRemnantWindow, ImGuiChildFlags_Borders | ImGuiChildFlags_NavFlattened, ImGuiWindowFlags_HorizontalScrollbar);
+    ImGui::PopStyleVar();
+    if (!open) { 
+        ImGui::EndChild(); 
+        return; 
+    }
+
+    f32 dpi = ctx.ui.dpiScale, cellH = p.height * dpi, iconSz = 16.f * dpi, xGap = XGap * dpi;
+    if (ImGui::IsWindowHovered() && ImGui::GetIO().MouseWheel != 0.f) {
+        ImGui::SetScrollX(ImGui::GetScrollX() - ImGui::GetIO().MouseWheel * 60.f * dpi);
+    }
+
+    auto& dir = ctx.navigation.Contents().Items();
+    if (dir.empty()) { 
+        ImGui::EndChild(); 
+        return; 
+    }
+
+    int rows = (std::max)(1, (int)(ImGui::GetContentRegionAvail().y / cellH));
+    int cols = ((int)dir.size() + rows - 1) / rows;
+    std::vector<f32> w(cols, 120.f * dpi), x(cols + 1, 0.f);
+    
+    for (int i = 0; i < (int)dir.size(); i++) {
+        w[i / rows] = (std::max)(w[i / rows], (std::min)(ImGui::CalcTextSize(dir[i].name.c_str()).x + iconSz + 3.f * xGap, p.width * dpi));
+    }
+    for (int c = 0; c < cols; c++) x[c + 1] = x[c] + w[c];
+
+    ImGui::Dummy({x[cols], (f32)(rows * cellH)});
+    f32 sx = ImGui::GetScrollX(), wx = ImGui::GetWindowWidth();
+    int c0 = 0; while (c0 < cols && x[c0 + 1] < sx) c0++;
+    int c1 = c0; while (c1 < cols && x[c1] < sx + wx) c1++;
+
+    for (int c = c0; c < c1; c++) {
+        for (int r = 0; r < rows; r++) {
+            int i = c * rows + r; if (i >= (int)dir.size()) break;
+            auto& item = dir[i]; ImGui::PushID(i);
+            ImVec2 pos(x[c], (f32)(r * cellH)); ImGui::SetCursorPos(pos);
+            if (HandleInteraction(ctx, i, item, w[c], cellH, openMenu)) { ImGui::PopID();   ImGui::EndChild(); 
                 return;
             }
-
-            // B. Draw Icon (Vertically centered)
-            f32 iconY = cellPos.y + (cellHeight - iconSize) * 0.5f;
-            ImGui::SetCursorPos(ImVec2(cellPos.x + xGap, iconY));
-
-            DrawItemIcon(ctx, item, i, iconSize, SHIL_SMALL);
-
-            // C. Draw Text (Vertically centered, truncated if necessary)
-            f32 textStartX = cellPos.x + xGap + iconSize + xGap;
-            f32 textY = cellPos.y + (cellHeight - ImGui::GetTextLineHeight()) * 0.5f;
-            
-            ImGui::SetCursorPos(ImVec2(textStartX, textY));
-            
-            // We give it the remaining space inside THIS specific dynamic column
-            f32 maxTextWidth = currentColWidth - (xGap * 3.0f) - iconSize;
-            UI::Helpers::DrawSingleLineTruncatedText(item.name.c_str(), maxTextWidth);
-
+            ImGui::SetCursorPos({pos.x + xGap, pos.y + (cellH - iconSz) * 0.5f});
+            DrawIcon(ctx, item, i, iconSz, SHIL_SMALL);
+            ImGui::SetCursorPos({pos.x + 2.f * xGap + iconSz, pos.y + (cellH - ImGui::GetTextLineHeight()) * 0.5f});
+            Helpers::DrawSingleLineTruncatedText(item.name.c_str(), w[c] - 3.f * xGap - iconSz);
             ImGui::PopID();
         }
     }
     ImGui::EndChild();
 }
 
-void RenderViewDetails(AppContext& ctx, GridViewParams& params) {
-    // Push these colors before the early returns so we don't leak state
-    ImGui::PushStyleColor(ImGuiCol_TableHeaderBg, IM_COL32(0, 0, 0, 0));
-    ImGui::PushStyleColor(ImGuiCol_TableBorderLight, IM_COL32(0, 0, 0, 0));
-
-    // Begin a group to keep our tight Table Child and Empty Space Child on the same horizontal plane
+static void RenderViewDetails(AppContext& ctx, GridViewParams p, bool& openMenu) {
+    ImGui::PushStyleColor(ImGuiCol_TableHeaderBg, 0); ImGui::PushStyleColor(ImGuiCol_TableBorderLight, 0);
     ImGui::BeginGroup();
-
-    // 1. TIGHT CHILD WINDOW: We use AutoResizeX so the child wraps perfectly around the columns!
-    ImGuiChildFlags tableChildFlags = ImGuiChildFlags_AutoResizeX | ImGuiChildFlags_NavFlattened;
-    if (ImGui::BeginChild("FileViewDetails_TableSpace", Style::AutoFillRemnantWindow, tableChildFlags, ImGuiWindowFlags_None)) {
-        
-        f32 dpi = ctx.ui.dpiScale;
-        f32 cellHeight = params.height * dpi;
-    // f32 iconSize = cellHeight * ImageToContainerRatio; was this before, changing to prevent blurriness when i use SHIL_SMALL
-    f32 iconSize = 16.0f * dpi; 
-        
-        f32 nameWidth = params.width * dpi;  
-        f32 dateWidth = 150.0f * dpi;
-        f32 typeWidth = 120.0f * dpi;
-        f32 sizeWidth = 100.0f * dpi;
-
-        ImGuiTableFlags flags = 
-            ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | 
-            ImGuiTableFlags_Sortable | ImGuiTableFlags_ScrollY | ImGuiTableFlags_PadOuterX | 
-            ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_NoBordersInBody;
-
-        if (ImGui::BeginTable("DetailsGrid", 4, flags)) {
-            
-            ImGui::TableSetupScrollFreeze(0, 1); 
-            ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_WidthFixed, nameWidth);
-            ImGui::TableSetupColumn("Date modified", ImGuiTableColumnFlags_WidthFixed, dateWidth);
-            ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, typeWidth);
-            ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, sizeWidth);
+    if (ImGui::BeginChild("DetTbl", Style::AutoFillRemnantWindow,  ImGuiChildFlags_NavFlattened)) {
+        f32 dpi = ctx.ui.dpiScale, cellH = p.height * dpi, iconSz = 16.f * dpi;
+        if (ImGui::BeginTable("DetGrid", 4, ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | ImGuiTableFlags_Sortable | ImGuiTableFlags_ScrollY | ImGuiTableFlags_PadOuterX | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_NoBordersInBodyUntilResize | ImGuiTableFlags_NoHostExtendX)) {
+            ImGui::TableSetupScrollFreeze(0, 1);
+            ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_DefaultSort | ImGuiTableColumnFlags_WidthFixed, p.width * dpi);
+            ImGui::TableSetupColumn("Date modified", ImGuiTableColumnFlags_WidthFixed, 150.f * dpi);
+            ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 120.f * dpi);
+            ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, 100.f * dpi);
             ImGui::TableHeadersRow();
 
-            auto &dir = ctx.navigation.Contents().Items();
-            ImGuiListClipper clipper;
-            clipper.Begin((int)dir.size(), cellHeight); 
-
-            while (clipper.Step()){
-                for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++){
-                    auto& item = dir[row];
-                    bool isFolder = item.attributes & SFGAO_FOLDER;
-                    bool isSelected = (ctx.navigation.Contents().Selected() == row);
-
-                    ImGui::PushID(row);
-                    ImGui::TableNextRow(ImGuiTableRowFlags_None, cellHeight);
-                    ImGui::TableNextColumn();
-
-                    f32 availWidth = ImGui::GetContentRegionAvail().x;
-                    ImVec2 startPos = ImGui::GetCursorPos();
-
-                    // SpanAllColumns will now naturally STOP at the edge of the TableSpace child!
-                    ImGuiSelectableFlags selectFlags = ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_AllowOverlap;
-
-                    if (HandleItemInteraction(ctx, row, item, isSelected, ImVec2(0, cellHeight), selectFlags, false)) {
-                        ImGui::PopID();
-                        ImGui::EndTable();
-                        ImGui::EndChild();
-                        ImGui::EndGroup();
-                        ImGui::PopStyleColor(2);
-                        return;
+            auto& dir = ctx.navigation.Contents().Items();
+            ImGuiListClipper clipper; clipper.Begin((int)dir.size(), cellH); 
+            while (clipper.Step()) {
+                for (int r = clipper.DisplayStart; r < clipper.DisplayEnd; r++) {
+                    auto& item = dir[r]; ImGui::PushID(r);
+                    ImGui::TableNextRow(0, cellH); ImGui::TableNextColumn();
+                    ImVec2 pos = ImGui::GetCursorPos();
+                    if (HandleInteraction(ctx, r, item, 0, cellH, openMenu,  ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowDoubleClick | ImGuiSelectableFlags_AllowOverlap, false)) {
+                        ImGui::PopID(); ImGui::EndTable(); ImGui::EndChild(); ImGui::EndGroup(); ImGui::PopStyleColor(2); return;
                     }
-                    bool isRowHovered = ImGui::IsItemHovered();
-
-                    if (isRowHovered && ImGui::TableGetHoveredColumn() == 0){
-                        if (item.tooltipInfo.resolved){
-                            ImGui::SetTooltip("%s", item.tooltipInfo.value.c_str());
-                        } else if (!item.tooltipRequestSent){
-                            WShell::Async::RequestTooltip(ctx, item, row);
-                        }
-                    }
-
-                    // Draw Icon 
-                    f32 iconPaddingX = 4.0f * dpi; 
-                    f32 iconY = startPos.y + (cellHeight - iconSize) * 0.5f;
-                    ImGui::SetCursorPos(ImVec2(startPos.x + iconPaddingX, iconY));
                     
-                    DrawItemIcon(ctx, item, row, iconSize, SHIL_SMALL);
-
-                    // Draw Text
-                    f32 textGapX = 6.0f * dpi;
-                    f32 textX = startPos.x + iconPaddingX + iconSize + textGapX;
-                    f32 textY = startPos.y + (cellHeight - ImGui::GetTextLineHeight()) * 0.5f;
-                    ImGui::SetCursorPos(ImVec2(textX, textY));
+                    bool hov = ImGui::IsItemHovered();
+                    if (hov && ImGui::TableGetHoveredColumn() == 0) {
+                        if (item.tooltipInfo.resolved) ImGui::SetTooltip("%s", item.tooltipInfo.value.c_str());
+                        else if (!item.tooltipRequestSent) WShell::Async::RequestTooltip(ctx, item, r);
+                    }
                     
-                    f32 maxTextWidth = availWidth - (textX - startPos.x);
-                    UI::Helpers::DrawSingleLineTruncatedText(item.name.c_str(), maxTextWidth);
+                    ImGui::SetCursorPos({pos.x + 4.f * dpi, pos.y + (cellH - iconSz) * 0.5f});
+                    DrawIcon(ctx, item, r, iconSz, SHIL_SMALL);
+                    ImGui::SetCursorPos({pos.x + 10.f * dpi + iconSz, pos.y + (cellH - ImGui::GetTextLineHeight()) * 0.5f});
+                    Helpers::DrawSingleLineTruncatedText(item.name.c_str(), ImGui::GetContentRegionAvail().x - (10.f * dpi + iconSz));
+                    
+                    f32 textY = pos.y + (cellH - ImGui::GetTextLineHeight()) * 0.5f;
+                    ImGui::TableNextColumn(); ImGui::SetCursorPosY(textY);
+                    char buf[64]; WShell::FileTime(item.lastWriteTime, buf, sizeof(buf));
+                    Helpers::DrawTableTextWithTooltip(buf, hov);
 
-                    ImGui::TableNextColumn();
-                    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (cellHeight - ImGui::GetTextLineHeight()) * 0.5f);
-                    char dateBuf[64];
-                    WShell::FileTime(item.lastWriteTime, dateBuf, sizeof(dateBuf));
-                    UI::Helpers::DrawTableTextWithTooltip(dateBuf, isRowHovered);
-                    // TypeName()/Size() only actually resolve lazily for virtual items - EnumFolder fills both in sychronously for real filesystem items, so this request is most likely a no-op
-                    if (!item.typeName.resolved && !item.metaRequestSent){
-                        WShell::Async::RequestMeta(ctx, item, row);
+                    if (!item.typeName.resolved && !item.metaRequestSent) WShell::Async::RequestMeta(ctx, item, r);
+                    ImGui::TableNextColumn(); ImGui::SetCursorPosY(textY);
+                    Helpers::DrawTableTextWithTooltip(item.typeName.resolved ? item.typeName.value.c_str() : "", hov);
+
+                    ImGui::TableNextColumn(); 
+                    if (!(item.attributes & SFGAO_FOLDER)) {
+                        ImGui::SetCursorPosY(textY);
+                        char sz[32] = {}; if (item.size.resolved) WShell::Size(item.size.value, sz, sizeof(sz));
+                        f32 cw = ImGui::GetContentRegionAvail().x, tw = ImGui::CalcTextSize(sz).x;
+                        if (cw > tw) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + cw - tw - 4.f * dpi);
+                        Helpers::DrawTableTextWithTooltip(sz, hov);
                     }
-                    ImGui::TableNextColumn();
-                    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (cellHeight - ImGui::GetTextLineHeight()) * 0.5f);
-                    UI::Helpers::DrawTableTextWithTooltip(item.typeName.resolved ? item.typeName.value.c_str() : "", isRowHovered);
-
-                    ImGui::TableNextColumn();
-                    if (!isFolder) {
-                        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (cellHeight - ImGui::GetTextLineHeight()) * 0.5f);
-                        char sizeBuf[32] = {};
-                        if (item.size.resolved){
-                            WShell::Size(item.size.value, sizeBuf, sizeof(sizeBuf));
-                        }
-                        f32 colWidth = ImGui::GetContentRegionAvail().x;
-                        f32 sizeTextWidth = ImGui::CalcTextSize(sizeBuf).x;
-                        if (colWidth > sizeTextWidth) {
-                            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (colWidth - sizeTextWidth) - (4.0f * dpi));
-                        }
-                        UI::Helpers::DrawTableTextWithTooltip(sizeBuf, isRowHovered);
-                    }
-
                     ImGui::PopID();
                 }
             }
             ImGui::EndTable();
         }
     }
-    ImGui::EndChild();
 
-    // To make the hover hug the last column
-    ImGui::SameLine(0, 0);
-    if (ImGui::BeginChild("FileViewDetails_EmptySpace", Style::AutoFillRemnantWindow, ImGuiChildFlags_None, ImGuiWindowFlags_None)) {
-        if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-            ctx.navigation.Contents().SelectIndex(-1);
-        }
-
-    }
-    ImGui::EndChild();
-    ImGui::EndGroup();
-
+    ImGui::EndChild(); 
+    ImGui::EndGroup(); 
     ImGui::PopStyleColor(2);
 }
 
-
-void RenderViewTiles(AppContext& ctx, GridViewParams& params){
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, WindowPadding);
-    if (!ImGui::BeginChild("FileView", Style::AutoFillRemnantWindow, ImGuiChildFlags_Borders, ImGuiChildFlags_NavFlattened)){
-        ImGui::PopStyleVar();
-        ImGui::EndChild();
-        return;
-    }
-    ImGui::PopStyleVar();
-
-    f32 dpi = ctx.ui.dpiScale;
-    f32 xGap = XGap * dpi;
-    
-    f32 cellHeight = params.height * dpi;
-    f32 iconSize = cellHeight * ImageToContainerRatio; 
-    
-    f32 availWidth = ImGui::GetContentRegionAvail().x;
-    u16 columnsCount = (u16)(availWidth / ((params.width + XGap) * dpi));
-    columnsCount = (std::max)(columnsCount, (u16)1);
-
-    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(xGap * 0.5f, xGap * 0.5f));
-
-    if (ImGui::BeginTable("ExplorerGrid", columnsCount, ImGuiTableFlags_NoSavedSettings)){
-        auto &dir = ctx.navigation.Contents().Items();
-        u16 totalRows = (u16)(std::ceil((f32)dir.size() / columnsCount));
-
-        ImGuiListClipper clipper;
-        clipper.Begin(totalRows, cellHeight); 
-
-        while (clipper.Step()){
-            for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++){
-                u64 startIdx = (u64) row * columnsCount;
-                u64 endIdx = (std::min)((u64)(startIdx + columnsCount), (u64)dir.size());
-
-                for (u64 i = startIdx; i < endIdx; i++){
-                    ImGui::TableNextColumn();
-
-                    f32 realCellWidth = ImGui::GetContentRegionAvail().x;
-                    auto& item = dir[i];
-                    bool isSelected = (ctx.navigation.Contents().Selected() == i);
-
-                    ImGui::PushID((int)i);  
-                    ImVec2 startPos = ImGui::GetCursorPos();
-                    ImVec2 startScreenPos = ImGui::GetCursorScreenPos();
-
-                    if (HandleItemInteraction(ctx, i, item, isSelected, ImVec2(realCellWidth, cellHeight))){
-                        ImGui::PopID();
-                        ImGui::EndTable();
-                        ImGui::PopStyleVar();
-                        ImGui::EndChild();
-                        return;
-                    }
-                    
-                    // 2. Draw Icon (Calculated explicit exact position)
-                    f32 iconPaddingX = 6.0f * dpi; 
-                    f32 iconX = startPos.x + iconPaddingX;
-                    f32 iconY = startPos.y + (cellHeight - iconSize) * 0.5f; // Perfect vertical center
-                    
-                    ImGui::SetCursorPos(ImVec2(iconX, iconY));
-                    DrawItemIcon(ctx, item, row, iconSize, ShilSizeFromViewMode(currentView));
-
-                    f32 textGapX = 8.0f * dpi;
-                    f32 rightGapX = 8.0f * dpi;
-
-                    f32 textX = iconX + iconSize + textGapX;
-                    f32 textY = iconY;
-
-                    ImGui::SetCursorPos(ImVec2(textX, textY));
-
-                    f32 textAvailWidth = (startPos.x + realCellWidth) - textX - rightGapX;
-
-                    if (!item.tileViewInfo.resolved && !item.tileInfoRequestSent){
-                        WShell::Async::RequestTileInfo(ctx, item, row);
-                    }
-                    std::string textToShow = item.name + '\n' + (item.tileViewInfo.resolved ? item.tileViewInfo.value : std::string());
-                    
-                    ImVec2 screenPos = ImGui::GetCursorScreenPos(); 
-                    ImVec2 clipMin = startScreenPos;
-                    ImVec2 clipMax = ImVec2(clipMin.x + realCellWidth, clipMin.y + cellHeight);
-
-                    ImGui::PushClipRect(clipMin, clipMax, true);
-                    
-                    // Enable text wrapping at our available width limit
-                    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + textAvailWidth);
-                    
-                    ImGui::TextUnformatted(textToShow.c_str());
-                    
-                    ImGui::PopTextWrapPos();
-                    ImGui::PopClipRect();
-
-
-                    // 4. Safely advance layout cursor
-                    ImGui::SetCursorPos(startPos);
-                    ImGui::Dummy(ImVec2(realCellWidth, cellHeight));
-                    ImGui::PopID();
-                }
-            }
-        }
-        ImGui::EndTable();
-    }
-    ImGui::PopStyleVar();
-    ImGui::EndChild();
-}
-
-
-void FileView::Render(AppContext& ctx){
-    GridViewParams params = GetGridParamsForMode(FileView::currentView);
-    switch (currentView){
-        case ViewMode::ExtraLarge: case ViewMode::Large: case ViewMode::Medium:{
-            RenderGrid(ctx, params);
-        }
-        break;
-        case ViewMode::Small:{
-            RenderViewSmall(ctx, params);
-        }
-        break;
-        case ViewMode::List:{
-            RenderViewList(ctx, params);
-        }
-        break;
-        case ViewMode::Details:{
-            RenderViewDetails(ctx, params);
-        }
-        break;
-        case ViewMode::Tiles:{
-            RenderViewTiles(ctx, params);
-        }
-        break;
-    }
+void FileView::Render(AppContext& ctx) {
+    bool openMenu = false;
+    auto p = GetGridParamsForMode(currentView);
+    if (currentView == ViewMode::Small) RenderViewSmall(ctx, p, openMenu);
+    else if (currentView == ViewMode::List) RenderViewList(ctx, p, openMenu);
+    else if (currentView == ViewMode::Details) RenderViewDetails(ctx, p, openMenu);
+    else if (currentView == ViewMode::Tiles) RenderViewTiles(ctx, p, openMenu);
+    else RenderGrid(ctx, p, openMenu);
 
     
+    if (openMenu){
+        ImGui::OpenPopup("ItemContextMenu");
+    }
+
+    if (ImGui::BeginPopup("ItemContextMenu")) {
+        RenderContextMenuStructure(ctx, ctx.activeContextMenuData);
+        ImGui::EndPopup();
+    }
+
 }

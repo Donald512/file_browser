@@ -2,6 +2,7 @@
 #include "ShellInternal.h"
 #include <Shlwapi.h>
 #include <algorithm>
+#include "Str.h"
 
 
 using namespace WShell;

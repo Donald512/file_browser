@@ -70,4 +70,23 @@ namespace Str{
         }), wstr.end());
         return WideToString(wstr.c_str());
     }
+
+    std::wstring CleanAmpersands(const std::wstring& rawText){
+        std::wstring cleanText;
+        cleanText.reserve(rawText.length());
+
+        for (size_t idx = 0; idx < rawText.length(); ++idx) {
+            if (rawText[idx] == L'&') {
+                if (idx + 1 < rawText.length() && rawText[idx + 1] == L'&') {
+                    cleanText += L'&'; // '&&' becomes single literal '&'
+                    ++idx;            // Skip second ampersand
+                }
+            // Single '&' is an accelerator key identifier -> skip it
+            } 
+            else {
+                cleanText += rawText[idx];
+            }
+        }
+        return cleanText;
+    }
 }

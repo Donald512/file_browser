@@ -1,5 +1,16 @@
 // imgui_boilerplate.cpp
+
+#include <d3d11.h>
+#include "WinFramework.h"
 #include "imgui_boilerplate.h"
+#include "imgui.h"
+#include "imgui_impl_dx11.h"
+#include "imgui_impl_win32.h"
+#include "WinFramework.h"  
+#include "ImGuiTheme.h" // For ApplyWindows11DarkTheme
+#include "Core.h"
+#include <windowsx.h>
+
 
 bool CreateMyOSWindow(AppContext &ctx, WNDCLASSEXW &wc){
     ImGui_ImplWin32_EnableDpiAwareness();
@@ -45,40 +56,6 @@ void InitializeImGui(AppContext &ctx){
 
 }
 
-static void BuildFonts(AppContext& ctx, ImFontAtlas* atlas){
-    if (atlas == nullptr) return;
-    atlas->Clear();
-
-    static const ImWchar icon_ranges[] = { (ImWchar)ICON_MIN_REG, (ImWchar)ICON_MAX_REG, 0 };
-    static const ImWchar32 emoji_ranges[] = {
-        0x2000, 0x206F, 0x2600, 0x26FF, 0x2700, 0x27BF,
-        0x1F300, 0x1F64F, 0x1F680, 0x1F6FF, 0x1F900, 0x1F9FF, 0
-    };
-
-    ImFontConfig icon_config;
-    icon_config.MergeMode = true;
-    icon_config.GlyphOffset.y = 2.0f * ctx.ui.dpiScale;
-    icon_config.PixelSnapH = true;
-    icon_config.GlyphMinAdvanceX = 16.0f * ctx.ui.dpiScale;
-
-    ImFontConfig emoji_config;
-    emoji_config.MergeMode = true;
-    emoji_config.FontDataOwnedByAtlas = false;
-
-    f32 dpi = ctx.ui.dpiScale;
-    // mainFont + its merged icons/emoji ---
-    ctx.ui.mainFont = atlas->AddFontFromFileTTF("C:\\Windows\\Fonts\\segoeui.ttf", 16.0f * dpi);
-    atlas->AddFontFromFileTTF("thirdparty\\fontstuff\\FluentSystemIcons-Regular.ttf", 14.0f * dpi, &icon_config, icon_ranges);
-    atlas->AddFontFromFileTTF("C:\\Windows\\Fonts\\seguiemj.ttf", 16.0f * dpi, &emoji_config, emoji_ranges);
-
-    ctx.ui.smallFont = atlas->AddFontFromFileTTF("C:\\Windows\\Fonts\\segoeui.ttf", 15.0f * dpi);
-    atlas->AddFontFromFileTTF("thirdparty\\fontstuff\\FluentSystemIcons-Regular.ttf", 12.0f * dpi, &icon_config, icon_ranges);
-    atlas->AddFontFromFileTTF("C:\\Windows\\Fonts\\seguiemj.ttf", 12.0f * dpi, &emoji_config, emoji_ranges);
-
-    ImGuiStyle& style = ImGui::GetStyle();
-    // style.ScaleAllSizes(ctx.ui.dpiScale);
-    style.FontScaleDpi = 1.0f;
-}
 void ImGui_Backend_NewFrame(){
     // B. Tell ImGui you are starting a new frame
     ImGui_ImplDX11_NewFrame();
@@ -125,56 +102,6 @@ void SetBackgroundColor(AppContext& ctx, float r, float g, float b, float a) {  
     ctx.ui.clearColor = ImVec4(r, g, b, a);    
 }
 
-
-void ApplyWindows11DarkTheme() {
-    ImGuiStyle& style = ImGui::GetStyle();
-    ImVec4* colors = style.Colors;
-
-    // --- 1. Layout Properties ---
-    style.WindowRounding    = 7.0f;  // Signature Windows 11 rounded corners
-    style.FrameRounding     = 4.0f;
-    style.PopupRounding     = 6.0f;
-    style.ChildRounding     = 4.0f;
-    style.WindowBorderSize  = 1.0f;
-    style.ChildBorderSize   = 1.0f;
-    style.FrameBorderSize   = 1.0f;
-    style.ItemSpacing       = ImVec2(8.0f, 6.0f);
-
-    // --- 2. Color Tokens ---
-    // Top-level background
-    colors[ImGuiCol_WindowBg]             = ImVec4(0.098f, 0.098f, 0.098f, 1.00f); // #191919
-    colors[ImGuiCol_ChildBg]              = ImVec4(0.10f,  0.10f,  0.10f,  1.00f); // #1A1A1A
-    colors[ImGuiCol_PopupBg]              = ImVec4(0.14f,  0.14f,  0.14f,  0.98f); // #242424
-
-    // Subtle divider lines and panel borders
-    colors[ImGuiCol_Border]               = ImVec4(0.18f, 0.18f, 0.18f, 1.00f); // #2E2E2E
-    colors[ImGuiCol_BorderShadow]         = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
-
-    // Text
-    colors[ImGuiCol_Text]                 = ImVec4(0.90f, 0.90f, 0.90f, 1.00f); // #E6E6E6
-    colors[ImGuiCol_TextDisabled]         = ImVec4(0.50f, 0.50f, 0.50f, 1.00f); // #808080
-
-    // --- 3. Interactive States (Neutral Grays - No Accent Blue) ---
-    colors[ImGuiCol_FrameBg]              = ImVec4(0.16f, 0.16f, 0.16f, 1.00f);
-    colors[ImGuiCol_FrameBgHovered]       = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
-    colors[ImGuiCol_FrameBgActive]        = ImVec4(0.26f, 0.26f, 0.26f, 1.00f); // Bright gray click
-
-    // Selectable Headers & Items (Active click is bright neutral gray)
-    colors[ImGuiCol_Header]               = ImVec4(0.22f, 0.22f, 0.22f, 1.00f); // Selected item bg
-    colors[ImGuiCol_HeaderHovered]        = ImVec4(0.20f, 0.20f, 0.20f, 1.00f); // Hovered item bg
-    colors[ImGuiCol_HeaderActive]         = ImVec4(0.28f, 0.28f, 0.28f, 1.00f); // Bright gray click state
-
-    // Buttons (Toolbar style)
-    colors[ImGuiCol_Button]               = ImVec4(0.14f, 0.14f, 0.14f, 0.00f);
-    colors[ImGuiCol_ButtonHovered]        = ImVec4(0.22f, 0.22f, 0.22f, 1.00f);
-    colors[ImGuiCol_ButtonActive]         = ImVec4(0.28f, 0.28f, 0.28f, 1.00f); // Bright gray click
-
-    // Scrollbars
-    colors[ImGuiCol_ScrollbarBg]          = ImVec4(0.10f, 0.10f, 0.10f, 0.00f);
-    colors[ImGuiCol_ScrollbarGrab]        = ImVec4(0.30f, 0.30f, 0.30f, 1.00f);
-    colors[ImGuiCol_ScrollbarGrabHovered]  = ImVec4(0.40f, 0.40f, 0.40f, 1.00f);
-    colors[ImGuiCol_ScrollbarGrabActive]   = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
-}
 
 // !!!!!!---------------------------------------------------------------------------------------
 
@@ -228,6 +155,9 @@ void CreateRenderTarget(AppContext& ctx){
 void CleanupRenderTarget(AppContext& ctx){
     ctx.gfx.renderTargetView.Reset();
 }
+
+
+
 
 // Forward declare message handler from imgui_impl_win32.cpp
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -377,7 +307,8 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam){
             return HTCAPTION;
         }
         return HTCLIENT;    // todo check is this is redundant
-    } break;
+    } 
+    break;
     
     case WM_SIZE:
         if (wParam == SIZE_MINIMIZED)
@@ -389,6 +320,10 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam){
         if ((wParam & 0xfff0) == SC_KEYMENU) // Disable ALT application menu
             return 0;
         break;
+    case WM_CLIPBOARDUPDATE:{
+        QueryClipBoardCutItems(*ctx);
+    }
+    break;
     case WM_DESTROY:
         ::PostQuitMessage(0);
         return 0;
