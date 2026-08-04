@@ -18,6 +18,7 @@ namespace Navigation{
     struct Breadcrumb{
         std::string displayName;
         WShell::Pidl pidl;
+        u64 hash;
     };
 
     class Breadcrumbs{

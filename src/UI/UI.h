@@ -102,6 +102,15 @@ namespace Sidebar{
     constexpr f32 SectionPaddingY = 20.0f;
     void Render(AppContext& ctx, f32 currentWidth);
 }
+
+
+struct MenuRowStyle {
+    f32 outerMargin  = 2.0f;
+    f32 innerPad     = 8.0f;
+    f32 rounding     = 6.0f;
+    ImVec2 itemSpacing = ImVec2(0.0f, 6.0f);   // read explicitly, not pushed
+};
+
 namespace UI::Helpers{
     bool IconAndTextButton(const char* str_id, const char* icon, const char* label, const ImVec4& icon_color = UI::Colors::AccentBlue);
     int GetWrappedLineCount(const char* text, float maxTextWidth, int maxLines);
@@ -111,6 +120,7 @@ namespace UI::Helpers{
     void AlignCursorVertically(f32 containerHeightPx, f32 itemHeightPx = ImGui::GetFrameHeight());
     void TextCentered(const char* text);
     bool IconButton(const char* iconLabel, f32 sizePx, bool disabled = false);
+    bool MenuRow(const char* strId, const char* label, f32 dpi, bool selected, MenuRowStyle style, f32 width = 0.0f);
     
 }
 

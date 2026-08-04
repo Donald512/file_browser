@@ -9,11 +9,12 @@ static bool s_isEditing = false;
 static bool s_justOpened = false;
 static char s_pathInputBuffer[1024] = {0};
 
-static WShell::Pidl s_cachedPopupFolder;
+static u64 s_cachedPopupFolder;
 static std::vector<WShell::ItemLite> s_cachedPopupItems;
+static f32 s_cachedPopupMaxTextWidth = 0.0f;
+static f32 s_cachedDpi = 0.0f;  // since it depends on dpi too
 
 static void PathEditor(AppContext& ctx){
-    // if y parameter in below function changes, change it in inputHeight also, use variable later
     const f32 verticalPadding = 4.0f * ctx.ui.dpiScale;
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f * ctx.ui.dpiScale, verticalPadding));
 
@@ -47,39 +48,64 @@ static void PathEditor(AppContext& ctx){
 }    
 
 static void Breadcrumbs(AppContext& ctx){
-    
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f * ctx.ui.dpiScale, 4.0f * ctx.ui.dpiScale));
+    f32 dpi = ctx.ui.dpiScale;
 
-    auto RenderPopup = [&](const char* popupID, PCIDLIST_ABSOLUTE folder){
-        // cache the directory contents so we dont fetch every frame
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f * ctx.ui.dpiScale, 4.0f * ctx.ui.dpiScale));
+    auto RenderPopup = [&](const char* popupID, PCIDLIST_ABSOLUTE folder, u64 hash){
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f * dpi, 8.0f * dpi));
         if (ImGui::BeginPopup(popupID)){
-            if (!ILIsEqual(s_cachedPopupFolder, folder)){
-                s_cachedPopupItems =WShell::GetLiteItems(folder);
-                s_cachedPopupFolder =WShell::Pidl(ILClone(folder));
+
+            bool folderChanged = (s_cachedPopupFolder != hash);
+            if (folderChanged){
+                s_cachedPopupItems = WShell::GetLiteItems(folder);
+                s_cachedPopupFolder = hash;
             }
+
+            MenuRowStyle rowStyle;
+            rowStyle.outerMargin = 2.0f;
+            rowStyle.innerPad    = 8.0f;
+            rowStyle.rounding    = 4.0f;
+            rowStyle.itemSpacing = ImVec2(0.0f, 6.0f);
+
+            // has to be recomputed when sidebar changes, 
+            if (!folderChanged || dpi != s_cachedDpi){
+                f32 maxTextWidth = 0.0f;
+                for (auto& item : s_cachedPopupItems){
+                    f32 w = ImGui::CalcTextSize(item.name.c_str()).x;
+                    if (w > maxTextWidth) maxTextWidth = w;
+                }
+                s_cachedPopupMaxTextWidth = maxTextWidth;
+                s_cachedDpi = dpi;
+            }
+            f32 rowWidth = s_cachedPopupMaxTextWidth + (rowStyle.innerPad * 2.0f + rowStyle.outerMargin * 2.0f) * dpi;
+
+            int i = 0;
             for (auto& item : s_cachedPopupItems){
-                ImGui::PushID(&item);
-                if (ImGui::Selectable(item.name.c_str())){
+                std::string rowId = "row" + std::to_string(i++);
+                if (UI::Helpers::MenuRow(rowId.c_str(), item.name.c_str(), dpi, false, rowStyle, rowWidth)){
                     ctx.navigation.NavigateTo(item.pidl);
                     ImGui::CloseCurrentPopup();
-                    ImGui::PopID();
-                    break;
                 }
-                ImGui::PopID();
             }
+
             ImGui::EndPopup();
         }
+        ImGui::PopStyleVar();
     };
 
     f32 buttonHeight = ImGui::GetFrameHeight();
 
     Helpers::AlignCursorVertically(Height * ctx.ui.dpiScale);
 
+    // Push This PC icon a little forward
+    ImVec2 startPos = ImGui::GetCursorPos();
+    ImGui::SetCursorPos({startPos.x + (8.0f * dpi), startPos.y} );
+
     const char* breadcrumbIcon = (ILIsEqual(ctx.pidlHome, ctx.navigation.CurrentFolder())) ? ICON_REG_HOME : ICON_REG_DESKTOP;
     ImGui::BeginDisabled();
     ImGui::Button(breadcrumbIcon, ImVec2(buttonHeight, buttonHeight));
     ImGui::EndDisabled();
-    ImGui::SameLine();
+    ImGui::SameLine(0, (8.0f * dpi) + ImGui::GetStyle().FramePadding.x * 0.5f);
     
     
     // you need two IDs for each popup, one for the popup window, and one for the popup button
@@ -90,10 +116,12 @@ static void Breadcrumbs(AppContext& ctx){
     if (ImGui::Button(firstPopupBtnID.c_str())){
         ImGui::OpenPopup(firstPopupID.c_str());
     }
-    ImVec2 btnRect = ImGui::GetItemRectMax();
-    ImGui::SetNextWindowPos(ImVec2(btnRect.x, btnRect.y + 2.0f));
+    ImVec2 btnMin = ImGui::GetItemRectMin();
+    ImVec2 btnMax = ImGui::GetItemRectMax();
+    ImGui::SetNextWindowPos(ImVec2(btnMin.x, btnMax.y + 2.0f));
 
-    RenderPopup(firstPopupID.c_str(), ctx.pidlDesktop.get());
+    static u64 s_desktopHash = WShell::HashPidl(ctx.pidlDesktop.get());
+    RenderPopup(firstPopupID.c_str(), ctx.pidlDesktop.get(), s_desktopHash);
     
     ImGui::SameLine(0.0f, 8.0f * ctx.ui.dpiScale);
 
@@ -115,9 +143,10 @@ static void Breadcrumbs(AppContext& ctx){
             if (ImGui::Button(sign)){
                 ImGui::OpenPopup(popupID);
             }
-            btnRect = ImGui::GetItemRectMax();
-            ImGui::SetNextWindowPos(ImVec2(btnRect.x, btnRect.y + 2.0f));
-            RenderPopup(popupID, crumb.pidl );
+            btnMin = ImGui::GetItemRectMin();
+            btnMax = ImGui::GetItemRectMax();
+            ImGui::SetNextWindowPos(ImVec2(btnMin.x, btnMax.y + 2.0f));
+            RenderPopup(popupID, crumb.pidl, crumb.hash);
         
         }
         ImGui::PopID();

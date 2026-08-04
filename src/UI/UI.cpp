@@ -263,3 +263,37 @@ bool UI::Helpers::IconButton(const char* iconLabel, f32 sizePx, bool disabled) {
     
     return clicked;
 }
+
+bool UI::Helpers::MenuRow(const char* strId, const char* label, f32 dpi, bool selected, MenuRowStyle style, f32 width){
+    f32 outerMargin = style.outerMargin * dpi;
+    f32 innerPad    = style.innerPad * dpi;
+    f32 rounding    = style.rounding * dpi;
+    f32 rowWidth    = (width > 0.0f) ? width : ImGui::GetContentRegionAvail().x;
+    f32 rowHeight   = ImGui::GetFrameHeight();
+
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + outerMargin);
+
+    ImGui::PushID(strId);
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0,0,0,0));
+    ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0,0,0,0));
+    ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0,0,0,0));
+    bool clicked = ImGui::Selectable("##row", selected, 0, ImVec2(rowWidth - outerMargin * 2.0f, rowHeight));
+    bool hovered = ImGui::IsItemHovered();
+    ImGui::PopStyleColor(3);
+    ImGui::PopID();
+
+    ImVec2 boxMin = ImGui::GetItemRectMin();
+    ImVec2 boxMax = ImGui::GetItemRectMax();
+
+    if (selected || hovered){
+        ImU32 col = ImGui::GetColorU32(selected ? ImGuiCol_HeaderActive : ImGuiCol_HeaderHovered);
+        ImGui::GetWindowDrawList()->AddRectFilled(boxMin, boxMax, col, rounding);
+    }
+    ImGui::GetWindowDrawList()->AddText(
+        ImVec2(boxMin.x + innerPad, boxMin.y + (rowHeight - ImGui::GetTextLineHeight()) * 0.5f),
+        ImGui::GetColorU32(ImGuiCol_Text),
+        label);
+
+    ImGui::Dummy(ImVec2(0, style.itemSpacing.y * dpi));
+    return clicked;
+}

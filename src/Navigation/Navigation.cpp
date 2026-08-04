@@ -97,7 +97,7 @@ bool Navigation::Breadcrumbs::Generate(PCIDLIST_ABSOLUTE folder){
             CoTaskMemFree(pAllocatedName); 
         }
         crumb.pidl =WShell::Pidl(ILClone(accumulatedPidl.get()));
-        
+        crumb.hash = WShell::HashPidl(crumb.pidl.get());
         crumbs.push_back(std::move(crumb));
         pCurrentHop = ILGetNext(pCurrentHop);
     }    

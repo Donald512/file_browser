@@ -42,6 +42,7 @@ cl /nologo /Z7 /W4 /MP /std:c++17 ^
    /I"src\Navigation" ^
    /I"src\Shell" ^
    /I"src\Str" ^
+   /I"src\Theme" ^
    /I"src\Threading" ^
    /I"src\UI" ^
    /I"%imgui_root%" ^
@@ -50,7 +51,6 @@ cl /nologo /Z7 /W4 /MP /std:c++17 ^
    "%source_file%" ^
    "src\Core\imgui_boilerplate.cpp" ^
    "src\Core\Core.cpp" ^
-   "src\Core\ImGuiTheme.cpp" ^
    "src\Icons\icons.cpp" ^
    "src\Navigation\Navigation.cpp" ^
    "src\Shell\ShellActions.cpp" ^
@@ -69,6 +69,8 @@ cl /nologo /Z7 /W4 /MP /std:c++17 ^
    "src\UI\ToolBar.cpp" ^
    "src\UI\TopBar.cpp" ^
    "src\UI\UI.cpp" ^
+   "src\Theme\ImGuiTheme.cpp"^
+   "src\Theme\Widgets.cpp"^
    "%build_dir%\imgui.obj" ^
    "%build_dir%\imgui_widgets.obj" ^
    "%build_dir%\imgui_draw.obj" ^

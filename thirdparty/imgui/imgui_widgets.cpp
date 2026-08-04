@@ -9565,6 +9565,7 @@ bool ImGui::BeginMenuEx(const char* label, const char* icon, bool enabled)
     return menu_is_open;
 }
 
+
 bool ImGui::BeginMenu(const char* label, bool enabled)
 {
     return BeginMenuEx(label, NULL, enabled);
