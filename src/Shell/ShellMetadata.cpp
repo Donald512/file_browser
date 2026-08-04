@@ -292,16 +292,16 @@ void WShell::Size(u64 sizeInBytes, char* outBuf, int outBufSize) {
 // Shared by every Sidebar::Item construction site below (drives, Recycle Bin,
 // Control Panel, Quick Access) — previously each one rebuilt name/pidl/icon by
 // hand with small, easy-to-miss differences.
-ItemLite MakeSidebarItem(std::string name, PCIDLIST_ABSOLUTE itemPidl){
-    ItemLite item;
+Item MakeSidebarItem(std::string name, PCIDLIST_ABSOLUTE itemPidl){
+    Item item;
     item.name = std::move(name);
     item.pidl = WShell::Pidl(itemPidl);   // clones — caller keeps ownership of itemPidl
     item.hash = HashPidl(item.pidl.get());
     return item;
 }
 
-std::vector<ItemLite> WShell::GetSidebarItems(int category){
-    std::vector<ItemLite> items;
+std::vector<Item> WShell::GetSidebarItems(int category){
+    std::vector<Item> items;
 
     if (category == 3){
         Pidl thisPc = GetKnownFolderPidl(FOLDERID_ComputerFolder);
@@ -330,7 +330,7 @@ std::vector<ItemLite> WShell::GetSidebarItems(int category){
     }
     else if (category == 1){    
         items.push_back(MakeSidebarItem(PidlToTypeablePath(home.get()), home.get()));
-        std::vector<ItemLite> accounts = GetOneDriveAccounts();
+        std::vector<Item> accounts = GetOneDriveAccounts();
         for (auto& account : accounts){
             items.push_back(std::move(account));
         }
@@ -344,8 +344,8 @@ std::vector<ItemLite> WShell::GetSidebarItems(int category){
 }
 
 
-std::vector<ItemLite> WShell::GetOneDriveAccounts(){
-    std::vector<ItemLite> accounts;
+std::vector<Item> WShell::GetOneDriveAccounts(){
+    std::vector<Item> accounts;
 
     HKEY hKeyRoot = nullptr;
     if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\OneDrive\\Accounts", 0, KEY_READ, &hKeyRoot) != ERROR_SUCCESS){
@@ -365,7 +365,7 @@ std::vector<ItemLite> WShell::GetOneDriveAccounts(){
         DWORD folderSize = sizeof(userFolder);
         LONG folderResult = RegQueryValueExW(hKeyAccount, L"UserFolder", nullptr, nullptr, (LPBYTE)userFolder, &folderSize);
         if (folderResult == ERROR_SUCCESS && userFolder[0] != L'\0'){
-            ItemLite account;
+            Item account;
 
             account.pidl = TypeablePathToPidl(userFolder);   
             if (account.pidl){

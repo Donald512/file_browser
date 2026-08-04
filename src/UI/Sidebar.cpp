@@ -11,6 +11,7 @@ namespace Sidebar {
         enum class LoadState {NotLoaded, Loading, Loaded} childState = LoadState::NotLoaded;
         std::vector<WShell::ItemLite> children;   // reuse the type you already built for breadcrumb popups
     };
+    bool documentsDropdownOpen = true;
 
     // Keyed by WShell::HashPidl(pidl) - content hash - Not by the pidl's raw address.
 
@@ -144,4 +145,11 @@ namespace Sidebar {
         ImGui::PopStyleVar(2);
         ImGui::EndChild();
     }
+
+    static bool s_openRecents   = true;
+    static bool s_openBookmarks = true;
+    static bool s_openPlaces    = true;
+
 }
+
+

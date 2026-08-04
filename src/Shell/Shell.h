@@ -111,8 +111,8 @@ namespace WShell{
     std::string PidlToTypeablePath(PCIDLIST_ABSOLUTE pidl);
     FolderAccess GetFolderAccess(PCIDLIST_ABSOLUTE folder);
     std::vector<NewMenuItem> EnumerateNewMenu();
-    std::vector<ItemLite> GetOneDriveAccounts();
-    std::vector<ItemLite> GetSidebarItems(int category);
+    std::vector<Item> GetOneDriveAccounts();
+    std::vector<Item> GetSidebarItems(int category);
     void FileTime(const FILETIME& ft, char* outBuf, int outBufSize);
     void Size(u64 sizeInBytes, char* outBuf, int outBufSize);
     

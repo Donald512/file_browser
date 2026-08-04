@@ -26,6 +26,25 @@ void WShell::Async::RequestIcon(AppContext& ctx, const Item& item, size_t index)
     );
 }
 
+// overload for Items that is not the main Current directory contnets
+void WShell::Async::RequestIcon(AppContext& ctx, std::vector<Item>& owner, Item& item, size_t index){
+    item.iconRequestSent = true;
+    u64 targetHash = item.hash;
+
+    ctx.tasks.RunAsync(
+        [pidl = item.pidl.Clone()]() mutable {
+            u32 iIcon = Icons::GetIconIndex(pidl.get(), nullptr, 0, SHGFI_PIDL | SHGFI_SYSICONINDEX | SHGFI_SMALLICON);
+            return std::make_pair(std::move(pidl), iIcon);
+        },
+        [&owner, targetHash, index](std::pair<Pidl, u32> result) mutable {
+            PatchByHash(owner, result.first.get(), targetHash, index, [&](Item& it){
+                it.iconKey.value = result.second;
+                it.iconKey.resolved = true;
+            });
+        }
+    );
+}
+
 
 void WShell::Async::RequestTooltip(AppContext& ctx, const Item& item, size_t index){
     item.tooltipRequestSent = true;
@@ -39,6 +58,23 @@ void WShell::Async::RequestTooltip(AppContext& ctx, const Item& item, size_t ind
         },
         [&ctx, gen, targetHash, index](std::pair<Pidl, std::string> result) mutable {
             ctx.navigation.Contents().PatchItem(result.first.get(), targetHash, index, gen, [&](Item& it){
+                it.tooltipInfo.value = std::move(result.second);
+                it.tooltipInfo.resolved = true;
+            });
+        }
+    );
+}
+void WShell::Async::RequestTooltip(AppContext& ctx, std::vector<Item>& owner, const Item& item, size_t index){
+    item.tooltipRequestSent = true;
+    u64 targetHash = item.hash;
+
+    ctx.tasks.RunAsync(
+        [pidl = item.pidl.Clone()]() mutable {
+            std::string tip = FetchWindowsTooltip(pidl.get());
+            return std::make_pair(std::move(pidl), std::move(tip));
+        },
+        [&owner, targetHash, index](std::pair<Pidl, std::string> result) mutable {
+            PatchByHash(owner, result.first.get(), targetHash, index, [&](Item& it){
                 it.tooltipInfo.value = std::move(result.second);
                 it.tooltipInfo.resolved = true;
             });
@@ -135,9 +171,9 @@ void WShell::Async::RequestHasSubFolders(AppContext& ctx, std::vector<ItemLite>&
 }
 
 void WShell::Async::RequestSidebarItems(AppContext& ctx){
-    ctx.tasks.RunAsync([]{ return GetSidebarItems(1);}, [&ctx](std::vector<ItemLite> r) {ctx.items1 = std::move(r); });
-    ctx.tasks.RunAsync([]{ return GetSidebarItems(2);}, [&ctx](std::vector<ItemLite> r) {ctx.items2 = std::move(r); });
-    ctx.tasks.RunAsync([]{ return GetSidebarItems(3);}, [&ctx](std::vector<ItemLite> r) {ctx.items3 = std::move(r); });
+    ctx.tasks.RunAsync([]{ return GetSidebarItems(1);}, [&ctx](std::vector<Item> r) {ctx.items1 = std::move(r); });
+    ctx.tasks.RunAsync([]{ return GetSidebarItems(2);}, [&ctx](std::vector<Item> r) {ctx.items2 = std::move(r); });
+    ctx.tasks.RunAsync([]{ return GetSidebarItems(3);}, [&ctx](std::vector<Item> r) {ctx.items3 = std::move(r); });
     ctx.tasks.RunAsync([]{ return EnumerateNewMenu();}, [&ctx](std::vector<NewMenuItem> r) {ctx.newMenuItems = std::move(r); });
 }
 

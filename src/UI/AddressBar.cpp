@@ -8,11 +8,13 @@ namespace Helpers = UI::Helpers;
 static bool s_isEditing = false;
 static bool s_justOpened = false;
 static char s_pathInputBuffer[1024] = {0};
+static bool s_isPopupOpenPrevFrame = false;
 
 static u64 s_cachedPopupFolder;
 static std::vector<WShell::ItemLite> s_cachedPopupItems;
 static f32 s_cachedPopupMaxTextWidth = 0.0f;
 static f32 s_cachedDpi = 0.0f;  // since it depends on dpi too
+
 
 static void PathEditor(AppContext& ctx){
     const f32 verticalPadding = 4.0f * ctx.ui.dpiScale;
@@ -50,9 +52,9 @@ static void PathEditor(AppContext& ctx){
 static void Breadcrumbs(AppContext& ctx){
     f32 dpi = ctx.ui.dpiScale;
 
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2.0f * ctx.ui.dpiScale, 4.0f * ctx.ui.dpiScale));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f * ctx.ui.dpiScale, 4.0f * ctx.ui.dpiScale));
     auto RenderPopup = [&](const char* popupID, PCIDLIST_ABSOLUTE folder, u64 hash){
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f * dpi, 8.0f * dpi));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(2.0f * dpi, 8.0f * dpi));
         if (ImGui::BeginPopup(popupID)){
 
             bool folderChanged = (s_cachedPopupFolder != hash);
@@ -63,7 +65,7 @@ static void Breadcrumbs(AppContext& ctx){
 
             MenuRowStyle rowStyle;
             rowStyle.outerMargin = 2.0f;
-            rowStyle.innerPad    = 8.0f;
+            rowStyle.innerPad.x    = 8.0f;
             rowStyle.rounding    = 4.0f;
             rowStyle.itemSpacing = ImVec2(0.0f, 6.0f);
 
@@ -77,7 +79,7 @@ static void Breadcrumbs(AppContext& ctx){
                 s_cachedPopupMaxTextWidth = maxTextWidth;
                 s_cachedDpi = dpi;
             }
-            f32 rowWidth = s_cachedPopupMaxTextWidth + (rowStyle.innerPad * 2.0f + rowStyle.outerMargin * 2.0f) * dpi;
+            f32 rowWidth = s_cachedPopupMaxTextWidth + (rowStyle.innerPad.x * 2.0f + rowStyle.outerMargin * 2.0f) * dpi;
 
             int i = 0;
             for (auto& item : s_cachedPopupItems){
@@ -185,7 +187,7 @@ void AddressBar::Render(AppContext& ctx){
     ImVec2 max = ImVec2(min.x + addressWidth, min.y + Height * ctx.ui.dpiScale);
 
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && ImGui::IsMouseHoveringRect(min, max)){
-        if (!ImGui::IsAnyItemActive() && !ImGui::IsAnyItemHovered()){
+        if (!ImGui::IsAnyItemActive() && !ImGui::IsAnyItemHovered() && !s_isPopupOpenPrevFrame){
             s_isEditing = true;
 
             s_justOpened = true;
@@ -198,5 +200,8 @@ void AddressBar::Render(AppContext& ctx){
             }
         }
     }
+    // remember for next frame. this is here to prevent the annoying beahviour of when the user is currently viewing one of the popup dropdowns and clicks anywhere else on the address bar, instead of closing the popup, it activates it immediately
+    s_isPopupOpenPrevFrame = ImGui::IsPopupOpen(NULL, ImGuiPopupFlags_AnyPopup);
+
     ImGui::EndChild();
 }

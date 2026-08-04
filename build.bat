@@ -64,8 +64,9 @@ cl /nologo /Z7 /W4 /MP /std:c++17 ^
    "src\UI\CommandBar.cpp" ^
    "src\UI\CtxMenu.cpp" ^
    "src\UI\FileView.cpp" ^
+   "src\UI\Helpers.cpp" ^
    "src\UI\NavBar.cpp" ^
-   "src\UI\Sidebar.cpp" ^
+   "src\UI\Sidebar2.cpp" ^
    "src\UI\ToolBar.cpp" ^
    "src\UI\TopBar.cpp" ^
    "src\UI\UI.cpp" ^

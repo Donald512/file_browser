@@ -64,9 +64,9 @@ struct AppContext{
 
     // these are populated Asynchronously shorty after startup, called once from main.cpp right after AppContext exists, and tasks, (at the bottom) is constructed and ready. Sidebar and command bar are written expecting that rendering an empty vector is no-op, 
     std::vector<WShell::NewMenuItem> newMenuItems;
-    std::vector<WShell::ItemLite> items1;    
-    std::vector<WShell::ItemLite> items2;    
-    std::vector<WShell::ItemLite> items3; 
+    std::vector<WShell::Item> items1;    
+    std::vector<WShell::Item> items2;    
+    std::vector<WShell::Item> items3; 
 
     TaskSystem tasks;
 

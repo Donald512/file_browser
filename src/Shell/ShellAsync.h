@@ -8,7 +8,9 @@ namespace WShell::Async{
     // safe to call every frame - they no-op after the first call (via the matching *RequestSent flag on the item) until the field resolves. Render code should still check the flag itself before calling, to avoid the lambda-build overhead of a call that will bail out anywhere
 
     void RequestIcon(AppContext& ctx, const WShell::Item& item, size_t index);
+    void RequestIcon(AppContext& ctx, std::vector<Item>& owner, Item& item, size_t index);
     void RequestTooltip(AppContext& ctx, const WShell::Item& item, size_t index);
+    void RequestTooltip(AppContext& ctx, std::vector<Item>& owner, const Item& item, size_t index);
     void RequestMeta(AppContext& ctx, const WShell::Item& item, size_t index);    // Typename + Size - virtual items only
     void RequestTileInfo(AppContext& ctx, const WShell::Item& item, size_t index);
     

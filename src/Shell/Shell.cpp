@@ -119,8 +119,8 @@ namespace {
     }
 }
 
-std::vector<ItemLite> WShell::GetSidebarItems(int category){
-    std::vector<ItemLite> items;
+std::vector<Item> WShell::GetSidebarItems(int category){
+    std::vector<Item> items;
 
     if (category == 3){
         Pidl thisPc = GetKnownFolderPidl(FOLDERID_ComputerFolder);
@@ -158,7 +158,6 @@ std::vector<ItemLite> WShell::GetSidebarItems(int category){
         items.push_back(MakeSidebarItem(GetDisplayName(documents.get()), documents.get()));
         items.push_back(MakeSidebarItem(GetDisplayName(downloads.get()), downloads.get()));
     }
-
     return items;
 }
 // =======================================

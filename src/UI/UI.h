@@ -106,10 +106,11 @@ namespace Sidebar{
 
 struct MenuRowStyle {
     f32 outerMargin  = 2.0f;
-    f32 innerPad     = 8.0f;
+    ImVec2 innerPad     = ImVec2{8.0f, 0.0f};
     f32 rounding     = 6.0f;
     ImVec2 itemSpacing = ImVec2(0.0f, 6.0f);   // read explicitly, not pushed
 };
+
 
 namespace UI::Helpers{
     bool IconAndTextButton(const char* str_id, const char* icon, const char* label, const ImVec4& icon_color = UI::Colors::AccentBlue);
@@ -121,7 +122,9 @@ namespace UI::Helpers{
     void TextCentered(const char* text);
     bool IconButton(const char* iconLabel, f32 sizePx, bool disabled = false);
     bool MenuRow(const char* strId, const char* label, f32 dpi, bool selected, MenuRowStyle style, f32 width = 0.0f);
-    
+    bool RenderSectionHeader(const char* id, const char* label, f32 dpi, bool* isOpen, MenuRowStyle style, f32 width);
+    bool MenuRow(const char* strId, const char* label, ImTextureID icon, f32 dpi, MenuRowStyle style, f32 leftPush, f32 spaceBetweenIconAndText, f32 width);
+
 }
 
 void RenderContextMenuStructure(AppContext& ctx, const std::vector<WShell::ContextMenuItem>& items);
