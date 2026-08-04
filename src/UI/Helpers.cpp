@@ -239,7 +239,7 @@ bool UI::Helpers::MenuRow(const char* strId, const char* label, f32 dpi, bool se
 }
 
 // creating a new one because i need one that doesnt center but shifts left by some amount
-bool UI::Helpers::MenuRow(const char* strId, const char* label, ImTextureID icon, f32 dpi, MenuRowStyle style, f32 leftPush, f32 spaceBetweenIconAndText, f32 width){
+bool UI::Helpers::MenuRow(const char* strId, const char* label, ImTextureID icon, f32 dpi, MenuRowStyle style, f32 leftPush, f32 spaceBetweenIconAndText, f32 width, bool selected){
     f32 outerMargin = style.outerMargin * dpi;
     f32 innerPadX   = style.innerPad.x * dpi;
     f32 innerPadY   = style.innerPad.y * dpi;
@@ -258,7 +258,7 @@ bool UI::Helpers::MenuRow(const char* strId, const char* label, ImTextureID icon
     ImGui::PushStyleColor(ImGuiCol_HeaderActive,  ImVec4(0,0,0,0));
     ImGui::PushStyleColor(ImGuiCol_Header,        ImVec4(0,0,0,0));
 
-    bool clicked = ImGui::Selectable("##row", false, 0, ImVec2(availableWidth , rowHeight));
+    bool clicked = ImGui::Selectable("##row", selected, 0, ImVec2(availableWidth , rowHeight));
     bool hovered = ImGui::IsItemHovered();
     ImGui::PopStyleColor(3);
     ImGui::PopID();
@@ -308,9 +308,10 @@ bool UI::Helpers::MenuRow(const char* strId, const char* label, ImTextureID icon
         ImVec2(textStartX, boxMin.y + (rowHeight - ImGui::GetTextLineHeight()) * 0.5f),
         ImGui::GetColorU32(ImGuiCol_Text), displayText.c_str());
 
-    // FIX 3: Restore the Cursor X position before moving down, otherwise the next row will be shifted even further
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + style.itemSpacing.y * dpi);
-    
+    // Restore the Cursor X position before moving down, otherwise the next row will be shifted even further
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, style.itemSpacing.y * dpi));
+    ImGui::Spacing();
+    ImGui::PopStyleVar();
     return clicked;
 }
 
@@ -372,4 +373,21 @@ bool UI::Helpers::RenderSectionHeader(const char* id, const char* label, f32 dpi
     // Advance cursor for the next item
     ImGui::Dummy({0.0f, style.itemSpacing.y * dpi});
     return clicked;
+}
+
+bool UI::Helpers::IsItemHoveredWithDelay(f32 delaySeconds) {
+    if (!ImGui::IsItemHovered()) {
+        return false;
+    }
+
+    ImGuiID currentItemId = ImGui::GetItemID();
+    static ImGuiID s_lastHoveredId = 0;
+    static double s_hoverStartTime = 0.0;
+
+    if (s_lastHoveredId != currentItemId) {
+        s_lastHoveredId = currentItemId;
+        s_hoverStartTime = ImGui::GetTime();
+    }
+
+    return (ImGui::GetTime() - s_hoverStartTime) >= delaySeconds;
 }

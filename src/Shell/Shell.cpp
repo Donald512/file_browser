@@ -27,9 +27,10 @@ namespace { // Anonymous namespace means these are private to this .cpp file
 
 Pidl WShell::GetKnownFolderPidl(REFKNOWNFOLDERID folderID){
     PIDLIST_ABSOLUTE pidl = nullptr;
-        SHGetKnownFolderIDList(folderID, 0, NULL, &pidl);
+    SHGetKnownFolderIDList(folderID, 0, NULL, &pidl);
     return Pidl(pidl);
-    }
+}
+
 Pidl WShell::GetKnownFolderPidl(const wchar_t* shellParsingGuid){
     PIDLIST_ABSOLUTE pidl = nullptr;
     SHParseDisplayName(shellParsingGuid, NULL, &pidl, 0, NULL);

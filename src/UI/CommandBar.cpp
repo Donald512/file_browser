@@ -1,158 +1,154 @@
-
 #include "UI.h"
 #include "ShellAsync.h"
 
 namespace Colors = UI::Colors;
-namespace Style = UI::Style;
+namespace Style  = UI::Style;
 
+// Forward declarations
 static void DrawNewMenuDropdown(AppContext& ctx);
-static void PositionPopupBelowWindow(const char* popupId, float dpiScale, float offsetPxY);
 static void DrawViewMenuDropdown(AppContext& ctx);
 static void DrawSortMenuDropdown(AppContext& ctx);
+static void PositionPopupBelowWindow(const char* popupId, float dpiScale, float offsetPxY);
+static bool CustomMenuItem(const char* label, bool selected, bool isRadioStyle = true);
 
-void CommandBar::Render(AppContext& ctx){
-    if (!ImGui::BeginChild("CommandBar", ImVec2(0, Height * ctx.ui.dpiScale), ImGuiChildFlags_None, TopBar::Flags) ){
-        ImGui::EndChild();
-        return;
-    }
+// ============================================================================
+// Internal Helpers
+// ============================================================================
 
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f * ctx.ui.dpiScale, 8.0f * ctx.ui.dpiScale));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, Style::NoBorder);
-
-    UI::Helpers::AlignCursorVertically(Height * ctx.ui.dpiScale);
-    
-    // =========================== New Button & Popup
-    char* newMenuPopupId = "NewMenuPopup";       
-    ImGui::BeginDisabled(ctx.navigation.Contents().Access() == WShell::FolderAccess::NoCreate);
-    const char* newLabel = ICON_REG_ADD_CIRCLE " New " ICON_REG_CHEVRON_DOWN;
-
-    if (ImGui::Button(newLabel)){
-        ImGui::OpenPopup(newMenuPopupId);
-    }
-    ImGui::EndDisabled();
-    PositionPopupBelowWindow(newMenuPopupId, ctx.ui.dpiScale, 5);
-    if (ImGui::BeginPopup(newMenuPopupId)){
-        DrawNewMenuDropdown(ctx);
-        ImGui::EndPopup();
-    }
-
-    // ============================
-    ImGui::SameLine(0.0f, 8.0f);
-    
-     UI::Helpers::AlignCursorVertically(Height * ctx.ui.dpiScale);
-
-    ImGui::Button(ICON_REG_CUT);
-    ImGui::SameLine(0.0f, 8.0f);
-
-     UI::Helpers::AlignCursorVertically(Height * ctx.ui.dpiScale);
-
-    ImGui::Button(ICON_REG_COPY);
-    ImGui::SameLine(0.0f, 8.0f);
-
-     UI::Helpers::AlignCursorVertically(Height * ctx.ui.dpiScale);
-
-    ImGui::Button(ICON_REG_CLIPBOARD_PASTE);
-    ImGui::SameLine(0.0f, 8.0f);
-
-     UI::Helpers::AlignCursorVertically(Height * ctx.ui.dpiScale);
-
-    ImGui::Button(ICON_REG_RENAME);
-    ImGui::SameLine(0.0f, 8.0f);
-
-     UI::Helpers::AlignCursorVertically(Height * ctx.ui.dpiScale);
-
-    ImGui::Button(ICON_REG_SHARE);
-    ImGui::SameLine(0.0f, 8.0f);
-
-     UI::Helpers::AlignCursorVertically(Height * ctx.ui.dpiScale);
-
-    ImGui::Button(ICON_REG_BIN_RECYCLE);
-    ImGui::SameLine(0.0f, 8.0f);
-
-     UI::Helpers::AlignCursorVertically(Height * ctx.ui.dpiScale);
-
-
-
-    // =========================== SORT & POPUP
-    char* sortMenuPopupId = "SortMenuPopup";       
-
-    if (ImGui::Button( ICON_REG_ARROW_SORT " Sort " ICON_REG_CHEVRON_DOWN)){
-        ImGui::OpenPopup(sortMenuPopupId);
-    }
-
-    if (ImGui::BeginPopup(sortMenuPopupId)){
-        DrawSortMenuDropdown(ctx);
-        ImGui::EndPopup();
-    }
-    // ============================
-    ImGui::SameLine(0.0f, 8.0f);
-
-    UI::Helpers::AlignCursorVertically(Height * ctx.ui.dpiScale);
-
-    // =========================== View
-    char* viewMenuPopupId = "ViewMenuPopup";       
-    if (ImGui::Button( ICON_REG_LIST " View " ICON_REG_CHEVRON_DOWN)){
-        ImGui::OpenPopup(viewMenuPopupId);
-    }
-    PositionPopupBelowWindow(viewMenuPopupId, ctx.ui.dpiScale, 5);
-    if (ImGui::BeginPopup(viewMenuPopupId)){
-        DrawViewMenuDropdown(ctx);
-        ImGui::EndPopup();
-    }
-    // ============================
-
-
-
-    ImGui::PopStyleVar(2);
-    ImGui::EndChild();
+// Helper to render inline command bar action buttons with standardized spacing
+static bool ToolbarButton(const char* label, float spacing = 8.0f) {
+    bool clicked = ImGui::Button(label);
+    ImGui::SameLine(0.0f, spacing);
+    return clicked;
 }
 
-static void PositionPopupBelowWindow(const char* popupId, float dpiScale, float offsetPxY){
-    if (ImGui::IsPopupOpen(popupId)){
-
-        // Set NextWindowPos here to move the popup 2px directly below, aligned with View button?
-        ImVec2 buttonMin = ImGui::GetItemRectMin(); // Top left of button
-        ImVec2 buttonSize = ImGui::GetItemRectSize();
-        
-        ImVec2 parentPos = ImGui::GetWindowPos();   // Top-left of current window
+static void PositionPopupBelowWindow(const char* popupId, float dpiScale, float offsetPxY) {
+    if (ImGui::IsPopupOpen(popupId)) {
+        ImVec2 parentPos  = ImGui::GetWindowPos();
         ImVec2 parentSize = ImGui::GetWindowSize();
-        
+        ImVec2 buttonMin  = ImGui::GetItemRectMin();
+
         ImVec2 popupPos = ImVec2(buttonMin.x, (offsetPxY * dpiScale) + parentPos.y + parentSize.y);
         ImGui::SetNextWindowPos(popupPos);
     }
 }
 
-static void DrawNewMenuDropdown(AppContext& ctx){
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f * ctx.ui.dpiScale, 8.0f * ctx.ui.dpiScale));
-    for (auto& item : ctx.newMenuItems){
+// ============================================================================
+// Main Command Bar Render Pass
+// ============================================================================
+
+void CommandBar::Render(AppContext& ctx) {
+    f32 dpi = ctx.ui.dpiScale;
+    const f32 scaledHeight = Height * dpi;
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(2.0f * dpi, 0));
+
+    if (!ImGui::BeginChild("CommandBar", ImVec2(0, scaledHeight), ImGuiChildFlags_None, TopBar::Flags)) {
+        ImGui::EndChild();
+        ImGui::PopStyleVar();
+        return;
+    }
+
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f * dpi, 8.0f * dpi));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, Style::NoBorder);
+
+    UI::Helpers::AlignCursorVertically(scaledHeight);
+
+    // --- New Menu Button & Dropdown ---
+    constexpr const char* newMenuPopupId = "NewMenuPopup";
+    ImGui::BeginDisabled(ctx.navigation.Contents().Access() == WShell::FolderAccess::NoCreate);
+
+    if (ImGui::Button(ICON_REG_ADD_CIRCLE " New " ICON_REG_CHEVRON_DOWN)) {
+        ImGui::OpenPopup(newMenuPopupId);
+    }
+    ImGui::EndDisabled();
+
+    PositionPopupBelowWindow(newMenuPopupId, dpi, 5.0f);
+    if (ImGui::BeginPopup(newMenuPopupId)) {
+        DrawNewMenuDropdown(ctx);
+        ImGui::EndPopup();
+    }
+    ImGui::SameLine(0.0f, 8.0f);
+
+    // --- Action Buttons ---
+    ToolbarButton(ICON_REG_CUT);
+    ToolbarButton(ICON_REG_COPY);
+    ToolbarButton(ICON_REG_CLIPBOARD_PASTE);
+    ToolbarButton(ICON_REG_RENAME);
+    ToolbarButton(ICON_REG_SHARE);
+    ToolbarButton(ICON_REG_BIN_RECYCLE);
+
+    // --- Sort Menu Dropdown ---
+    constexpr const char* sortMenuPopupId = "SortMenuPopup";
+    if (ImGui::Button(ICON_REG_ARROW_SORT " Sort " ICON_REG_CHEVRON_DOWN)) {
+        ImGui::OpenPopup(sortMenuPopupId);
+    }
+
+    PositionPopupBelowWindow(sortMenuPopupId, dpi, 5.0f);
+    if (ImGui::BeginPopup(sortMenuPopupId)) {
+        DrawSortMenuDropdown(ctx);
+        ImGui::EndPopup();
+    }
+    ImGui::SameLine(0.0f, 8.0f);
+
+    // --- View Menu Dropdown ---
+    constexpr const char* viewMenuPopupId = "ViewMenuPopup";
+    if (ImGui::Button(ICON_REG_LIST " View " ICON_REG_CHEVRON_DOWN)) {
+        ImGui::OpenPopup(viewMenuPopupId);
+    }
+    PositionPopupBelowWindow(viewMenuPopupId, dpi, 5.0f);
+    if (ImGui::BeginPopup(viewMenuPopupId)) {
+        DrawViewMenuDropdown(ctx);
+        ImGui::EndPopup();
+    }
+    
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleVar(1);
+    ImGui::EndChild();
+}
+
+// ============================================================================
+// Sub-Menu Dropdown Implementations
+// ============================================================================
+
+static void DrawNewMenuDropdown(AppContext& ctx) {
+    f32 dpi = ctx.ui.dpiScale;
+
+    static f32 maxTextWidth = GetLongestStringWidth(ctx.newMenuItems);
+    for (auto& item : ctx.newMenuItems) {
+        int i = 0;
         ImGui::PushID(&item);
+
         ImTextureID iconTex = 0;
-        if (item.iconKey.resolved){
+        if (item.iconKey.resolved) {
             iconTex = ctx.icons.GetTexture({item.iconKey.value, SHIL_LARGE});
-        } else if (!item.iconRequestSent){
+        } else if (!item.iconRequestSent) {
             WShell::Async::RequestNewMenuIcon(ctx, item);
         }
-        if (iconTex){
-            ImGui::Image(iconTex, ImVec2(16.0f, 16.0f));
-            ImGui::SameLine();
-        }
-        if (ImGui::Selectable(item.displayName.c_str())){
-            
-            ImGui::CloseCurrentPopup();
-            ImGui::PopID();
-            break;
+
+        MenuRowStyle rowStyle;
+        rowStyle.outerMargin = 2.0f;
+        rowStyle.innerPad.x    = 8.0f;
+        rowStyle.rounding    = 4.0f;
+        rowStyle.itemSpacing = ImVec2(0.0f, 2.0f);
+        f32 iconSize = 16.0f * dpi;
+        f32 spaceBetweenIconAndText = 8.0f;
+
+
+        // No comments, no logic, pure eyeballing and correcting. dont try to reason it 
+        if (UI::Helpers::MenuRow(item.displayName.c_str(), item.displayName.c_str(), iconTex, dpi, rowStyle, 0, spaceBetweenIconAndText, maxTextWidth + rowStyle.outerMargin * 2 + rowStyle.innerPad.x * 2 + rowStyle.itemSpacing.x + spaceBetweenIconAndText * 2 + iconSize, false)){
+
         }
         ImGui::PopID();
-
+        i++;
     }
-    ImGui::PopStyleVar();
+
 }
-static bool CustomMenuItem(const char* label, bool selected, bool isRadioStyle = true) {
-    ImGui::PushID(label); // Prevents ID collisions between items
+
+static bool CustomMenuItem(const char* label, bool selected, bool isRadioStyle) {
+    ImGui::PushID(label);
     
     ImVec2 cursorStart = ImGui::GetCursorPos();
-    
-    // Using AllowOverlap lets us draw text/icons on top of the selectable
     bool clicked = ImGui::Selectable("##selectable", selected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowOverlap);
 
     ImGui::SetCursorPos(cursorStart);
@@ -161,7 +157,6 @@ static bool CustomMenuItem(const char* label, bool selected, bool isRadioStyle =
         const char* checkMark = isRadioStyle ? ICON_REG_RADIO_BUTTON : ICON_REG_CHECKMARK;
         ImGui::TextUnformatted(checkMark);
     } else {
-        // Space holder for alignment
         ImGui::Dummy(ImVec2(ImGui::GetFontSize(), 0.0f));
     }
 
@@ -172,83 +167,146 @@ static bool CustomMenuItem(const char* label, bool selected, bool isRadioStyle =
     return clicked;
 }
 
+struct SortMode{
+    std::string displayName;
+    WShell::SortMode sortMode;
+};
+
+struct SortDir{
+    std::string displayName;
+    WShell::SortDirection sortDir;
+};
+
+std::vector<const char*> sortModesStr = {"Name", "Date Modified", "Type", "Size"  "Ascending", "Descending", "Hidden Items"};
 
 
 
-static void DrawSortMenuDropdown(AppContext& ctx){
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f * ctx.ui.dpiScale, 8.0f * ctx.ui.dpiScale));
-    if (ImGui::MenuItem(" Name ", nullptr, ctx.navigation.Contents().GetSort() == WShell::SortMode::Name)){
-        ctx.navigation.Contents().SetSort(WShell::SortMode::Name, ctx.navigation.Contents().GetSortDir());
-    }
-    if (ImGui::MenuItem(" Date Modified ", nullptr, ctx.navigation.Contents().GetSort() == WShell::SortMode::DateModified)){
-        ctx.navigation.Contents().SetSort(WShell::SortMode::DateModified, ctx.navigation.Contents().GetSortDir());
-    }
-    if (ImGui::MenuItem(" Type ", nullptr, ctx.navigation.Contents().GetSort() == WShell::SortMode::Type)){
-        ctx.navigation.Contents().SetSort(WShell::SortMode::Type, ctx.navigation.Contents().GetSortDir());
-    }
-    if (ImGui::BeginMenu(" More ")){
-        if (ImGui::MenuItem(" Size ", nullptr, ctx.navigation.Contents().GetSort() == WShell::SortMode::Size)){ 
-            ctx.navigation.Contents().SetSort(WShell::SortMode::Size, ctx.navigation.Contents().GetSortDir());
+
+
+static void DrawSortMenuDropdown(AppContext& ctx) {
+    f32 dpi = ctx.ui.dpiScale;
+    auto& contents = ctx.navigation.Contents();
+
+    SortMode sortModes[] = {
+        {"Name",            WShell::SortMode::Name },
+        {"Date Modified",   WShell::SortMode::DateModified},
+        {"Type",            WShell::SortMode::Type},
+        {"Size",            WShell::SortMode::Size}
+    };
+    SortDir sortDirs[] = {
+        {"Ascending",    WShell::SortDirection::Ascending },
+        {"Descending",   WShell::SortDirection::Descending}
+    };
+
+    auto GetMaxWidth = [&](std::vector<const char*> strings){
+        f32 maxWidth = 0.0f;
+
+        for (const auto& displayName : strings) {
+            f32 textWidth = ImGui::CalcTextSize(displayName).x;
+            if (textWidth > maxWidth){
+                maxWidth = textWidth;
+            }
         }
-        ImGui::EndMenu();
-    }
+        return maxWidth;
+    };
 
-    ImGui::Separator();
-        
-    if (ImGui::MenuItem(" Ascending ", nullptr, ctx.navigation.Contents().GetSortDir() == WShell::SortDirection::Ascending)){
-        ctx.navigation.Contents().SetSort(ctx.navigation.Contents().GetSort(), WShell::SortDirection::Ascending);
-    }
+    auto maxTextWidth = GetMaxWidth(sortModesStr);
+    
+    MenuRowStyle rowStyle;
+    rowStyle.outerMargin = 4.0f;
+    rowStyle.innerPad.x    = 16.0f;
+    rowStyle.innerPad.y    = 4.0f;
+    rowStyle.rounding    = 6.0f;
+    rowStyle.itemSpacing = ImVec2(0.0f, 6.0f);
+    
+    f32 rowWidth = maxTextWidth + (rowStyle.innerPad.x * 2.0f + rowStyle.outerMargin * 2.0f) * dpi;
+    for (auto& sortMode : sortModes) {
+        int i = 0;
+        ImGui::PushID(i);
 
-    if (ImGui::MenuItem(" Descending ", nullptr, ctx.navigation.Contents().GetSortDir() == WShell::SortDirection::Descending)){
-        ctx.navigation.Contents().SetSort(ctx.navigation.Contents().GetSort(), WShell::SortDirection::Descending);
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {0.0f, 0.0f});  // was messing up my buttons, but i didnt want to remove the FramePadding in the Main Command::Render because it gives the cut, New, and even the sort label the padding, dont know why its transferring to the ones in this function now
+
+        if (UI::Helpers::MenuRow(sortMode.displayName.c_str(), sortMode.displayName.c_str(), dpi, ctx.navigation.Contents().GetSort() == sortMode.sortMode, rowStyle, rowWidth)){
+            contents.SetSort(sortMode.sortMode, contents.GetSortDir());
+        }
+        ImGui::PopStyleVar();
+        ImGui::PopID();
+
+        i++;
     }
     
     ImGui::Separator();
+    ImGui::Dummy({0, 4*dpi});
+
     
-    // The "Show >" sub-menu
-    if (ImGui::BeginMenu("Group by")) {
-        ImGui::EndMenu();
+    for (auto& sortDir : sortDirs) {
+        int i = 0;
+        ImGui::PushID(i);
+
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {0.0f, 0.0f});  
+
+        if (UI::Helpers::MenuRow(sortDir.displayName.c_str(), sortDir.displayName.c_str(), dpi, ctx.navigation.Contents().GetSortDir() == sortDir.sortDir, rowStyle, rowWidth)){
+            contents.SetSort(contents.GetSort(), sortDir.sortDir);
+        }
+        ImGui::PopStyleVar();
+        ImGui::PopID();
+
+        i++;
     }
 
+    ImGui::Separator();
+
+    ImGui::Dummy({0, 4*dpi});
+
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, {0.0f, 0.0f});  
+    bool hidden =  FileView::ShowHidden == true;
+    if (UI::Helpers::MenuRow("hidden items", "Hidden Items", dpi, hidden, rowStyle, rowWidth)){
+        hidden != hidden;
+    }
     ImGui::PopStyleVar();
-    
+
 }
 
-static void DrawViewMenuDropdown(AppContext& ctx){
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f * ctx.ui.dpiScale, 8.0f * ctx.ui.dpiScale));
-    if (CustomMenuItem(ICON_REG_DESKTOP_28 " Extra large icons", FileView::currentView == FileView::ViewMode::ExtraLarge)) FileView::currentView = FileView::ViewMode::ExtraLarge;
-    if (CustomMenuItem(ICON_REG_DESKTOP_20 " Large icons", FileView::currentView == FileView::ViewMode::Large)) FileView::currentView = FileView::ViewMode::Large;
-    if (CustomMenuItem(ICON_REG_DESKTOP_MAC " Medium icons", FileView::currentView == FileView::ViewMode::Medium)) FileView::currentView = FileView::ViewMode::Medium;
-    if (CustomMenuItem(ICON_REG_GRID " Small icons", FileView::currentView == FileView::ViewMode::Small)) FileView::currentView = FileView::ViewMode::Small;
-    if (CustomMenuItem(ICON_REG_LIST " List", FileView::currentView == FileView::ViewMode::List)) FileView::currentView = FileView::ViewMode::List;
-    if (CustomMenuItem(ICON_REG_DOCUMENT_BULLET_LIST " Details", FileView::currentView == FileView::ViewMode::Details)) FileView::currentView = FileView::ViewMode::Details;
-    if (CustomMenuItem(ICON_REG_APPS_LIST_DETAIL " Tiles", FileView::currentView == FileView::ViewMode::Tiles)) FileView::currentView = FileView::ViewMode::Tiles;
-    // if (CustomMenuItem(ICON_REG_APPS_LIST " Content", FileView::currentView == FileView::ViewMode::Content)) FileView::currentView = FileView::ViewMode::Content;
-    
+static void DrawViewMenuDropdown(AppContext& ctx) {
+    f32 dpi = ctx.ui.dpiScale;
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f * dpi, 8.0f * dpi));
+
+    // View Modes
+    struct ViewOption { const char* label; FileView::ViewMode mode; };
+    const ViewOption options[] = {
+        { ICON_REG_DESKTOP_28 " Extra large icons", FileView::ViewMode::ExtraLarge },
+        { ICON_REG_DESKTOP_20 " Large icons",       FileView::ViewMode::Large },
+        { ICON_REG_DESKTOP_MAC " Medium icons",     FileView::ViewMode::Medium },
+        { ICON_REG_GRID " Small icons",             FileView::ViewMode::Small },
+        { ICON_REG_LIST " List",                   FileView::ViewMode::List },
+        { ICON_REG_DOCUMENT_BULLET_LIST " Details", FileView::ViewMode::Details },
+        { ICON_REG_APPS_LIST_DETAIL " Tiles",       FileView::ViewMode::Tiles }
+    };
+
+    for (const auto& opt : options) {
+        if (CustomMenuItem(opt.label, FileView::currentView == opt.mode)) {
+            FileView::currentView = opt.mode;
+        }
+    }
+
     ImGui::Separator();
-    
+
     CustomMenuItem(ICON_REG_PANEL_LEFT " Details pane", false);
     CustomMenuItem(ICON_REG_PANEL_RIGHT " Preview pane", false);
-    
+
     ImGui::Separator();
-    
-    // The "Show >" sub-menu
+
     if (ImGui::BeginMenu("Show")) {
-        CustomMenuItem(ICON_REG_PANEL_LEFT " Navigation pane", true, false); // True by default based on your image
+        CustomMenuItem(ICON_REG_PANEL_LEFT " Navigation pane", true, false);
         ImGui::Separator();
         CustomMenuItem(ICON_REG_ARROW_BIDIRECTIONAL_UP_DOWN "Compact view", false, false);
         ImGui::Separator();
         CustomMenuItem(ICON_REG_CHECKMARK_SQUARE "Item check boxes", false, false);
-        
         CustomMenuItem(ICON_REG_DOCUMENT_ARROW_UP "File name extensions", false, false);
-        
         CustomMenuItem(ICON_REG_EYE "Hidden items", false, false);
 
         ImGui::EndMenu();
     }
 
-    
-
     ImGui::PopStyleVar();
-    
 }

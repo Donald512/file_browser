@@ -484,3 +484,33 @@ std::vector<ContextMenuItem> WShell::GetContextMenu(ComPtr<IContextMenu>& outAct
 
     return result;
 }
+
+std::vector<ContextMenuItem> WShell::GetFolderBackgroundMenu(PCIDLIST_ABSOLUTE folderPIDL, HWND hWnd, ID3D11Device* pDevice) {
+    std::vector<ContextMenuItem> result;
+    
+    // Get the IShellFolder interface for this folder
+    ComPtr<IShellFolder> psfFolder;
+    if (FAILED(SHCreateItemFromIDList(folderPIDL, IID_PPV_ARGS(&psfFolder)))) {
+        return result;
+    }
+    
+    // CreateViewObject gives us the background context menu
+    ComPtr<IContextMenu> pcm;
+    if (FAILED(psfFolder->CreateViewObject(hWnd, IID_PPV_ARGS(&pcm)))) {
+        return result;
+    }
+    
+    // Now populate and walk the menu 
+    HMENU hMenu = CreatePopupMenu();
+    if (!hMenu) return result;
+    
+    // CMF_EXPLORE is key for folder background menus
+    UINT flags = CMF_NORMAL | CMF_EXPLORE | CMF_CANRENAME;
+    if (SUCCEEDED(pcm->QueryContextMenu(hMenu, 0, 1, 0x7FFF, flags))) {
+        WalkMenu(pcm.Get(), hMenu, 1, 0x7FFF, result, pDevice);
+    }
+    
+    DestroyMenu(hMenu);
+    return result;
+}
+

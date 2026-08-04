@@ -38,13 +38,10 @@ bool NavigationController::NavigateTo(PCIDLIST_ABSOLUTE dest, Actions action){
     WShell::SortMode sortMode = contents.GetSort();
     WShell::SortDirection sortDir = contents.GetSortDir();
 
-    bool showHidden = contents.GetShowHidden();
-
     WShell::Pidl target = currentFolder.Clone();
-
     tasks->RunAsync(
         // runs on worker thread. touches only its own locals, never 'this', never anything another thread might be looking at
-        [target = std::move(target), sortMode, sortDir, showHidden]() mutable {
+        [target = std::move(target), sortMode, sortDir]() mutable {
             struct Result {
                 Navigation::Breadcrumbs breadcrumbs;
                 WShell::Directory contents;
@@ -52,7 +49,6 @@ bool NavigationController::NavigateTo(PCIDLIST_ABSOLUTE dest, Actions action){
             Result r;
             r.breadcrumbs.Generate(target.get());
             r.contents.Load(target.get());
-            r.contents.SetShowHidden(showHidden);
             r.contents.SetSort(sortMode, sortDir);
             return r;
         },
@@ -67,6 +63,8 @@ bool NavigationController::NavigateTo(PCIDLIST_ABSOLUTE dest, Actions action){
             loading = false;
         }
     );
+
+    // Update new menu
 
     return true;
 }

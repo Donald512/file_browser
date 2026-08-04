@@ -8,9 +8,10 @@
 using namespace WShell;
 
 
-std::vector<Item> WShell::EnumFolder(PCIDLIST_ABSOLUTE folder){
+std::vector<Item> WShell::EnumFolder(PCIDLIST_ABSOLUTE folder, u64* numHiddenItems){
     std::vector<Item> items;
-    IterateFolder(folder, SHCONTF_FOLDERS | SHCONTF_NONFOLDERS, [&](IShellFolder* pTarget, PITEMID_CHILD child) {
+
+    IterateFolder(folder, SHCONTF_FOLDERS | SHCONTF_NONFOLDERS | SHCONTF_INCLUDEHIDDEN, [&](IShellFolder* pTarget, PITEMID_CHILD child) {
         Item item;
         item.name = GetDisplayName(pTarget, child, SHGDN_NORMAL);
         item.pidl = CombineChild(folder, child);
@@ -21,6 +22,11 @@ std::vector<Item> WShell::EnumFolder(PCIDLIST_ABSOLUTE folder){
         pTarget->GetAttributesOf(1, (LPCITEMIDLIST*)&child, &item.attributes);
 
         bool isFolder = (item.attributes & SFGAO_FOLDER);
+        bool isHidden = (item.attributes & SFGAO_HIDDEN);
+
+        if (isHidden && numHiddenItems){
+            *numHiddenItems++;
+        }
 
         WIN32_FIND_DATAW wfd{};
         if (SUCCEEDED(SHGetDataFromIDListW(pTarget, child, SHGDFIL_FINDDATA, &wfd, sizeof(wfd)))){
@@ -69,8 +75,14 @@ std::vector<ItemLite>WShell::GetLiteItems(PCIDLIST_ABSOLUTE folder){
 bool WShell::Directory::Load(PCIDLIST_ABSOLUTE folder){
 
     if (!folder) return false;
-    items = WShell::EnumFolder(folder);
+    u64 numHidden;
+    items = WShell::EnumFolder(folder, &numHidden);
     access = WShell::GetFolderAccess(folder);
+
+    if (numHidden <= items.size()){
+        numHiddenItems = numHidden;
+    }
+
     selectedIndex = -1;
 
     ResortItems();
@@ -210,3 +222,27 @@ std::vector<NewMenuItem> WShell::EnumerateNewMenu(){
     return menuItems;
     
 }
+
+// std::vector<NewMenuItem> ExtractNewMenuItems(std::vector<ContextMenuItem>& backgroundMenu){
+//     std::vector<NewMenuItem> newMenu;
+//     // Find and cache the "New" submenu
+//     for (const auto& item : backgroundMenu) {
+//         if (!item.isSeparator && 
+//             (item.text.find("New") != std::string::npos || 
+//                 item.text.find("new") != std::string::npos)) {
+            
+//             // Move the submenu items into our cache
+//             newMenu.items = std::move(item.subItems);
+            
+//             // Store the IContextMenu for later invocation
+//             ComPtr<IShellFolder> psfFolder;
+//             if (SUCCEEDED(SHCreateItemFromIDList(navigation.CurrentFolder(), 
+//                                                     IID_PPV_ARGS(&psfFolder)))) {
+//                 psfFolder->CreateViewObject(hWnd, IID_PPV_ARGS(&newMenu.contextMenu));
+//             }
+            
+//             newMenu.isValid = true;
+//             break;
+//         }
+//     }
+// }

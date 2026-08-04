@@ -25,7 +25,7 @@ static int ShilSizeFromViewMode(ViewMode m) {
 static bool HandleInteraction(AppContext& ctx, int i, const WShell::Item& item, f32 w, f32 h, bool& openMenu, ImGuiSelectableFlags flags = ImGuiSelectableFlags_AllowDoubleClick, bool hover = true) {
     bool sel = ctx.navigation.Contents().Selected() == i;
     if (ImGui::Selectable("##file_selectedbox", sel, flags, {w, h})) ctx.navigation.Contents().SelectIndex(i);
-    if (hover && ImGui::IsItemHovered()) {
+    if (hover && UI::Helpers::IsItemHoveredWithDelay(HOVER_DELAY_NORMAL)){
         if (item.tooltipInfo.resolved) ImGui::SetTooltip("%s", item.tooltipInfo.value.c_str());
         else if (!item.tooltipRequestSent) WShell::Async::RequestTooltip(ctx, item, i);
     }
@@ -83,7 +83,10 @@ static void RenderGridBase(AppContext& ctx, f32 w, f32 h, F renderCell) {
                 for (int i = r * cols, end = (std::min)(i + cols, (int)dir.size()); i < end; i++) {
                     ImGui::TableNextColumn();
                     if (renderCell(i, dir[i], ImGui::GetContentRegionAvail().x)) {
-                        ImGui::EndTable(); ImGui::PopStyleVar(); ImGui::EndChild(); return;
+                        ImGui::EndTable(); 
+                        ImGui::PopStyleVar(); 
+                        ImGui::EndChild(); 
+                        return;
                     }
                 }
             }

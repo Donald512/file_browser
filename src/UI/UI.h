@@ -92,6 +92,7 @@ namespace FileView{
     
     inline ViewMode currentView = ViewMode::Medium; 
     inline bool showFileExtensions = true;
+    inline bool ShowHidden = false;
 
     void Render(AppContext& ctx);
 }
@@ -123,8 +124,27 @@ namespace UI::Helpers{
     bool IconButton(const char* iconLabel, f32 sizePx, bool disabled = false);
     bool MenuRow(const char* strId, const char* label, f32 dpi, bool selected, MenuRowStyle style, f32 width = 0.0f);
     bool RenderSectionHeader(const char* id, const char* label, f32 dpi, bool* isOpen, MenuRowStyle style, f32 width);
-    bool MenuRow(const char* strId, const char* label, ImTextureID icon, f32 dpi, MenuRowStyle style, f32 leftPush, f32 spaceBetweenIconAndText, f32 width);
+    bool MenuRow(const char* strId, const char* label, ImTextureID icon, f32 dpi, MenuRowStyle style, f32 leftPush, f32 spaceBetweenIconAndText, f32 width, bool selected = false);
+    bool IsItemHoveredWithDelay(f32 delaySeconds);
 
 }
 
 void RenderContextMenuStructure(AppContext& ctx, const std::vector<WShell::ContextMenuItem>& items);
+constexpr float HOVER_DELAY_SHORT  = 0.3f;
+constexpr float HOVER_DELAY_NORMAL = 1.0f;
+constexpr float HOVER_DELAY_LONG   = 2.5f;
+
+
+template <typename T>
+f32 GetLongestStringWidth(const std::vector<T>& items) {
+    f32 maxWidth = 0.0f;
+
+    for (const auto& item : items) {
+        f32 textWidth = ImGui::CalcTextSize(item.displayName.c_str()).x;
+        if (textWidth > maxWidth){
+            maxWidth = textWidth;
+        }
+    }
+
+    return maxWidth;
+}

@@ -63,18 +63,10 @@ namespace WShell{
                 }
             }
 
-            SortMode GetSort(){
-                return sortMode;
-            }
-            SortDirection GetSortDir(){
-                return sortDirection;
-            }
+            SortMode GetSort() const {return sortMode;}
+            SortDirection GetSortDir() const {return sortDirection;}
 
-            bool GetShowHidden() const { return showHidden; }
-
-            void SetShowHidden(bool show){
-                showHidden = show;
-            }
+            u64 HiddenNum() const {return numHiddenItems;}
 
             // tags this directory with the navigation generation it was loaded for, set when the background load's result is applied. Lets PatchItem() below reject a per-item asysnc result.
             void SetLoadGeneration(u64 g) {loadGeneration = g; }
@@ -82,6 +74,7 @@ namespace WShell{
 
             // forGeneration is whatever Generation() returned at the moment the request was fired, if the directory has been replaced by  a newer navigation, the generations wont match, and result is dropped without scanning items for the matching pidl 
             // never call this anywhere except a RunAsync onDone callback, it mutates item directly and assumes its on the main thread
+
 
             template <typename TApply>
             bool PatchItem(PCIDLIST_ABSOLUTE targetPidl, u64 targetHash, u64 hintIndex, u64 forGeneration, TApply&& apply){
@@ -93,18 +86,19 @@ namespace WShell{
 
             std::vector<Item> items;
 
+            u64 numHiddenItems = 0;
+
             FolderAccess access = FolderAccess::NoCreate;
 
             SortMode sortMode = SortMode::Name;
             SortDirection sortDirection = SortDirection::Ascending;
             void ResortItems();
 
-            bool showHidden = false;
             u64 loadGeneration = 0;
     };
     
     // NOTE: Typeable means it includes the names of virtual folders
-    std::vector<Item> EnumFolder(PCIDLIST_ABSOLUTE folder);
+    std::vector<Item> EnumFolder(PCIDLIST_ABSOLUTE folder, u64* numHiddenItems);
     std::vector<ItemLite> GetLiteItems(PCIDLIST_ABSOLUTE folder);
     bool ExecuteFile(PCIDLIST_ABSOLUTE file);
     Pidl TypeablePathToPidl(const wchar_t* widePath);
@@ -118,6 +112,7 @@ namespace WShell{
     
     std::vector<ContextMenuItem> GetContextMenu(ComPtr<IContextMenu>& outActiveMenu,  PCIDLIST_ABSOLUTE pidl, ID3D11Device* pDevice);
     void ExecuteContextMenuCommand(ComPtr<IContextMenu> menu, UINT id);
+    std::vector<ContextMenuItem> GetFolderBackgroundMenu(PCIDLIST_ABSOLUTE folderPIDL, HWND hWnd, ID3D11Device* pDevice);
 
     // Resolves a well-known folder (This PC, Desktop, Recycle Bin, ...) to a Pidl.
     Pidl GetKnownFolderPidl(REFKNOWNFOLDERID folderID);

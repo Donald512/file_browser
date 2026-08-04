@@ -9,10 +9,10 @@ struct TaskSystem;
 namespace Navigation{
 
     enum class Actions {
-    Normal,     
-    Back,   
-    Forward,
-    Refresh  
+        Normal,     
+        Back,   
+        Forward,
+        Refresh  
     };
 
     struct Breadcrumb{
@@ -37,7 +37,7 @@ namespace Navigation{
             bool Push(PCIDLIST_ABSOLUTE folder);
             bool CanGoBack() const { return currentIndex > 0;}
             bool CanGoForward() const { return currentIndex + 1 < (i64) visited.size(); }
-            PCIDLIST_ABSOLUTE Current() const { return visited[currentIndex].get();} 
+            PCIDLIST_ABSOLUTE Current() const { return visited[currentIndex].get(); } 
             bool Back(){
                 if (!CanGoBack()) return false;
                 currentIndex--;
@@ -61,6 +61,7 @@ namespace Navigation{
 
             // True while a navigation's breadcrumbs/contents are being fetched in the background. CurrentFolder()/Breadcrumbs/Contents() still return whatever the PREVIOUS navigation left behind until the new data arrives.
             // td wire into UI (a spinner / dimmed view). but later later
+
             bool IsLoading() const { return loading;}
 
 

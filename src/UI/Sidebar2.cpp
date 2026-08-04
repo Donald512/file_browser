@@ -72,12 +72,14 @@ namespace Sidebar {
                     }
                     ImGui::PopID();
 
-                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)){
+                    if (UI::Helpers::IsItemHoveredWithDelay(HOVER_DELAY_NORMAL)){
                         if (item.tooltipInfo.resolved){
-                            ImGui::SetTooltip("%s", item.tooltipInfo.value.c_str());
+                            if (!item.tooltipInfo.value.empty()){
+                                ImGui::SetTooltip("%s", item.tooltipInfo.value.c_str());
+                            }
                         }
                         else if (!item.tooltipRequestSent){
-                            WShell::Async::RequestTooltip(ctx, item, i);
+                            WShell::Async::RequestTooltip(ctx, *sec.items, item, i);
                         }
                     }
                     
