@@ -1,2 +1,0 @@
-Store selected items in a set in Navigation::CurrentState
-Holds Current Folders

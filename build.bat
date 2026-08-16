@@ -3,7 +3,7 @@
 
 :: 1. Check if file name provided
 if "%~1"=="" (
-    set "source_file=src\Core\main.cpp"
+    set "source_file=src\main.cpp"
     set "build_dir=build"
 ) else (
     set "source_file=%1"
@@ -22,7 +22,7 @@ echo Checking Dependencies in %build_dir%
 :: Compile ImGui if the object files don't exist 
 if not exist %build_dir%\imgui.obj (
     echo [1/2] Compiling ImGui core libraries...
-    cl /nologo /c /Z7 /std:c++17 /I"include" /I"%imgui_root%" /I"%imgui_root%\backends" /I"%font_stuff%" ^
+    cl /nologo /c /Z7 /std:c++20 /I"include" /I"%imgui_root%" /I"%imgui_root%\backends" /I"%font_stuff%" ^
        "%imgui_root%\imgui.cpp" ^
        "%imgui_root%\imgui_widgets.cpp" ^
        "%imgui_root%\imgui_draw.cpp" ^
@@ -34,44 +34,24 @@ if not exist %build_dir%\imgui.obj (
 
 :: Compile project sources and link with cached ImGui .obj files
 echo [2/2] Compiling project files and linking...
-cl /nologo /Z7 /W4 /MP /std:c++17 ^
+cl /nologo /Z7 /W4 /MP /std:c++20 ^
    /I"include" ^
    /I"src" ^
-   /I"src\Core" ^
-   /I"src\Icons" ^
+   /I"src\Global\Icons" ^
    /I"src\Navigation" ^
+   /I"src\Setup" ^
    /I"src\Shell" ^
-   /I"src\Str" ^
-   /I"src\Theme" ^
-   /I"src\Threading" ^
+   /I"src\Types" ^
    /I"src\UI" ^
+   /I"src\WindowManager" ^
+   /I"src\WindowManager\Navigation" ^
    /I"%imgui_root%" ^
    /I"%imgui_root%\backends" ^
+   /I"%imgui_root%\misc" ^
    /I"%font_stuff%" ^
    "%source_file%" ^
-   "src\Core\imgui_boilerplate.cpp" ^
-   "src\Core\Core.cpp" ^
-   "src\Icons\icons.cpp" ^
-   "src\Navigation\Navigation.cpp" ^
-   "src\Shell\ShellActions.cpp" ^
-   "src\Shell\ShellAsync.cpp" ^
-   "src\Shell\ShellEnum.cpp" ^
-   "src\Shell\ShellMetadata.cpp" ^
-   "src\Shell\ShellPidl.cpp" ^
-   "src\Str\Str.cpp" ^
-   "src\Threading\Threading.cpp" ^
-   "src\UI\AddressBar.cpp" ^
-   "src\UI\CommandBar.cpp" ^
-   "src\UI\CtxMenu.cpp" ^
-   "src\UI\FileView.cpp" ^
-   "src\UI\Helpers.cpp" ^
-   "src\UI\NavBar.cpp" ^
-   "src\UI\Sidebar2.cpp" ^
-   "src\UI\ToolBar.cpp" ^
-   "src\UI\TopBar.cpp" ^
-   "src\UI\UI.cpp" ^
-   "src\Theme\ImGuiTheme.cpp"^
-   "src\Theme\Widgets.cpp"^
+   "src\Setup\imgui_fonts.cpp" ^
+   "src\UI\Theme.cpp" ^
    "%build_dir%\imgui.obj" ^
    "%build_dir%\imgui_widgets.obj" ^
    "%build_dir%\imgui_draw.obj" ^

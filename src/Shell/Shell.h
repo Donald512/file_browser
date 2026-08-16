@@ -1,128 +1,205 @@
 #pragma once
-
-#include "Types.h"
-#include <utility>
-#include <ShlObj.h>
-// #include "icons.h"
-// #include "Str.h"
-
-#include "ShellPidl.h"
-#include "ShellItems.h"
-
-#pragma comment(lib, "Shell32.lib") 
-#pragma comment(lib, "Shlwapi.lib") 
-#pragma comment(lib, "Advapi32.lib")
+#include "Str.h"
+#include "Shlwapi.h"
+#include "ShlObj.h"
+#include <optional>
+#include "ComUtils.h"
+#include "wrl/client.h"
+#include "KnownSpecialFolders.h"
 
 
 namespace WShell{
 
-    // A stable identity for a pidl based on its content, not its address. Pure in-memory hashing - ILGetSize() walks the linked SHITEMID structure summing  sizes, no shell/COM/IO calls involved - so this is cheap enough to call every frame and safe to call on any thread, Used as a key in std::unordered_map 
-    u64 HashPidl(PCIDLIST_ABSOLUTE pidl);
-
-    // Searches 'items' for the one whose pidl matches 'pidl' by content and if found, calls apply(item)- otherwise, does nothing. 
-    // td check if looping through items is neccessary
-    // NOTE: This exists because of a side effect of asynchronous programming, if fileview pushes a request to get the iconKey, but someone clicks sort and the ordering changes, it gives the wrong item a wrong Pidl
-    // but using ILIsEqual to compare 5000 items everytime we need the iconIndex is a slow API call, so compare by a hash they each hold 
-    template <typename TCollection, typename  TApply>
-    bool PatchByHash(TCollection& items, PCIDLIST_ABSOLUTE pidl, u64 hash, size_t hintIndex, TApply&& apply){
-        // O(1) try
-        // if hintIndex is 0, doesnt matter, just 1 check, could mean a valid index or just random 
-        if (hintIndex < items.size() && items[hintIndex].hash == hash){
-            apply(items[hintIndex]);
-            return true;
+    using Microsoft::WRL::ComPtr;
+    // Extracts a child's display name cleanly.
+    inline std::string GetDisplayName(IShellFolder* folder, PITEMID_CHILD child, SHGDNF flags) {
+        STRRET strName;
+        if (SUCCEEDED(folder->GetDisplayNameOf(child, flags, &strName))) {
+            wchar_t nameBuffer[MAX_PATH] = {};
+            StrRetToBufW(&strName, child, nameBuffer, MAX_PATH);
+            return Str::WideToString(nameBuffer);
         }
-        // Fallback to O(N) 
-        for (auto& item: items){
-            if (item.hash == hash){
-                // for the quintillionth chance of a hash collision
-                if (ILIsEqual(item.pidl.get(), pidl)){
-                    apply(item);
-                    return true;
+        return "";
+    }
+    
+    inline std::string GetDisplayName(PCIDLIST_ABSOLUTE pidl ) {
+        wchar_t* niceName = nullptr;
+        if (SUCCEEDED(SHGetNameFromIDList(pidl, SIGDN_NORMALDISPLAY, &niceName))){
+            std::string name = Str::WideToString(niceName);
+            CoTaskMemFree(niceName);
+            return name;
+        }
+        return "";
+    }
+    
+        
+    // Helper: Safely fetches a Shell name and automatically handles COM memory & UTF-8 conversion
+    inline std::string GetShellName(PCIDLIST_ABSOLUTE pidl, SIGDN sigdn) {
+        PWSTR pRawPath = nullptr;
+        if (SUCCEEDED(SHGetNameFromIDList(pidl, sigdn, &pRawPath)) && pRawPath) {
+            UniqueCoTaskStr pathGuard(pRawPath); // RAII: Free memory on exit or exception
+            return Str::WideToString(pathGuard.get());
+        }
+        return std::string{};
+    }
+
+    inline std::string GetFullPath(PCIDLIST_ABSOLUTE pidl){ 
+        if (!pidl || pidl->mkid.cb == 0) {
+            // If it's the root Desktop, just return "Desktop"
+            return "Desktop";
+        }
+
+        const SIGDN fallbacksInOrder[] = {SIGDN_FILESYSPATH, SIGDN_PARENTRELATIVEFORADDRESSBAR, SIGDN_NORMALDISPLAY, SIGDN_DESKTOPABSOLUTEPARSING};
+
+        
+        for (auto sigdn : fallbacksInOrder){
+            const std::string path = GetShellName(pidl, sigdn);
+            if (!path.empty() && !((path.size() >= 2) && path[0] == ':' && path[1] == ':')){
+                return path;
+            }
+        }
+        return "";
+    }
+
+    
+    Pidl GetFullPath(const wchar_t* widePath){
+
+    WShell::Pidl pidl(nullptr);
+        DWORD attrs = 0;
+
+        // Try as a standard path or GUID Parsing Name (e.g. "C:\Windows" or "::{GUID}")
+        if (SUCCEEDED(::SHParseDisplayName(widePath, nullptr, pidl.GetAddressOf(), 0, &attrs))){
+            return pidl;
+        }
+
+        // if it failed, try searching the Desktop. (Catches "This PC", "Recycle Bin", "Linux", custom virtual folders)
+        // TRIAL 2:
+        ComPtr<IShellFolder> pDesktop;
+        if (SUCCEEDED(::SHGetDesktopFolder(&pDesktop))) {
+            ComPtr<IEnumIDList> pEnum;
+            if (SUCCEEDED(pDesktop->EnumObjects(nullptr, SHCONTF_FOLDERS | SHCONTF_NONFOLDERS, &pEnum))) {
+                LPITEMIDLIST childPidl = nullptr;
+                ULONG fetched = 0;
+                
+                while (pEnum->Next(1, &childPidl, &fetched) == S_OK) {
+                    STRRET strName;
+                    if (SUCCEEDED(pDesktop->GetDisplayNameOf(childPidl, SHGDN_NORMAL, &strName))) {
+                        wchar_t nameBuf[MAX_PATH];
+                        StrRetToBufW(&strName, childPidl, nameBuf, MAX_PATH);
+
+                        if (_wcsicmp(nameBuf, widePath) == 0) {
+                            pidl =WShell::Pidl(ILClone(childPidl)); 
+                            CoTaskMemFree(childPidl); 
+                            break;
+                        }
+                    }
+                    CoTaskMemFree(childPidl);
                 }
             }
+            if (pidl) return pidl; 
+        }
+
+        // TRIAL 3:
+        ComPtr<IKnownFolderManager> pManager;
+        if (SUCCEEDED(CoCreateInstance(CLSID_KnownFolderManager, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pManager)))) {
+            UINT count = 0;
+            KNOWNFOLDERID* pIds = nullptr;
+            
+            if (SUCCEEDED(pManager->GetFolderIds(&pIds, &count))) {
+                for (UINT i = 0; i < count; i++) {  
+                    ComPtr<IKnownFolder> pFolder;
+                    if (SUCCEEDED(pManager->GetFolder(pIds[i], &pFolder))) {
+                        ComPtr<IShellItem> pItem;
+                        if (SUCCEEDED(pFolder->GetShellItem(0, IID_PPV_ARGS(&pItem)))) {
+                            LPWSTR pName = nullptr;
+                            if (SUCCEEDED(pItem->GetDisplayName(SIGDN_NORMALDISPLAY, &pName))) {
+                                if (_wcsicmp(pName, widePath) == 0) {
+                                    SHGetKnownFolderIDList(pIds[i], 0, NULL, pidl.GetAddressOf());
+                                }
+                                CoTaskMemFree(pName);
+                            }
+                        }
+                    }
+                    if (pidl) break;
+                }
+                CoTaskMemFree(pIds);
+            }
+            if (pidl) return pidl; 
+        }
+        return pidl;
+
+    }
+
+    
+    inline bool PidlHasSubFolders(PCIDLIST_ABSOLUTE folder, bool accurate = false){
+        if (!folder) return false;
+        if (ILIsEqual(folder, SpecialFolders::pidlHome)) return false;
+
+        bool hasSubFolders = false;
+        ComPtr<IShellItem> pParentItem;
+        
+        if (FAILED(SHCreateItemFromIDList(folder, IID_PPV_ARGS(&pParentItem)))) return hasSubFolders;
+        
+        // check if folder, only folders can have subfolders
+        SFGAOF attr = 0;
+        if (accurate){
+            if (FAILED(pParentItem->GetAttributes(SFGAO_FOLDER, &attr)) || !(attr & SFGAO_FOLDER)) return hasSubFolders;
+            ComPtr<IEnumShellItems> pEnum;
+            if (FAILED(pParentItem->BindToHandler(nullptr, BHID_EnumItems, IID_PPV_ARGS(&pEnum)))) return hasSubFolders;
+            
+            ComPtr<IShellItem> pChild;
+            ULONG fetched = 0; 
+        
+            // exit once a folder is found
+            while (pEnum->Next(1, &pChild, &fetched) == S_OK && fetched == 1){
+                SFGAOF childAttr = 0;
+                if (SUCCEEDED(pChild->GetAttributes(SFGAO_FOLDER, &childAttr))){
+                    if (childAttr & SFGAO_FOLDER){
+                        hasSubFolders = true;
+                        break;
+                    }
+                }
+            }
+            return hasSubFolders;
+        }
+        if (SUCCEEDED(pParentItem->GetAttributes(SFGAO_HASSUBFOLDER, &attr))) {
+            return (attr & SFGAO_HASSUBFOLDER) != 0;
         }
         return false;
     }
 
-    class Directory{
-        public:
-            bool Load(PCIDLIST_ABSOLUTE folder);
+    inline u32 GetIconIndex(PCIDLIST_ABSOLUTE pidl, const wchar_t* pszPath, DWORD dwFileAttributes, UINT uFlags){
+        // if (!pidl) return 0;
 
-            const std::vector<Item>& Items() const { return items; }
-            FolderAccess Access() const { return access; }
-            void SelectIndex(i64 i) {
-                if (i < (i64)items.size()) selectedIndex = i;
-            };
-            u64 Selected() const {return (u64) selectedIndex; }
+        // memoize, map<Pidl | wchar_t*, bool>
+        SHFILEINFOW sfi = {};
 
-            void SetSort(SortMode mode, SortDirection dir){
-                if (sortMode != mode || dir != sortDirection){    
-                    sortMode = mode;
-                    sortDirection = dir;
-                    ResortItems();  
-                }
-            }
+        if (pidl){
+            SHGetFileInfoW((LPCWSTR) pidl, dwFileAttributes, &sfi, sizeof(sfi), uFlags);
+        }
+        else if (pszPath){
+            SHGetFileInfoW(pszPath, dwFileAttributes, &sfi, sizeof(sfi), uFlags);
+        }
+        // sfi.iIcon now contains the unique icon index
+        return sfi.iIcon; // even if it fails, it returns 0
+    }
 
-            SortMode GetSort() const {return sortMode;}
-            SortDirection GetSortDir() const {return sortDirection;}
+    inline bool ExecuteFile(PCIDLIST_ABSOLUTE file){
+        if (!file) return false;
 
-            u64 HiddenNum() const {return numHiddenItems;}
+        SHELLEXECUTEINFOW sei = {};
+        sei.cbSize = sizeof(sei);
+        sei.fMask = SEE_MASK_IDLIST | SEE_MASK_ASYNCOK;
+        sei.lpIDList = const_cast<PIDLIST_ABSOLUTE>(file);
+        sei.nShow = SW_SHOWNORMAL;
 
-            // tags this directory with the navigation generation it was loaded for, set when the background load's result is applied. Lets PatchItem() below reject a per-item asysnc result.
-            void SetLoadGeneration(u64 g) {loadGeneration = g; }
-            u64 Generation() const {return loadGeneration;}
-
-            // forGeneration is whatever Generation() returned at the moment the request was fired, if the directory has been replaced by  a newer navigation, the generations wont match, and result is dropped without scanning items for the matching pidl 
-            // never call this anywhere except a RunAsync onDone callback, it mutates item directly and assumes its on the main thread
-
-
-            template <typename TApply>
-            bool PatchItem(PCIDLIST_ABSOLUTE targetPidl, u64 targetHash, u64 hintIndex, u64 forGeneration, TApply&& apply){
-                if (forGeneration != loadGeneration) return false;
-                return PatchByHash(items, targetPidl, targetHash, hintIndex, std::forward<TApply>(apply));
-            }
-        private:
-            i64 selectedIndex = -1;
-
-            std::vector<Item> items;
-
-            u64 numHiddenItems = 0;
-
-            FolderAccess access = FolderAccess::NoCreate;
-
-            SortMode sortMode = SortMode::Name;
-            SortDirection sortDirection = SortDirection::Ascending;
-            void ResortItems();
-
-            u64 loadGeneration = 0;
-    };
-    
-    // NOTE: Typeable means it includes the names of virtual folders
-    std::vector<Item> EnumFolder(PCIDLIST_ABSOLUTE folder, u64* numHiddenItems);
-    std::vector<ItemLite> GetLiteItems(PCIDLIST_ABSOLUTE folder);
-    bool ExecuteFile(PCIDLIST_ABSOLUTE file);
-    Pidl TypeablePathToPidl(const wchar_t* widePath);
-    std::string PidlToTypeablePath(PCIDLIST_ABSOLUTE pidl);
-    FolderAccess GetFolderAccess(PCIDLIST_ABSOLUTE folder);
-    std::vector<NewMenuItem> EnumerateNewMenu();
-    std::vector<Item> GetOneDriveAccounts();
-    std::vector<Item> GetSidebarItems(int category);
-    void FileTime(const FILETIME& ft, char* outBuf, int outBufSize);
-    void Size(u64 sizeInBytes, char* outBuf, int outBufSize);
-    
-    std::vector<ContextMenuItem> GetContextMenu(ComPtr<IContextMenu>& outActiveMenu,  PCIDLIST_ABSOLUTE pidl, ID3D11Device* pDevice);
-    void ExecuteContextMenuCommand(ComPtr<IContextMenu> menu, UINT id);
-    std::vector<ContextMenuItem> GetFolderBackgroundMenu(PCIDLIST_ABSOLUTE folderPIDL, HWND hWnd, ID3D11Device* pDevice);
-
-    // Resolves a well-known folder (This PC, Desktop, Recycle Bin, ...) to a Pidl.
-    Pidl GetKnownFolderPidl(REFKNOWNFOLDERID folderID);
-    Pidl GetKnownFolderPidl(const wchar_t* shellParsingGuid);
+        if (!::ShellExecuteExW(&sei)){
+            // todo handle error, eg Access Denied, or No app associated
+            DWORD err = GetLastError();
+            printf("Failed to launch item. Error: %lu\n", err);
+            return false;
+        }
+        return true;
+    }
 
 }
-
-// Sidebar is sectioned in 3 parts, 
-// 1 - SHCONTF_FOLDERS | SHCONTF_NAVIGATION_ENUM
-// 2 - Pinned, Enumerate Home Quick access shell:::{679F85CB-0220-4080-B29B-5540CC05AAB6} 
-//       EnumObjects(SHCONTF_FOLDERS)
-// 3 - Will make it enumerate This PC, then Add Recycle Bin, and Control Panel
-
