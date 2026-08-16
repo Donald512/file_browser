@@ -25,11 +25,11 @@ int main (void){
     App app{};
 
     app.window.NewTab(SpecialFolders::defaultStartupFolder);
-    // app.window.NewTab(SpecialFolders::pidlHome);
-    // app.window.NewTab(SpecialFolders::pidlQuickAccess);
-    // app.window.NewTab(SpecialFolders::pidlDownloads);
-    // app.window.NewTab(SpecialFolders::pidlDesktop);
-    // app.window.NewTab(SpecialFolders::pidlRecycleBin);
+    app.window.NewTab(SpecialFolders::pidlHome);
+    app.window.NewTab(SpecialFolders::pidlQuickAccess);
+    app.window.NewTab(SpecialFolders::pidlDownloads);
+    app.window.NewTab(SpecialFolders::pidlDesktop);
+    app.window.NewTab(SpecialFolders::pidlRecycleBin);
     app.window.NewTab();
 
     app.sidebar.Init();

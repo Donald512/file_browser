@@ -8,6 +8,38 @@
 #include <string>
 #include "IconManager.h"
 
+#include <wrl/client.h>
+using Microsoft::WRL::ComPtr;
+
+
+struct DirParent{
+    ComPtr<IShellFolder> shellFolder;
+    WShell::Pidl pidl;  // Absolute pidl, like a full path
+    std::string name;
+    u64 hash = 0;
+};
+
+struct DirChild{
+    WShell::Pidl pidl;    // 8
+    std::string name; // 24
+    u64 size = 0;
+    FILETIME lastWriteTime{}; // 8
+    SFGAOF attributes = 0;  // 4
+    // std::string typeName{};  // Gonna change to a u64, since many of them have similar typenames
+    mutable bool hashComputed = false;
+    u64 Hash(PCIDLIST_ABSOLUTE parent)const {
+        if (hashComputed) return hash;
+        hashComputed = true;
+        PIDLIST_ABSOLUTE fullPidl = GetFullPidl(parent, pidl.get());
+        hash = HashPidl(fullPidl);
+        ILFree(fullPidl);
+        
+        return hash;
+    }
+    private:
+        mutable u64 hash = 0;   // store Hash -  ID used to match item, shared_ptr/unique_ptr is slow (cache misses) and using ptr is risky because things can be ordered 
+
+};
 
 struct DirItem{
     std::string name; // 24
@@ -18,6 +50,10 @@ struct DirItem{
     u64 size = 0;
     std::string typeName{};  // Gonna change to a u64, since many of them have similar typenames
 };
+
+
+// Actually first goal is making the current Code a hybrid, switch to Pidl when virtual, before indexing folders recursively
+// do i need 8 arenas? for each DirList Item
 
 /*
 // Convert the std::vector to Arena
@@ -89,10 +125,4 @@ User clicks Parent at C:
     Since thats physical root, try getting C:'s Pidl, and do ILParent
     See This PC, user clicks parent again, go to desktop
     and in enumerating everything, we see nothing is physical, so we dont get any information from our backend or enumerate
-            
-        
-
-
-
-    
 */

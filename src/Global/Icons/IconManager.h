@@ -34,6 +34,20 @@ class IconManager{
         // guess we can store it if its an invalid result so we dont keep recomputing with bad parameters
         return iconIndex;
     }
+
+    u32 GetIconIndex(IShellFolder* pParent, PCITEMID_CHILD pChild, u64 hash) const {
+        auto it = IconIndexesOfPidls.find(hash);
+        if (it != IconIndexesOfPidls.end()){
+            return it->second;
+        }
+        
+        int iconIndex = -1;
+        // Asks the parent shell folder to map its child PIDL 
+        // to the system image list index
+        SHMapPIDLToSystemImageListIndex(pParent, pChild, &iconIndex);
+        IconIndexesOfPidls.emplace(hash, iconIndex);
+        return iconIndex;
+    }
     private:
         mutable std::unordered_map<u64, u32> IconIndexesOfPidls;
 };

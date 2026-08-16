@@ -7,8 +7,11 @@
 #include "Shell.h"
 #include "Item.h"
 
+#include <iostream>
+
 #include <wrl/client.h>
 using Microsoft::WRL::ComPtr;
+
 
 
 /* todo
@@ -76,6 +79,58 @@ void IterateFolder(PCIDLIST_ABSOLUTE folder, DWORD shcontfFlags, Func&& callback
     }
 }
 
+template <typename Func>
+void IterateFolder(IShellFolder* pFolder, DWORD shcontfFlags, Func&& callback) {
+    if (!pFolder) return;
+
+    ComPtr<IEnumIDList> enumerator;
+    if (FAILED(pFolder->EnumObjects(nullptr, shcontfFlags, &enumerator))) return;
+
+    PITEMID_CHILD childPidl = nullptr;
+    ULONG fetched = 0;
+
+    while (enumerator->Next(1, &childPidl, &fetched) == S_OK) {
+        callback(pFolder, childPidl);
+        CoTaskMemFree(childPidl);   
+    }
+}
+
+
+
+// std::vector<DirItem> EnumFolder(const std::wstring dirPath){
+//     std::wstring searchPath = dirPath; 
+//     if (searchPath.back() != L'\\' && searchPath.back() != L'/') {  // check if it already contains a backslash e.g: C:/ or C:\ before adding /
+//         searchPath += L"\\";
+//     }
+    
+//     searchPath += L"*";     // Build search path with wildcard (e.g., L"C:\\Windows\\*")
+//     WIN32_FIND_DATAW findData{};
+
+//     HANDLE hFind = FindFirstFileExW( searchPath.c_str(), FindExInfoBasic, &findData, FindExSearchNameMatch, NULL, FIND_FIRST_EX_LARGE_FETCH);
+
+//     if (hFind == INVALID_HANDLE_VALUE){
+//         std::cout << "Failed to open directory. Error: " << GetLastError() << std::endl; 
+//     }
+
+//     std::vector<DirItem> result;
+//     do {
+//         // skip dummy "." and ".." parent dir entries
+//         if (wcscmp(findData.cFileName, L".") == 0 || wcscmp(findData.cFileName, L"..") == 0){
+//             continue;
+//         }
+
+//         DirItem item;
+//         item.attributes = findData.dwFileAttributes;
+//         item.name = Str::WideToString(findData.cFileName);
+//         item.size = ((u64)(findData.nFileSizeHigh << 32) | findData.nFileSizeLow);
+//         item.lastWriteTime = findData.ftLastWriteTime; // sus
+
+//         // no typename, i was doing it wrong all along
+//     } while (FindNextFileW(hFind, &findData));
+
+//     FindClose(hFind);
+// }
+
 std::vector<DirItem> EnumFolder(PCIDLIST_ABSOLUTE folder, DirItem* parentItem = nullptr){
     std::vector<DirItem> items;
 
@@ -106,7 +161,7 @@ std::vector<DirItem> EnumFolder(PCIDLIST_ABSOLUTE folder, DirItem* parentItem = 
         [&](IShellFolder* pTarget, PITEMID_CHILD child) {
             DirItem item;
             item.name = WShell::GetDisplayName(pTarget, child, SHGDN_NORMAL);
-            item.pidl = WShell::Pidl(ILCombine(safeFolder, child)); // <-- use safeFolder, not folder
+            item.pidl = WShell::Pidl(ILCombine(safeFolder, child)); // <-- use safeFolder, not folder   // ! delete this, lazy now
             item.hash = HashPidl(item.pidl.get());
 
             item.attributes = SFGAO_FOLDER | SFGAO_CANRENAME | SFGAO_CANDELETE;
@@ -128,6 +183,55 @@ std::vector<DirItem> EnumFolder(PCIDLIST_ABSOLUTE folder, DirItem* parentItem = 
 
     return items;
 }
+
+DirParent GetDirParent(PCIDLIST_ABSOLUTE folder){
+    DirParent parent;
+    parent.pidl = WShell::Pidl(ILClone(folder));
+    parent.hash = HashPidl(parent.pidl.get());
+    parent.name = WShell::GetDisplayName(parent.pidl.get());
+
+    if (ILIsEmpty(folder)){ // if is desktop Root
+        SHGetDesktopFolder(&parent.shellFolder);
+    }
+    else {
+        HRESULT hr = SHBindToObject(nullptr, folder, nullptr, IID_PPV_ARGS(&parent.shellFolder));
+
+        if (FAILED(hr)) {
+            ComPtr<IShellFolder> desktop;
+            if (SUCCEEDED(SHGetDesktopFolder(&desktop))) {
+                desktop->BindToObject(folder, nullptr, IID_PPV_ARGS(&parent.shellFolder));
+            }
+        }
+    }
+    return parent;
+}
+
+std::vector<DirChild> GetDirChildren(IShellFolder* parentShellFolder){
+    std::vector<DirChild> children{};
+    if (!parentShellFolder) return children;
+
+    constexpr DWORD flags = SHCONTF_FOLDERS | SHCONTF_NONFOLDERS | SHCONTF_INCLUDEHIDDEN;
+
+    IterateFolder(parentShellFolder, flags, [&](IShellFolder* pTarget, PITEMID_CHILD pChild){
+        DirChild child;
+
+        child.pidl = WShell::Pidl(ILCloneChild(pChild));
+        child.name = WShell::GetDisplayName(pTarget, pChild, SHGDN_NORMAL);
+
+        child.attributes = SFGAO_FOLDER | SFGAO_CANRENAME | SFGAO_CANDELETE;
+        pTarget->GetAttributesOf(1, (LPCITEMIDLIST*)&pChild, &child.attributes);
+
+        WIN32_FIND_DATAW wfd{};
+        if (SUCCEEDED(SHGetDataFromIDListW(pTarget, pChild, SHGDFIL_FINDDATA, &wfd, sizeof(wfd)))){
+            child.size = (static_cast<u64>(wfd.nFileSizeHigh) << 32) | wfd.nFileSizeLow;
+            child.lastWriteTime = wfd.ftLastWriteTime;
+        }
+        children.push_back(std::move(child)); 
+    });
+
+    return children;
+}
+
 
 
 std::vector<DirItem> GetOneDriveAccounts(){

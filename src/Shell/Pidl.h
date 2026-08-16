@@ -66,3 +66,8 @@ u64 HashPidl(PCIDLIST_ABSOLUTE pidl){
     }
     return hash;
 }
+
+// Should be non const so it can be freed
+PIDLIST_ABSOLUTE GetFullPidl(PCIDLIST_ABSOLUTE parent, PCITEMID_CHILD child){
+    return ILCombine(parent, child);
+}

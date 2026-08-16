@@ -5,6 +5,7 @@
 #include "Item.h"
 #include <unordered_set>
 #include "Enum.h"
+#include "Directory.h"
 
 
 template <typename T>
@@ -46,7 +47,7 @@ class Tab{
         bool CanGoBack() const {return history.CanGoBack();}
         bool CanGoForward() const {return history.CanGoForward();}
         bool CanGoParent() const {
-            if (!currentFolder.pidl || ILIsEmpty(currentFolder.pidl.get())) return false;
+            if (!directory.parent.pidl || ILIsEmpty(directory.parent.pidl.get())) return false;
             return true;
         }
         bool GoBack(){
@@ -79,18 +80,17 @@ class Tab{
                 }
             }
         }
-        DirItem currentFolder;
-        
+
         Breadcrumbs breadcrumbs{};
         History history{};
-        std::vector<DirItem> dirEntry{}; 
+        Directory directory{};
         std::unordered_set<u64> selectedItems{};
         
         FileViewState viewState;
+        
     private:
         // WShell::Pidl currentFolder; // Prolly the same as Breadcrumbs.crumbs.back()
 
-        void UpdateDirEntry();        
 };
 
 // Maybe Window manager handles multiple windows, or maybe its not neccessary
@@ -127,17 +127,16 @@ bool Tab::GoTo(PCIDLIST_ABSOLUTE dest, Actions action){
     // preventing currentFolder from being null, becasue it will crash ILIsEqual
 
     // skip check for Actions::Refresh so that it always navigates
-    if (action != Actions::Refresh && currentFolder.pidl && ILIsEqual(dest, currentFolder.pidl)){
+    if (action != Actions::Refresh && directory.parent.pidl && ILIsEqual(dest, directory.parent.pidl)){
         return false;
     }
-    currentFolder.pidl = WShell::Pidl(ILClone(dest));
-    
-    if (action == Actions::Normal) history.Push(currentFolder.pidl.get()); 
-    breadcrumbs = GenerateBreadcrumbs(currentFolder.pidl.get());
-    selectedItems.clear();
-    UpdateDirEntry();
+    directory.UpdateParent(dest);
 
-    // Update new menu
+    if (action == Actions::Normal) history.Push(directory.parent.pidl.get()); 
+    breadcrumbs = GenerateBreadcrumbs(directory.parent.pidl.get());
+    selectedItems.clear();
+
+    directory.updatedChildren = false;
 
     return true;
 }
@@ -146,7 +145,7 @@ bool Tab::GoParent(){
     if (!CanGoParent()){
         return false;
     }
-    PIDLIST_ABSOLUTE parentPidl = ILClone(currentFolder.pidl.get());
+    PIDLIST_ABSOLUTE parentPidl = ILClone(directory.parent.pidl.get());
     if(!parentPidl) return false;
     ILRemoveLastID(parentPidl);
 
@@ -154,8 +153,4 @@ bool Tab::GoParent(){
     // NavigateTo only ever reads from what we give it, does not clone, makes it own copy
     WShell::Pidl owned(parentPidl); // wrap in RAII, taking ownership, not cloning again
     return GoTo(owned.get());
-}
-
-void Tab::UpdateDirEntry(){
-    dirEntry = EnumFolder(currentFolder.pidl.get(), &currentFolder);
 }

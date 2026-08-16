@@ -254,7 +254,7 @@ inline void RenderTitlebar(f32 dpi, App& app, bool isMaximized = false){
                 tabRect.Min.y + (titleH - iconSize) * 0.5f
             );
 
-            ImTextureID iconTex = textures.GetTexture({icons.GetIconIndex(tab.currentFolder.pidl.get(), tab.currentFolder.hash), SHIL_SMALL});
+            ImTextureID iconTex = textures.GetTexture({icons.GetIconIndex(tab.directory.parent.pidl.get(), tab.directory.parent.hash), SHIL_SMALL});
 
             if (iconTex){
                 dl->AddImage(iconTex, iconMin, ImVec2(iconMin.x + iconSize, iconMin.y + iconSize));
@@ -264,11 +264,11 @@ inline void RenderTitlebar(f32 dpi, App& app, bool isMaximized = false){
             ImFont* font = ImGui::GetFont();
             const f32 fontSize = ImGui::GetFontSize();
             const f32 textLeft = iconMin.x + iconSize + gap;
-            const ImVec2 textSize = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, tab.currentFolder.name.c_str());
+            const ImVec2 textSize = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, tab.directory.parent.name.c_str());
             
             if (contentRight > textLeft){
                 DrawTextEllipsisSingleLine(dl,
-                ImRect(ImVec2(textLeft, tabRect.Min.y), ImVec2(contentRight, tabRect.Max.y)), tab.currentFolder.name.c_str(), textCol);
+                ImRect(ImVec2(textLeft, tabRect.Min.y), ImVec2(contentRight, tabRect.Max.y)), tab.directory.parent.name.c_str(), textCol);
             }
             
             // Close button glyph.

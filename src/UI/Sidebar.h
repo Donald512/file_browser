@@ -242,7 +242,7 @@ inline void RenderSidebar(f32 dpi, App& app){
 
                     std::string rowID = item.name + std::to_string(i);
 
-                    bool isSelected = app.window.tabs[app.window.activeTabIndex].currentFolder.hash == item.hash;
+                    bool isSelected = app.window.GetActiveTab().directory.parent.hash == item.hash;
                     if (RenderItemRow(rowID.c_str(), iconTex, item.name.c_str(), isSelected, dpi, 30.0f * dpi, {4.0f * dpi, 4.0f * dpi}, 4.0f * dpi, indent)){
                         app.QueueCommand({CmdType::GoTo, item.pidl.Clone(), item.hash, app.window.activeTabIndex, L""});
                     }
