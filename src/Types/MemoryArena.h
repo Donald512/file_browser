@@ -66,24 +66,22 @@ void* Arena::Alloc(u64 numElem, u64 elemSize, u64 alignSize){
 
     // if it is greater than capacity. prolly create a linked buffer
     while(neededEndAddr > size + (uintptr_t)buffer){
-        if (Commit() == nullptr){
-            std::cout << "Commit returned nullptr" << std::endl;
+        uintptr_t bytesToCommit = neededEndAddr - ((uintptr_t)buffer + size);
+
+        // round up to nearest page size
+        bytesToCommit = (bytesToCommit + pageSize - 1) & ~(pageSize - 1);
+
+        void* commitedPtr = VirtualAlloc(buffer + size, bytesToCommit, MEM_COMMIT, PAGE_READWRITE);
+        if (commitedPtr == nullptr){
+            std::cout << "Commit returned nullptr: " << GetLastError() << std::endl;
             return nullptr;
         }
+
+        size += bytesToCommit;
     }
     offset = neededEndAddr - (uintptr_t)buffer;
-
-
     memset((void*)alignedAddr, 0, allocationSize);
     return (void*) alignedAddr;
-}
-
-void* Arena::Commit(){
-    void* commitedPtr = VirtualAlloc(buffer + size, pageSize, MEM_COMMIT, PAGE_READWRITE);
-    if (commitedPtr != nullptr){
-        size += pageSize;
-    }
-    return commitedPtr;
 }
 
 void Arena::Reset(){

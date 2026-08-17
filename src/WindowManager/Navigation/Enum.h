@@ -135,8 +135,6 @@ std::vector<DirItem> EnumFolder(const std::wstring dirPath){
     FindClose(hFind);
     return result;
 }
-
-
 std::vector<DirItem> EnumFolder(PCIDLIST_ABSOLUTE folder, DirItem* parentItem = nullptr){
     std::vector<DirItem> items;
 
