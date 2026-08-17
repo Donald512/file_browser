@@ -71,3 +71,38 @@ u64 HashPidl(PCIDLIST_ABSOLUTE pidl){
 PIDLIST_ABSOLUTE GetFullPidl(PCIDLIST_ABSOLUTE parent, PCITEMID_CHILD child){
     return ILCombine(parent, child);
 }
+
+
+u64 HashCombinedPidl(PCIDLIST_ABSOLUTE parent, PCITEMID_CHILD child) {
+    u64 hash = 1469598103934665603ULL; // FNV offset basis
+    const unsigned char* bytes;
+    UINT size;
+
+    // 1. Hash Parent bytes (EXCLUDING the 2-byte null terminator)
+    if (parent && !ILIsEmpty(parent)) {
+        bytes = reinterpret_cast<const unsigned char*>(parent);
+        size = ILGetSize(parent);
+        if (size >= 2) {
+            for (UINT i = 0; i < size - 2; ++i) {
+                hash ^= bytes[i];
+                hash *= 1099511628211ULL;
+            }
+        }
+    }
+
+    // 2. Hash Child bytes (INCLUDING its 2-byte null terminator)
+    if (child && !ILIsEmpty(child)) {
+        bytes = reinterpret_cast<const unsigned char*>(child);
+        size = ILGetSize(child);
+        for (UINT i = 0; i < size; ++i) {
+            hash ^= bytes[i];
+            hash *= 1099511628211ULL;
+        }
+    } else {
+        // Empty child just adds the 2-byte null terminator
+        hash ^= 0; hash *= 1099511628211ULL;
+        hash ^= 0; hash *= 1099511628211ULL;
+    }
+
+    return hash;
+}

@@ -17,13 +17,9 @@ class Directory{
 
     void UpdateChildren(){
         if (updatedChildren) return;
-        children = GetDirChildren(parent.shellFolder.Get());
+        children = GetDirChildren(parent.shellFolder.Get(), parent.pidl.get());
         updatedChildren = true;
     }
 
-    u64 ComputeChildHash(DirChild child){
-        return child.Hash(parent.pidl.get());
-    }
-    
 };
 

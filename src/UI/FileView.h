@@ -68,7 +68,7 @@ inline ItemInteraction HandleItemInteraction(App& app, const DirParent& parent, 
         else
             app.QueueCommand({CmdType::OpenFile, child.pidl.Clone(), {}, {}, L""});
     } else if (clicked) {
-        app.window.GetActiveTab().selectItem(child.Hash(parent.pidl.get()), SelectMode::OneItem);
+        app.window.GetActiveTab().selectItem((child.hash), SelectMode::OneItem);
     }
     return {hovered, clicked || doubleClicked};
 }
@@ -80,7 +80,7 @@ inline void DrawItemIcon(ImDrawList* dl, App& app, const DirParent& parent, cons
     // if (!app.icons.IsCached(item.Hash(), shilSize)) { app.icons.RequestAsync(...); }
     
     // ImTextureID iconTex = 0; // Disabled synchronous call to prevent freezing
-    ImTextureID iconTex = app.textures.GetTexture({app.icons.GetIconIndex(parent.shellFolder.Get(), item.pidl.get(), item.Hash(parent.pidl)), shilSize});
+    ImTextureID iconTex = app.textures.GetTexture({app.icons.GetIconIndex(parent.shellFolder.Get(), item.pidl.get(), item.hash), shilSize});
     
     if (iconTex){
         dl->AddImage(iconTex, pos, ImVec2(pos.x + iconSize, pos.y + iconSize));
@@ -120,7 +120,7 @@ inline void RenderGridView(f32 dpi, App& app, ViewMode mode){
     // visible gap between them.
     ForEachGridCell(dirChildren.size(), itemWidth + xGap, cellH, [&](size_t i, ImVec2 cellPos){
         const DirChild& child = dirChildren[i];
-        bool isSelected = activeTab.isSelected(child.Hash(directory.parent.pidl));
+        bool isSelected = activeTab.isSelected(child.hash);
         ImRect fullRect(cellPos, ImVec2(cellPos.x + itemWidth, cellPos.y + cellH));
 
         ImGuiID id = window->GetID((void*)(intptr_t)i);
@@ -161,7 +161,7 @@ inline void RenderSmallView(f32 dpi, App& app){
 
     ForEachGridCell(dirChildren.size(), cellW, cellH, [&](size_t i, ImVec2 cellPos){
         const DirChild& child = dirChildren[i];
-        bool isSelected = activeTab.isSelected(child.Hash(directory.parent.pidl));
+        bool isSelected = activeTab.isSelected(child.hash);
         ImRect fullRect(cellPos, ImVec2(cellPos.x + cellW, cellPos.y + cellH));
 
         ImGuiID id = window->GetID((void*)(intptr_t)i);
@@ -239,7 +239,7 @@ inline void RenderListView(f32 dpi, App& app){
 
             const DirChild& child = dirChildren[i];
             
-            bool isSelected = activeTab.isSelected(child.Hash(directory.parent.pidl));
+            bool isSelected = activeTab.isSelected(child.hash);
             ImGui::PushID(i);
             ImGui::SetCursorPos(ImVec2(currentColOffset, (f32)r * cellHeight));
             ImVec2 cellScreenPos = ImGui::GetCursorScreenPos();
@@ -305,7 +305,7 @@ inline void RenderDetailsView(f32 dpi, App& app){
                 for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++){
                     const DirChild& child = dirChildren[row];
                     bool isFolder = (child.attributes & SFGAO_FOLDER) != 0;
-                    bool isSelected = activeTab.isSelected(child.Hash(directory.parent.pidl));
+                    bool isSelected = activeTab.isSelected(child.hash);
                     
                     ImGui::PushID(row);
                     ImGui::TableNextRow(ImGuiTableRowFlags_None, cellHeight);
@@ -369,7 +369,7 @@ inline void RenderTilesView(f32 dpi, App& app){
 
     ForEachGridCell(dirChildren.size(), cellW, cellH, [&](size_t i, ImVec2 cellPos){
         const DirChild& child = dirChildren[i];
-        bool isSelected = activeTab.isSelected(child.Hash(directory.parent.pidl));
+        bool isSelected = activeTab.isSelected(child.hash);
         ImRect fullRect(cellPos, ImVec2(cellPos.x + cellW, cellPos.y + cellH));
 
         ImGuiID id = window->GetID((void*)(intptr_t)i);

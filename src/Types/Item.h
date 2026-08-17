@@ -24,20 +24,10 @@ struct DirChild{
     std::string name; // 24
     u64 size = 0;
     FILETIME lastWriteTime{}; // 8
+    u64 hash = 0;
     SFGAOF attributes = 0;  // 4
     // std::string typeName{};  // Gonna change to a u64, since many of them have similar typenames
-    mutable bool hashComputed = false;
-    u64 Hash(PCIDLIST_ABSOLUTE parent)const {
-        if (hashComputed) return hash;
-        hashComputed = true;
-        PIDLIST_ABSOLUTE fullPidl = GetFullPidl(parent, pidl.get());
-        hash = HashPidl(fullPidl);
-        ILFree(fullPidl);
-        
-        return hash;
-    }
-    private:
-        mutable u64 hash = 0;   // store Hash -  ID used to match item, shared_ptr/unique_ptr is slow (cache misses) and using ptr is risky because things can be ordered 
+    // store Hash -  ID used to match item, shared_ptr/unique_ptr is slow (cache misses) and using ptr is risky because things can be ordered 
 
 };
 

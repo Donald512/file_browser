@@ -12,7 +12,7 @@ namespace WShell{
 
     using Microsoft::WRL::ComPtr;
     // Extracts a child's display name cleanly.
-    inline std::string GetDisplayName(IShellFolder* folder, PITEMID_CHILD child, SHGDNF flags) {
+    inline std::string GetDisplayName(IShellFolder* folder, PCITEMID_CHILD child, SHGDNF flags) {
         STRRET strName;
         if (SUCCEEDED(folder->GetDisplayNameOf(child, flags, &strName))) {
             wchar_t nameBuffer[MAX_PATH] = {};

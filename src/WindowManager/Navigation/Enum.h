@@ -55,6 +55,7 @@ IterateFolder(safeFolder, SHCONTF_FOLDERS | SHCONTF_NONFOLDERS | SHCONTF_INCLUDE
 
 
 template <typename Func>
+// ! DO NOT delete this, sidebarEnum needs this
 void IterateFolder(PCIDLIST_ABSOLUTE folder, DWORD shcontfFlags, Func&& callback) {
     if (!folder) return;
 
@@ -91,45 +92,48 @@ void IterateFolder(IShellFolder* pFolder, DWORD shcontfFlags, Func&& callback) {
 
     while (enumerator->Next(1, &childPidl, &fetched) == S_OK) {
         callback(pFolder, childPidl);
-        CoTaskMemFree(childPidl);   
+        
+        if(childPidl){ // if the lambda stole it, pChild will be null
+            CoTaskMemFree(childPidl);   
+        }
     }
 }
 
 
 
-// std::vector<DirItem> EnumFolder(const std::wstring dirPath){
-//     std::wstring searchPath = dirPath; 
-//     if (searchPath.back() != L'\\' && searchPath.back() != L'/') {  // check if it already contains a backslash e.g: C:/ or C:\ before adding /
-//         searchPath += L"\\";
-//     }
+std::vector<DirItem> EnumFolder(const std::wstring dirPath){
+    std::wstring searchPath = dirPath; 
+    if (searchPath.back() != L'\\' && searchPath.back() != L'/') {  // check if it already contains a backslash e.g: C:/ or C:\ before adding /
+        searchPath += L"\\";
+    }
     
-//     searchPath += L"*";     // Build search path with wildcard (e.g., L"C:\\Windows\\*")
-//     WIN32_FIND_DATAW findData{};
+    searchPath += L"*";     // Build search path with wildcard (e.g., L"C:\\Windows\\*")
+    WIN32_FIND_DATAW findData{};
 
-//     HANDLE hFind = FindFirstFileExW( searchPath.c_str(), FindExInfoBasic, &findData, FindExSearchNameMatch, NULL, FIND_FIRST_EX_LARGE_FETCH);
+    HANDLE hFind = FindFirstFileExW( searchPath.c_str(), FindExInfoBasic, &findData, FindExSearchNameMatch, NULL, FIND_FIRST_EX_LARGE_FETCH);
 
-//     if (hFind == INVALID_HANDLE_VALUE){
-//         std::cout << "Failed to open directory. Error: " << GetLastError() << std::endl; 
-//     }
+    if (hFind == INVALID_HANDLE_VALUE){
+        std::cout << "Failed to open directory. Error: " << GetLastError() << std::endl; 
+    }
 
-//     std::vector<DirItem> result;
-//     do {
-//         // skip dummy "." and ".." parent dir entries
-//         if (wcscmp(findData.cFileName, L".") == 0 || wcscmp(findData.cFileName, L"..") == 0){
-//             continue;
-//         }
+    std::vector<DirItem> result;
+    do {
+        // skip dummy "." and ".." parent dir entries
+        if (wcscmp(findData.cFileName, L".") == 0 || wcscmp(findData.cFileName, L"..") == 0){
+            continue;
+        }
 
-//         DirItem item;
-//         item.attributes = findData.dwFileAttributes;
-//         item.name = Str::WideToString(findData.cFileName);
-//         item.size = ((u64)(findData.nFileSizeHigh << 32) | findData.nFileSizeLow);
-//         item.lastWriteTime = findData.ftLastWriteTime; // sus
+        DirItem item;
+        item.attributes = findData.dwFileAttributes;
+        item.name = Str::WideToString(findData.cFileName);
+        item.size = ((u64)(findData.nFileSizeHigh << 32) | findData.nFileSizeLow);
+        item.lastWriteTime = findData.ftLastWriteTime; // sus
 
-//         // no typename, i was doing it wrong all along
-//     } while (FindNextFileW(hFind, &findData));
+        // no typename, i was doing it wrong all along
+    } while (FindNextFileW(hFind, &findData));
 
-//     FindClose(hFind);
-// }
+    FindClose(hFind);
+}
 
 std::vector<DirItem> EnumFolder(PCIDLIST_ABSOLUTE folder, DirItem* parentItem = nullptr){
     std::vector<DirItem> items;
@@ -184,6 +188,15 @@ std::vector<DirItem> EnumFolder(PCIDLIST_ABSOLUTE folder, DirItem* parentItem = 
     return items;
 }
 
+
+
+DirParent GetDirParent(std::wstring folder){
+    DirParent parent;
+
+    
+    parent.pidl =  folder;
+}
+
 DirParent GetDirParent(PCIDLIST_ABSOLUTE folder){
     DirParent parent;
     parent.pidl = WShell::Pidl(ILClone(folder));
@@ -206,23 +219,27 @@ DirParent GetDirParent(PCIDLIST_ABSOLUTE folder){
     return parent;
 }
 
-std::vector<DirChild> GetDirChildren(IShellFolder* parentShellFolder){
+std::vector<DirChild> GetDirChildren(IShellFolder* parentShellFolder, PCIDLIST_ABSOLUTE parentPidl){
     std::vector<DirChild> children{};
     if (!parentShellFolder) return children;
 
     constexpr DWORD flags = SHCONTF_FOLDERS | SHCONTF_NONFOLDERS | SHCONTF_INCLUDEHIDDEN;
 
-    IterateFolder(parentShellFolder, flags, [&](IShellFolder* pTarget, PITEMID_CHILD pChild){
+    IterateFolder(parentShellFolder, flags, [&](IShellFolder* pTarget, PITEMID_CHILD& pChild){
         DirChild child;
 
-        child.pidl = WShell::Pidl(ILCloneChild(pChild));
-        child.name = WShell::GetDisplayName(pTarget, pChild, SHGDN_NORMAL);
+        child.pidl = WShell::Pidl(reinterpret_cast<PIDLIST_ABSOLUTE>(pChild));  // Steal ownership
+        pChild = nullptr;  // This prevents IterateFolder from freeing it
+
+        child.hash = HashCombinedPidl(parentPidl, child.pidl.get());
+        child.name = WShell::GetDisplayName(pTarget, child.pidl.get(), SHGDN_NORMAL);
 
         child.attributes = SFGAO_FOLDER | SFGAO_CANRENAME | SFGAO_CANDELETE;
-        pTarget->GetAttributesOf(1, (LPCITEMIDLIST*)&pChild, &child.attributes);
+        PCIDLIST_ABSOLUTE childPtr = child.pidl.get();
+        pTarget->GetAttributesOf(1, (LPCITEMIDLIST*)&childPtr, &child.attributes);
 
         WIN32_FIND_DATAW wfd{};
-        if (SUCCEEDED(SHGetDataFromIDListW(pTarget, pChild, SHGDFIL_FINDDATA, &wfd, sizeof(wfd)))){
+        if (SUCCEEDED(SHGetDataFromIDListW(pTarget, child.pidl.get(), SHGDFIL_FINDDATA, &wfd, sizeof(wfd)))){
             child.size = (static_cast<u64>(wfd.nFileSizeHigh) << 32) | wfd.nFileSizeLow;
             child.lastWriteTime = wfd.ftLastWriteTime;
         }
