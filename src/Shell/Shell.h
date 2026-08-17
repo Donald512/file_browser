@@ -21,6 +21,28 @@ namespace WShell{
         }
         return "";
     }
+
+    // this function might have a bug, because the destination needs to know the size of the name
+    inline int GetDisplayName2(IShellFolder* folder, PCITEMID_CHILD child, SHGDNF flags, char* dest) {  // writes the char* to a buffer eg, in an arena, prevent mallocing, copying, and freeing, when you can just write straight to the dest
+        STRRET strName;
+        if (SUCCEEDED(folder->GetDisplayNameOf(child, flags, &strName))) {
+            wchar_t nameBuffer[MAX_PATH] = {};
+            StrRetToBufW(&strName, child, nameBuffer, MAX_PATH);
+            return Str::WideToUtf8(nameBuffer, dest);
+        }
+        return -1;
+    }
+    
+    inline bool GetWideDisplayName2(IShellFolder* folder, PCITEMID_CHILD child, SHGDNF flags, wchar_t* wBufOut){
+        STRRET strName;
+        if (SUCCEEDED(folder->GetDisplayNameOf(child, flags, &strName))) {
+            if (FAILED(StrRetToBufW(&strName, child, wBufOut, MAX_PATH))){
+                return false;
+            }
+            return true;
+        }
+        return false;
+    }
     
     inline std::string GetDisplayName(PCIDLIST_ABSOLUTE pidl ) {
         wchar_t* niceName = nullptr;

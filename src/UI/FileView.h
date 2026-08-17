@@ -57,20 +57,20 @@ struct ItemInteraction {
     bool clicked;
 };
 
-inline ItemInteraction HandleItemInteraction(App& app, const DirParent& parent, const DirChild& child, ImGuiID id, const ImRect& rect){
+inline ItemInteraction HandleItemInteraction(App& app, const DirParent& parent, const DirChildren& children, const size_t child, ImGuiID id, const ImRect& rect){
     Interaction ia = MakeInteractive(id, rect);
     bool doubleClicked = IsDoubleClick(id, ia.pressed);
     
     if (doubleClicked) {
-        if (child.attributes & SFGAO_FOLDER){
-            PCIDLIST_ABSOLUTE newPidl = GetFullPidl(parent.pidl.get(), child.pidl.get());
+        PCIDLIST_ABSOLUTE newPidl = GetFullPidl(parent.pidl.get(), children.GetChildPidl(child));
+        // WShell::Pidl steals ownership
+        if (children.attributes[child] & SFGAO_FOLDER){
             app.QueueCommand({CmdType::GoTo, WShell::Pidl(newPidl), 0, app.window.activeTabIndex, L""}); 
         }
-        else
-        app.QueueCommand({CmdType::OpenFile, child.pidl.Clone(), {}, {}, L""});
+        else app.QueueCommand({CmdType::OpenFile, WShell::Pidl(newPidl), {}, {}, L""});
     } 
     else if (ia.pressed) {
-        app.window.GetActiveTab().selectItem((child.hash), SelectMode::OneItem);
+        app.window.GetActiveTab().selectItem((children.hashes[child]), SelectMode::OneItem);
     }
     return {ia.hovered || ia.pressed};
 }
@@ -78,21 +78,21 @@ inline ItemInteraction HandleItemInteraction(App& app, const DirParent& parent, 
 // FIX 2: Synchronous Icon Loading causes UI Freezing.
 // GetIconIndex calls Windows Shell API on the main thread. 
 // You MUST use your async request system here instead of synchronous fetching.
-inline void DrawItemIcon(ImDrawList* dl, App& app, const DirParent& parent, const DirChild& item, ImVec2 pos, f32 iconSize, int shilSize){
-    ImTextureID iconTex = app.textures.GetTexture({app.icons.GetIconIndex(parent.shellFolder.Get(), item.pidl.get(), item.hash), shilSize});
+inline void DrawItemIcon(ImDrawList* dl, App& app, const DirParent& parent, const DirChildren& children, size_t child, ImVec2 pos, f32 iconSize, int shilSize){
+    ImTextureID iconTex = app.textures.GetTexture({app.icons.GetIconIndex(parent.shellFolder.Get(), children.GetChildPidl(child), children.hashes[child]), shilSize});
     
     if (iconTex){
         dl->AddImage(iconTex, pos, ImVec2(pos.x + iconSize, pos.y + iconSize));
     } else {
-        const bool isFolder = (item.attributes & SFGAO_FOLDER) != 0;
+        const bool isFolder = (children.attributes[child] & SFGAO_FOLDER) != 0;
         const char* fallback = isFolder ? ICON_REG_FOLDER : ICON_REG_DOCUMENT;
         DrawTextCenteredSingleLine(dl, pos, ImVec2(pos.x + iconSize, pos.y + iconSize), fallback, Theme::Current.palette.TextMuted, iconSize);
     }
 }
 
-inline const char* KindLabel(const DirChild& item){
-    return (item.attributes & SFGAO_FOLDER) ? "File folder" : "File";
-}
+// inline const char* KindLabel(const DirChild& item){
+//     return (item.attributes & SFGAO_FOLDER) ? "File folder" : "File";
+// }
 
 // FIX 3: Removed ImGuiTable from Grid views. 
 // ImGuiTable and ImGuiListClipper fight over Y-coordinates, causing overlaps and crashes.
@@ -113,28 +113,28 @@ inline void RenderGridView(f32 dpi, App& app, ViewMode mode){
     const f32 cellH = imageSize + yTextPadding + (maxLines * lineHeight) + yTextPadding;
 
     const Directory& directory = activeTab.directory;
-    const std::vector<DirChild>& dirChildren = directory.children;
+    const DirChildren& dirChildren = directory.children;
 
     // Cells are itemWidth wide but stride by itemWidth + xGap, so there's a
     // visible gap between them.
-    ForEachGridCell(dirChildren.size(), itemWidth + xGap, cellH, [&](size_t i, ImVec2 cellPos){
-        const DirChild& child = dirChildren[i];
-        bool isSelected = activeTab.isSelected(child.hash);
+    ForEachGridCell(dirChildren.hashes.size(), itemWidth + xGap, cellH, [&](size_t i, ImVec2 cellPos){
+        u64 childHash = dirChildren.hashes[i];
+        bool isSelected = activeTab.isSelected(childHash);
         ImRect fullRect(cellPos, ImVec2(cellPos.x + itemWidth, cellPos.y + cellH));
 
         ImGuiID id = window->GetID((void*)(intptr_t)i);
-        ItemInteraction ia = HandleItemInteraction(app, directory.parent, child, id, fullRect);
+        ItemInteraction ia = HandleItemInteraction(app, directory.parent, dirChildren, i, id, fullRect);
         DrawSelectableBg(dl, fullRect, ia.hovered, isSelected, 4.0f * dpi);
 
         f32 iconX = cellPos.x + (itemWidth - imageSize) * 0.5f;
-        DrawItemIcon(dl, app, directory.parent, child, ImVec2(iconX, cellPos.y), imageSize, shilSize);
+        DrawItemIcon(dl, app, directory.parent, dirChildren, i, ImVec2(iconX, cellPos.y), imageSize, shilSize);
 
         f32 textY = cellPos.y + imageSize + yTextPadding;
         RenderTextWrappedCenteredEllipsis(
             dl,
             ImVec2(cellPos.x + 4.0f * dpi, textY),
             ImVec2(itemWidth - 8.0f * dpi, maxLines * lineHeight),
-            child.name.c_str(),
+            dirChildren.GetChildName(i),
             nullptr,
             maxLines
         );
@@ -156,24 +156,23 @@ inline void RenderSmallView(f32 dpi, App& app){
     const ImU32 textCol = Theme::Current.palette.Text;
 
     const Directory& directory = activeTab.directory;
-    const std::vector<DirChild>& dirChildren = directory.children;
+    const DirChildren& dirChildren = directory.children;
 
-    ForEachGridCell(dirChildren.size(), cellW, cellH, [&](size_t i, ImVec2 cellPos){
-        const DirChild& child = dirChildren[i];
-        bool isSelected = activeTab.isSelected(child.hash);
+    ForEachGridCell(dirChildren.hashes.size(), cellW, cellH, [&](size_t i, ImVec2 cellPos){
+        bool isSelected = activeTab.isSelected(dirChildren.hashes[i]);
         ImRect fullRect(cellPos, ImVec2(cellPos.x + cellW, cellPos.y + cellH));
 
         ImGuiID id = window->GetID((void*)(intptr_t)i);
-        ItemInteraction ia = HandleItemInteraction(app, directory.parent, child, id, fullRect);
+        ItemInteraction ia = HandleItemInteraction(app, directory.parent, dirChildren, i, id, fullRect);
         DrawSelectableBg(dl, fullRect, ia.hovered, isSelected, 4.0f * dpi);
 
         f32 iconX = cellPos.x + iconPad;
         f32 iconY = cellPos.y + (cellH - iconSize) * 0.5f;
-        DrawItemIcon(dl, app, directory.parent, child, ImVec2(iconX, iconY), iconSize, SHIL_SMALL);
+        DrawItemIcon(dl, app, directory.parent, dirChildren, i, ImVec2(iconX, iconY), iconSize, SHIL_SMALL);
 
         ImRect textRect(ImVec2(iconX + iconSize + textGap, cellPos.y),
                          ImVec2(cellPos.x + cellW - 8.0f * dpi, cellPos.y + cellH));
-        DrawTextEllipsisSingleLine(dl, textRect, child.name.c_str(), textCol);
+        DrawTextEllipsisSingleLine(dl, textRect, dirChildren.GetChildName(i), textCol);
     });
 }
 
@@ -195,7 +194,7 @@ inline void RenderListView(f32 dpi, App& app){
     auto& activeTab = app.window.GetActiveTab();
 
     const Directory& directory = activeTab.directory;
-    const std::vector<DirChild>& dirChildren = directory.children;
+    const DirChildren& dirChildren = directory.children;
 
     const f32 xGap = 8.0f * dpi;
     const f32 cellHeight = p.height * dpi;
@@ -206,7 +205,7 @@ inline void RenderListView(f32 dpi, App& app){
     const f32 availY = ImGui::GetContentRegionAvail().y;
     int rowsPerColumn = (int)(availY / cellHeight);
     if (rowsPerColumn < 1) rowsPerColumn = 1;
-    const int totalItems = (int)dirChildren.size();
+    const int totalItems = (int)dirChildren.hashes.size();
     if (totalItems == 0){
         ImGui::EndChild();
         return;
@@ -215,7 +214,7 @@ inline void RenderListView(f32 dpi, App& app){
     std::vector<f32> colWidths(totalColumns, minColWidth);
     for (int i = 0; i < totalItems; i++){
         int c = i / rowsPerColumn;
-        f32 textWidth = ImGui::CalcTextSize(dirChildren[i].name.c_str()).x;
+        f32 textWidth = ImGui::CalcTextSize(dirChildren.GetChildName(i)).x;
         f32 requiredWidth = textWidth + iconSize + (xGap * 3.0f);
         if (requiredWidth > colWidths[c]) colWidths[c] = (std::min)(requiredWidth, maxColWidth);
     }
@@ -236,24 +235,22 @@ inline void RenderListView(f32 dpi, App& app){
             int i = (c * rowsPerColumn) + r;
             if (i >= totalItems) break;
 
-            const DirChild& child = dirChildren[i];
-            
-            bool isSelected = activeTab.isSelected(child.hash);
+            bool isSelected = activeTab.isSelected(dirChildren.hashes[i]);
             ImGui::PushID(i);
             ImGui::SetCursorPos(ImVec2(currentColOffset, (f32)r * cellHeight));
             ImVec2 cellScreenPos = ImGui::GetCursorScreenPos();
             ImRect fullRect(cellScreenPos, ImVec2(cellScreenPos.x + currentColWidth, cellScreenPos.y + cellHeight));
             ImGuiID id = window->GetID((void*)(intptr_t)i);
-            ItemInteraction ia = HandleItemInteraction(app, directory.parent, child, id, fullRect);
+            ItemInteraction ia = HandleItemInteraction(app, directory.parent, dirChildren, i, id, fullRect);
             DrawSelectableBg(dl, fullRect, ia.hovered, isSelected, 4.0f * dpi);
 
             f32 iconY = cellScreenPos.y + (cellHeight - iconSize) * 0.5f;
-            DrawItemIcon(dl, app, directory.parent, child, ImVec2(cellScreenPos.x + xGap, iconY), iconSize, SHIL_SMALL);
+            DrawItemIcon(dl, app, directory.parent, dirChildren, i, ImVec2(cellScreenPos.x + xGap, iconY), iconSize, SHIL_SMALL);
             f32 textStartX = cellScreenPos.x + xGap + iconSize + xGap;
             f32 maxTextWidth = currentColWidth - (xGap * 3.0f) - iconSize;
             if (maxTextWidth > 0.0f){
                 ImRect textRect(ImVec2(textStartX, cellScreenPos.y), ImVec2(textStartX + maxTextWidth, cellScreenPos.y + cellHeight));
-                DrawTextEllipsisSingleLine(dl, textRect, child.name.c_str(), textCol);
+                DrawTextEllipsisSingleLine(dl, textRect, dirChildren.GetChildName(i), textCol);
             }
             ImGui::PopID();
         }
@@ -295,16 +292,15 @@ inline void RenderDetailsView(f32 dpi, App& app){
 
 
             const Directory& directory = activeTab.directory;
-            const std::vector<DirChild>& dirChildren = directory.children;
+            const DirChildren& dirChildren = directory.children;
 
             ImGuiListClipper clipper;
-            clipper.Begin((int)dirChildren.size(), cellHeight);
+            clipper.Begin((int)dirChildren.hashes.size(), cellHeight);
 
             while (clipper.Step()){
                 for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++){
-                    const DirChild& child = dirChildren[row];
-                    bool isFolder = (child.attributes & SFGAO_FOLDER) != 0;
-                    bool isSelected = activeTab.isSelected(child.hash);
+                    bool isFolder = (dirChildren.attributes[row] & SFGAO_FOLDER) != 0;
+                    bool isSelected = activeTab.isSelected(dirChildren.hashes[row]);
                     
                     ImGui::PushID(row);
                     ImGui::TableNextRow(ImGuiTableRowFlags_None, cellHeight);
@@ -316,16 +312,16 @@ inline void RenderDetailsView(f32 dpi, App& app){
                     ImRect rowRect(cellPos, ImVec2(rowMaxX, cellPos.y + cellHeight));
                     
                     ImGuiID id = window->GetID((void*)(intptr_t)row);
-                    ItemInteraction ia = HandleItemInteraction(app, directory.parent, child, id, rowRect);
+                    ItemInteraction ia = HandleItemInteraction(app, directory.parent, dirChildren, row, id, rowRect);
                     DrawSelectableBg(dl, rowRect, ia.hovered, isSelected);
 
                     f32 iconY = cellPos.y + (cellHeight - iconSize) * 0.5f;
-                    DrawItemIcon(dl, app, directory.parent, child, ImVec2(cellPos.x + 4.0f * dpi, iconY), iconSize, SHIL_SMALL);
+                    DrawItemIcon(dl, app, directory.parent, dirChildren, row, ImVec2(cellPos.x + 4.0f * dpi, iconY), iconSize, SHIL_SMALL);
                     
                     f32 textX = cellPos.x + 4.0f * dpi + iconSize + 6.0f * dpi;
                     f32 maxTextWidth = availWidth - (textX - cellPos.x);
                     ImRect textRect(ImVec2(textX, cellPos.y), ImVec2(textX + maxTextWidth, cellPos.y + cellHeight));
-                    DrawTextEllipsisSingleLine(dl, textRect, child.name.c_str(), textCol);
+                    DrawTextEllipsisSingleLine(dl, textRect, dirChildren.GetChildName(row), textCol);
 
                     ImGui::TableNextColumn();
                     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (cellHeight - ImGui::GetTextLineHeight()) * 0.5f);
@@ -333,7 +329,7 @@ inline void RenderDetailsView(f32 dpi, App& app){
 
                     ImGui::TableNextColumn();
                     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (cellHeight - ImGui::GetTextLineHeight()) * 0.5f);
-                    ImGui::TextUnformatted(KindLabel(child));
+                    // ImGui::TextUnformatted(KindLabel(child));
 
                     ImGui::TableNextColumn();
                     if (!isFolder){
@@ -362,32 +358,31 @@ inline void RenderTilesView(f32 dpi, App& app){
     const f32 iconSize = cellH * 0.7f;
     const f32 lineHeight = ImGui::GetTextLineHeight();
     const ImU32 textCol = Theme::Current.palette.Text;
-    const ImU32 mutedCol = Theme::Current.palette.TextMuted;
+    // const ImU32 mutedCol = Theme::Current.palette.TextMuted;
 
     const Directory& directory = activeTab.directory;
-    const std::vector<DirChild>& dirChildren = directory.children;
+    const DirChildren& dirChildren = directory.children;
 
-    ForEachGridCell(dirChildren.size(), cellW, cellH, [&](size_t i, ImVec2 cellPos){
-        const DirChild& child = dirChildren[i];
-        bool isSelected = activeTab.isSelected(child.hash);
+    ForEachGridCell(dirChildren.hashes.size(), cellW, cellH, [&](size_t i, ImVec2 cellPos){
+        bool isSelected = activeTab.isSelected(dirChildren.hashes[i]);
         ImRect fullRect(cellPos, ImVec2(cellPos.x + cellW, cellPos.y + cellH));
 
         ImGuiID id = window->GetID((void*)(intptr_t)i);
-        ItemInteraction ia = HandleItemInteraction(app, directory.parent, child, id, fullRect);
+        ItemInteraction ia = HandleItemInteraction(app, directory.parent, dirChildren, i, id, fullRect);
         DrawSelectableBg(dl, fullRect, ia.hovered, isSelected, 4.0f * dpi);
 
         f32 iconX = cellPos.x + 6.0f * dpi;
         f32 iconY = cellPos.y + (cellH - iconSize) * 0.5f;
-        DrawItemIcon(dl, app, directory.parent, child, ImVec2(iconX, iconY), iconSize, ShilSizeForMode(ViewMode::Tiles));
+        DrawItemIcon(dl, app, directory.parent, dirChildren, i, ImVec2(iconX, iconY), iconSize, ShilSizeForMode(ViewMode::Tiles));
 
         f32 textX = iconX + iconSize + 8.0f * dpi;
         f32 textMaxWidth = cellPos.x + cellW - textX - 8.0f * dpi;
         if (textMaxWidth > 0.0f){
             ImRect nameRect(ImVec2(textX, cellPos.y + 4.0f * dpi), ImVec2(textX + textMaxWidth, cellPos.y + 4.0f * dpi + lineHeight));
-            DrawTextEllipsisSingleLine(dl, nameRect, child.name.c_str(), textCol);
-            dl->AddText(ImGui::GetFont(), ImGui::GetFontSize(),
-                ImVec2(textX, cellPos.y + 4.0f * dpi + lineHeight + 2.0f * dpi),
-                mutedCol, KindLabel(child));
+            DrawTextEllipsisSingleLine(dl, nameRect, dirChildren.GetChildName(i), textCol);
+            // dl->AddText(ImGui::GetFont(), ImGui::GetFontSize(),
+            //     ImVec2(textX, cellPos.y + 4.0f * dpi + lineHeight + 2.0f * dpi),
+            //     mutedCol, KindLabel(child));
         }
     });
 }

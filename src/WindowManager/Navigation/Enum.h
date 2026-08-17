@@ -6,7 +6,8 @@
 #include "Str.h"
 #include "Shell.h"
 #include "Item.h"
-
+#include "BasicTypes.h"
+#include "Types/global.h"
 #include <iostream>
 
 #include <wrl/client.h>
@@ -251,6 +252,90 @@ std::vector<DirChild> GetDirChildren(IShellFolder* parentShellFolder, PCIDLIST_A
     return children;
 }
 
+DirChildren GetDirChildren2(IShellFolder* parentShellFolder, PCIDLIST_ABSOLUTE parentPidl){
+    DirChildren children{};
+    if (!parentShellFolder) return children;
+
+    // Baseline reservations to minimize early reallocations
+    constexpr size_t baseline = 64;
+    children.hashes.reserve(baseline);
+    children.attributes.reserve(baseline);
+    children.lastWriteTimes.reserve(baseline);
+    children.sizes.reserve(baseline);
+    children.pidlOffsets.reserve(baseline);
+    children.pidlLengths.reserve(baseline);
+    children.nameOffsets.reserve(baseline);
+    children.nameLengths.reserve(baseline);
+    children.pidlArena.reserve(baseline * 64); // Guess ~64 bytes per PIDL
+    children.nameArena.reserve(baseline * 48); // Guess ~48 bytes per name
+
+    constexpr DWORD flags = SHCONTF_FOLDERS | SHCONTF_NONFOLDERS | SHCONTF_INCLUDEHIDDEN;
+
+    size_t index = 0;
+    IterateFolder(parentShellFolder, flags, [&](IShellFolder* pTarget, PITEMID_CHILD& pChild){
+        // PIDL arena
+        u16 pidlLen = (u16)ILGetSize(pChild);
+        u32 pidlOffset = (u32)children.pidlArena.size(); // offset is the current size
+
+        children.pidlArena.resize(pidlOffset + pidlLen);    // just increases size, if capacity allows, reallocates if it doesnt
+        memcpy(&children.pidlArena[pidlOffset], pChild, pidlLen);   // copies the contents of pChild to start of pidl
+
+        children.pidlOffsets.push_back(pidlOffset);
+        children.pidlLengths.push_back(pidlLen);
+        PCITEMID_CHILD pStoredPidl = children.GetChildPidl(index); // this should be correct
+        // does not free pChild;
+        
+
+        wchar_t wideBuffer[MAX_PATH] = {0};
+        if (!WShell::GetWideDisplayName2(pTarget, pStoredPidl, SHGDN_NORMAL, wideBuffer)){
+            PRINTERR;
+            wideBuffer[0] = L'\0';
+        }
+        int sizeNeeded = Str::GetRequiredWideToUtf8Size(wideBuffer); // includes null terminator
+        if (sizeNeeded < 0) PRINTERR;   // will prolly see the warnng before it crashes
+
+        u32 nameOffset = (u32)children.nameArena.size();
+        children.nameArena.resize(nameOffset + sizeNeeded);
+        Str::WriteUtf8CharToBufferFromWide(wideBuffer, &children.nameArena[nameOffset], sizeNeeded);
+
+        children.nameOffsets.push_back(nameOffset);
+        children.nameLengths.push_back((u16)(sizeNeeded - 1));
+
+
+        children.hashes.push_back(HashCombinedPidl(parentPidl, pStoredPidl));
+
+
+        SFGAOF attrs = SFGAO_FOLDER | SFGAO_CANRENAME | SFGAO_CANDELETE;
+        pTarget->GetAttributesOf(1, (LPCITEMIDLIST*)&pStoredPidl, &attrs);
+        children.attributes.push_back(attrs);
+        
+        u64 size = 0;
+        FILETIME lastWriteTime = {};
+        WIN32_FIND_DATAW wfd{};
+        if (SUCCEEDED(SHGetDataFromIDListW(pTarget, pStoredPidl, SHGDFIL_FINDDATA, &wfd, sizeof(wfd)))){
+            size = (static_cast<u64>(wfd.nFileSizeHigh) << 32) | wfd.nFileSizeLow;
+            lastWriteTime = wfd.ftLastWriteTime;
+        }
+        children.sizes.push_back(size);
+        children.lastWriteTimes.push_back(lastWriteTime);
+        CoTaskMemFree(pChild);
+        pChild = nullptr;   // prevent double freeing
+        index++;
+
+    });
+    shrinkVec(children.hashes);
+    shrinkVec(children.attributes);
+    shrinkVec(children.lastWriteTimes);
+    shrinkVec(children.sizes);
+    shrinkVec(children.pidlOffsets);
+    shrinkVec(children.pidlLengths);
+    shrinkVec(children.nameOffsets);
+    shrinkVec(children.nameLengths);
+    shrinkVec(children.pidlArena);
+    shrinkVec(children.nameArena);
+
+    return children;
+}
 
 
 std::vector<DirItem> GetOneDriveAccounts(){

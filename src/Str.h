@@ -6,19 +6,20 @@
 
 namespace Str{
 
-    std::string WideToString(const wchar_t* wide){
+    inline std::string WideToString(const wchar_t* wide){
         int size = WideCharToMultiByte(CP_UTF8, 0, wide, -1, nullptr, 0, nullptr, nullptr);
         std::string result(size - 1, '\0');
         WideCharToMultiByte(CP_UTF8, 0, wide, -1, result.data(), size, nullptr, nullptr);
         return result;
     }
-    std::string WideToString(std::wstring wide){
+    inline std::string WideToString(std::wstring wide){
         int size = WideCharToMultiByte(CP_UTF8, 0, wide.c_str(), -1, nullptr, 0, nullptr, nullptr);
         std::string result(size - 1, '\0');
         WideCharToMultiByte(CP_UTF8, 0, wide.c_str(), -1, result.data(), size, nullptr, nullptr);
         return result;
     }
-    wchar_t* Utf8ToWide(const char* utf8, u64 extraCharCount, u64* outNumWideChars){
+
+    inline wchar_t* Utf8ToWide(const char* utf8, u64 extraCharCount, u64* outNumWideChars){
         // outNumWideChars != numrBytes + extraCharCount
         // an emoji could have len = 2, and 4 bytes
         // so outNumWideChars = 2 + extraCharCount, not 4 plus it, which is why the len has to be calculated in this function, not using string.length
@@ -42,7 +43,7 @@ namespace Str{
         return new_string;
     }
 
-    char* WideToUtf8(const wchar_t* wide) {
+    inline char* WideToUtf8(const wchar_t* wide) {
         if (!wide) return nullptr;
 
         int sizeNeeded = ::WideCharToMultiByte(CP_UTF8, 0, wide, -1, nullptr, 0, nullptr, nullptr);
@@ -63,6 +64,41 @@ namespace Str{
         }
 
         return newString;
+    }
+
+
+    inline int WideToUtf8(const wchar_t* src, char* dest) {    // made this function for when i already have a location, so i dont malloc, copy to my own buffer, and free the src, eliminate the malloc twice
+        if (!src) return -1;
+
+        int sizeNeeded = ::WideCharToMultiByte(CP_UTF8, 0, src, -1, nullptr, 0, nullptr, nullptr);
+
+        if (sizeNeeded <= 0) {
+            printf("Error in WideCharToMultiByte. Error: %lu\n", ::GetLastError());
+            return - 1;
+        }
+
+        int result = ::WideCharToMultiByte(CP_UTF8, 0, src, -1, dest, sizeNeeded, nullptr, nullptr);
+        if (result == 0) {
+            printf("Error in WideCharToMultiByte conversion. Error: %lu\n", ::GetLastError());
+            return -1;
+        }
+        return sizeNeeded;
+    }
+    
+    inline int GetRequiredWideToUtf8Size(const wchar_t* src){
+        // Get exact UTF-8 size needed (passing nullptr for dest calculates size only)
+        // Passing -1 for cchWideChar INCLUDES the null terminator in the returned size
+        return ::WideCharToMultiByte(CP_UTF8, 0, src, -1, nullptr, 0, nullptr, nullptr);
+    }
+
+    inline int WriteUtf8CharToBufferFromWide(const wchar_t* wSrc, char* dest, int destCapacity){
+        if (!wSrc || !dest || destCapacity <= 0) return -1;
+        int result = ::WideCharToMultiByte(CP_UTF8, 0, wSrc, -1, dest, destCapacity, nullptr, nullptr);
+        if (!result) {
+            printf("Error in WideCharToMultiByte conversion. Error: %lu\n", ::GetLastError());
+            return -1;
+        }
+        return result;
     }
 
     std::string SanitizeWString(const wchar_t* wide){

@@ -28,8 +28,8 @@ struct DirChild{
     SFGAOF attributes = 0;  // 4
     // std::string typeName{};  // Gonna change to a u64, since many of them have similar typenames
     // store Hash -  ID used to match item, shared_ptr/unique_ptr is slow (cache misses) and using ptr is risky because things can be ordered 
-
 };
+
 
 struct DirItem{
     std::string name; // 24
@@ -41,6 +41,34 @@ struct DirItem{
     std::string typeName{};  // Gonna change to a u64, since many of them have similar typenames
 };
 
+class DirChildren{
+    public:
+    std::vector<char> nameArena;
+    std::vector<u32>  nameOffsets;
+    std::vector<u16>  nameLengths;
+    
+    // PIDL Arena (SoA) - Raw bytes packed sequentially
+    std::vector<u8>   pidlArena;     // Stores raw ITEMIDLIST bytes back-to-back
+    std::vector<u32>  pidlOffsets;   // Offset into pidlArena for each item, like start
+    std::vector<u16>  pidlLengths;   // Length of each child PIDL in bytes
+    
+    // Parallel Attributes
+    std::vector<u64>      hashes;
+    std::vector<SFGAOF>   attributes;
+    std::vector<FILETIME> lastWriteTimes;
+    std::vector<u64>      sizes;
+    
+    size_t ItemCount() const { return hashes.size(); }
+
+    const char* GetChildName(size_t index) const {
+        // do i lowkey need the nameLength if it ends with a null terminator
+        return reinterpret_cast<const char*>(&nameArena[nameOffsets[index]]);
+    }
+
+    PCITEMID_CHILD GetChildPidl(size_t index) const {
+        return reinterpret_cast<PCITEMID_CHILD>(&pidlArena[pidlOffsets[index]]);
+    }
+};
 
 // Actually first goal is making the current Code a hybrid, switch to Pidl when virtual, before indexing folders recursively
 // do i need 8 arenas? for each DirList Item
