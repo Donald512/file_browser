@@ -29,8 +29,8 @@ inline bool RenderSectionHeader(const char* id, const char* headerGlyph, const c
     const bool hovered = ImGui::IsItemHovered();
     ImGui::PopID();
 
-    const ImU32 mutedCol = ToImU32(Theme::Current.palette.TextMuted);
-    const ImU32 disabledCol = ToImU32(Theme::Current.palette.TextDisabled);
+    const ImU32 mutedCol = Theme::Current.palette.TextMuted;
+    const ImU32 disabledCol = Theme::Current.palette.TextDisabled;
     const ImU32 textCol  = isDisabled ? disabledCol : mutedCol;
 
     if (!isDisabled && hovered){
@@ -104,8 +104,8 @@ inline bool RenderItemRow(const char* id, ImTextureID icon, const char* label, b
     const bool hovered = ImGui::IsItemHovered();
     ImGui::PopID();
 
-    const ImU32 textCol   = ToImU32(Theme::Current.palette.Text);
-    const ImU32 mutedCol  = ToImU32(Theme::Current.palette.TextMuted);
+    const ImU32 textCol   = Theme::Current.palette.Text;
+    const ImU32 mutedCol  = Theme::Current.palette.TextMuted;
 
     if (hovered || isSelected){
         ImRect bgRect(ImVec2(rect.Min.x + xFramePadding.x, rect.Min.y + 1.0f),
@@ -158,10 +158,10 @@ inline void RenderSidebar(f32 dpi, App& app){
     const f32 titleH = TitlebarHeight * dpi;
     const f32 searchHeight = titleH;
     
-    const ImU32 bgCol = ToImU32(Theme::Current.palette.Background);
-    const ImU32 surfaceCol = ToImU32(Theme::Current.palette.Surface);
-    const ImU32 borderCol = ToImU32(Theme::Current.palette.Border);
-    const ImU32 textMutedCol = ToImU32(Theme::Current.palette.TextMuted);
+    const ImU32 bgCol = Theme::Current.palette.Background;
+    const ImU32 surfaceCol = Theme::Current.palette.Surface;
+    const ImU32 borderCol = Theme::Current.palette.Border;
+    const ImU32 textMutedCol = Theme::Current.palette.TextMuted;
     
     ImVec2 mousePos = ImGui::GetMousePos();
     
@@ -269,8 +269,8 @@ inline void RenderSidebar(f32 dpi, App& app){
 
     f32 dragDelta = RenderResizeHorizontalHandle(
         "SidebarResize", topLeft, handleW, handleH,
-        ToImU32(Theme::Current.palette.SurfaceActive),
-        ToImU32(Theme::Current.palette.SurfaceHover)
+        Theme::Current.palette.SurfaceActive,
+        Theme::Current.palette.SurfaceHover
     );
 
     if (dragDelta != 0.0f){

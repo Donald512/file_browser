@@ -15,15 +15,15 @@ namespace Theme {
     };
 
     struct Palette {
-        ImVec4 Background;
-        ImVec4 Surface;
-        ImVec4 SurfaceHover;
-        ImVec4 SurfaceActive;
-        ImVec4 Border;
-        ImVec4 Text;          // Primary / Bright Text
-        ImVec4 TextMuted;     // Secondary / Label / Inactive Text
-        ImVec4 TextDisabled;  // Fully Disabled / Hidden Text
-        ImVec4 Accent;
+        ImU32 Background;
+        ImU32 Surface;
+        ImU32 SurfaceHover;
+        ImU32 SurfaceActive;
+        ImU32 Border;
+        ImU32 Text;          // Primary / Bright Text
+        ImU32 TextMuted;     // Secondary / Label / Inactive Text
+        ImU32 TextDisabled;  // Fully Disabled / Hidden Text
+        ImU32 Accent;
     };
     
     struct Metrics {

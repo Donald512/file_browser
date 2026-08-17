@@ -42,13 +42,13 @@ inline void RenderTitlebar(f32 dpi, App& app, bool isMaximized = false){
         ImVec2(windowPos.x + contentSize.x, windowPos.y + titleH)
     );
 
-    const ImU32 surfaceCol = ToImU32(Theme::Current.palette.Surface);
-    const ImU32 backgroundCol = ToImU32(Theme::Current.palette.Background);
-    const ImU32 surfaceHoverCol = ToImU32(Theme::Current.palette.SurfaceHover);
-    const ImU32 surfaceActiveCol = ToImU32(Theme::Current.palette.SurfaceActive);
-    const ImU32 textCol = ToImU32(Theme::Current.palette.Text);
+    const ImU32 surfaceCol = Theme::Current.palette.Surface;
+    const ImU32 backgroundCol = Theme::Current.palette.Background;
+    const ImU32 surfaceHoverCol = Theme::Current.palette.SurfaceHover;
+    const ImU32 surfaceActiveCol = Theme::Current.palette.SurfaceActive;
+    const ImU32 textCol = Theme::Current.palette.Text;
     const ImU32 closeHoverCol = IM_COL32(232, 17, 35, 255);
-    const ImU32 borderCol = ToImU32(Theme::Current.palette.Border);
+    const ImU32 borderCol = Theme::Current.palette.Border;
 
     // Titlebar background.
     dl->AddRectFilled(titleRect.Min, titleRect.Max, surfaceCol);

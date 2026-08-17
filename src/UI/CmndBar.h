@@ -18,10 +18,10 @@ inline void RenderCommandbar(f32 dpi, App& app){
     const f32 barH = TitlebarHeight * dpi;
     const f32 pad  = 4.0f * dpi;
 
-    const ImU32 hoverCol  = ToImU32(Theme::Current.palette.SurfaceHover);
-    const ImU32 activeCol = ToImU32(Theme::Current.palette.SurfaceActive);
-    const ImU32 textCol   = ToImU32(Theme::Current.palette.Text);        // was SurfaceActive!
-    const ImU32 mutedCol  = ToImU32(Theme::Current.palette.TextDisabled);
+    const ImU32 hoverCol  = Theme::Current.palette.SurfaceHover;
+    const ImU32 activeCol = Theme::Current.palette.SurfaceActive;
+    const ImU32 textCol   = Theme::Current.palette.Text;        // was SurfaceActive!
+    const ImU32 mutedCol  = Theme::Current.palette.TextDisabled;
 
     const ImRect barRect(winPos, ImVec2(winPos.x + winSize.x, winPos.y + barH));
     const f32 btnSize = barH - pad * 2.0f;

@@ -126,14 +126,16 @@ std::vector<DirItem> EnumFolder(const std::wstring dirPath){
         DirItem item;
         item.attributes = findData.dwFileAttributes;
         item.name = Str::WideToString(findData.cFileName);
-        item.size = ((u64)(findData.nFileSizeHigh << 32) | findData.nFileSizeLow);
+        item.size = (static_cast<u64>(findData.nFileSizeHigh) << 32) | findData.nFileSizeLow;
         item.lastWriteTime = findData.ftLastWriteTime; // sus
 
         // no typename, i was doing it wrong all along
     } while (FindNextFileW(hFind, &findData));
 
     FindClose(hFind);
+    return result;
 }
+
 
 std::vector<DirItem> EnumFolder(PCIDLIST_ABSOLUTE folder, DirItem* parentItem = nullptr){
     std::vector<DirItem> items;
@@ -189,13 +191,15 @@ std::vector<DirItem> EnumFolder(PCIDLIST_ABSOLUTE folder, DirItem* parentItem = 
 }
 
 
+/*
+DirParent2 GetDirParent(std::wstring& folder){
+    DirParent2 parent;
 
-DirParent GetDirParent(std::wstring folder){
-    DirParent parent;
-
-    
-    parent.pidl =  folder;
+    // risky ... but my middle name is danger
+    // parent.pidl = WShell::Pidl(reinterpret_cast<PCIDLIST_ABSOLUTE>(folder.c_str()));
+    return parent;
 }
+*/
 
 DirParent GetDirParent(PCIDLIST_ABSOLUTE folder){
     DirParent parent;

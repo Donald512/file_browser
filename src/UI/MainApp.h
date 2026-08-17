@@ -30,9 +30,9 @@ inline void GameLoop( f32 screenW, f32 screenH, f32 mouseX, f32 mouseY, bool isM
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
 
-    ImGui::PushStyleColor(ImGuiCol_WindowBg,ToImU32(Theme::Current.palette.Background));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg,Theme::Current.palette.Background);
 
-    ImGui::PushStyleColor(ImGuiCol_ChildBg,ToImU32(Theme::Current.palette.Background));
+    ImGui::PushStyleColor(ImGuiCol_ChildBg,Theme::Current.palette.Background);
 
     ImGui::Begin(
         "AppWorkspace",
@@ -64,14 +64,16 @@ inline void GameLoop( f32 screenW, f32 screenH, f32 mouseX, f32 mouseY, bool isM
         RenderSidebar(dpi, app);
     }
 
-    // f32 handleW = 4.0f * dpi;
-    // ImGui::SetCursorScreenPos(ImVec2(sidebarW, topH));
+    
     if (ImGui::BeginChild("Content", ImVec2(screenW - sidebarW, screenH - topH), false)){
-        RenderCommandbar(dpi, app);
-        RenderFileGrid(dpi, app);
-        // TODO main app content goes here.
+        RenderCommandbar(dpi, app);    
+
+        if (ImGui::BeginChild("FileViewArea", ImVec2(0, 0), false)) {
+            RenderFileGrid(dpi, app);
+        }
         ImGui::EndChild();
     }
+    ImGui::EndChild();
 
 
 

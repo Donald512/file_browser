@@ -83,15 +83,15 @@ private:
 
 
 // if palette is stored as 0..255 colors.
-template <typename ColorT>
-inline ImU32 ToImU32(const ColorT& c){
-    return IM_COL32((int)c.r, (int)c.g, (int)c.b, (int)c.a);
-}    
+// template <typename ColorT>
+// inline ImU32 ToImU32(const ColorT& c){
+//     return IM_COL32((int)c.r, (int)c.g, (int)c.b, (int)c.a);
+// }    
 
-// if 0..1.
-inline ImU32 ToImU32(const ImVec4& c){
-    return ImGui::ColorConvertFloat4ToU32(c);
-}    
+// // if 0..1.
+// inline ImU32 ToImU32(const ImVec4& c){
+//     return ImGui::ColorConvertFloat4ToU32(c);
+// }    
 
 
 
@@ -215,13 +215,26 @@ inline Interaction MakeInteractive(const char* strID, const ImRect& rect){
     return MakeInteractive(ImGui::GetCurrentWindow()->GetID(strID), rect);
 }
 
+inline bool IsDoubleClick(ImGuiID id, bool clickedThisFrame){
+    static ImGuiID lastId = 0;
+    static double lastTime = -1.0;
+    bool isDouble = false;
+    if (clickedThisFrame){
+        double now = ImGui::GetTime();
+        isDouble = (id == lastId) && (now - lastTime) <= ImGui::GetIO().MouseDoubleClickTime;
+        lastId = id;
+        lastTime = now;
+    }
+    return isDouble;
+}
+
 // Fills `rect` with the theme's hover or selected color, or does nothing.
 // Pass an already-inset rect if you want padding around the fill (see
 // Sidebar.h's RenderItemRow for an example) - this only decides the color.
 inline void DrawSelectableBg(ImDrawList* dl, const ImRect& rect, bool hovered, bool selected, f32 rounding = 0.0f){
     if (!hovered && !selected) return;
-    ImU32 col = selected ? ToImU32(Theme::Current.palette.SurfaceActive)
-                          : ToImU32(Theme::Current.palette.SurfaceHover);
+    ImU32 col = selected ? Theme::Current.palette.SurfaceActive
+                          : Theme::Current.palette.SurfaceHover;
     dl->AddRectFilled(rect.Min, rect.Max, col, rounding);
 }
 
@@ -265,7 +278,7 @@ inline void ForEachGridCell(size_t itemCount, f32 cellW, f32 cellH, Fn&& drawCel
 }
 
 
-bool RenderIconButton( const ImRect& rect, const char* idName, const char* icon, f32 rounding, ImU32 hoverCol, ImU32 activeCol, ImU32 textCol = ToImU32(Theme::Current.palette.Text), bool isDisabled = false){
+bool RenderIconButton( const ImRect& rect, const char* idName, const char* icon, f32 rounding, ImU32 hoverCol, ImU32 activeCol, ImU32 textCol = Theme::Current.palette.Text, bool isDisabled = false){
     bool hovered = false;
     bool held = false;
 
@@ -282,7 +295,7 @@ bool RenderIconButton( const ImRect& rect, const char* idName, const char* icon,
         else if (hovered)   dl->AddRectFilled(rect.Min, rect.Max, hoverCol, rounding);
     }    
 
-    if (isDisabled) textCol = ToImU32(Theme::Current.palette.TextDisabled);
+    if (isDisabled) textCol = Theme::Current.palette.TextDisabled;
     DrawTextCenteredSingleLine(dl, rect.Min, rect.Max, icon, textCol);
 
     if (isDisabled) return false;
@@ -373,9 +386,9 @@ inline void RenderHorizontalScrollbar(const char* idStr, ImRect trackRect, ImRec
         ImVec2(thumbRect.Max.x, trackRect.Max.y - yOffset)
     );    
 
-    ImU32 thumbCol = held    ? ToImU32(Theme::Current.palette.SurfaceActive) : 
-                    hovered ? ToImU32(Theme::Current.palette.SurfaceHover) : 
-                           ToImU32(Theme::Current.palette.Border);
+    ImU32 thumbCol = held    ? Theme::Current.palette.SurfaceActive : 
+                    hovered ? Theme::Current.palette.SurfaceHover : 
+                           Theme::Current.palette.Border;
     dl->AddRectFilled(visualThumb.Min, visualThumb.Max, thumbCol, thickness * 0.5f);                       
 
 }    
@@ -513,9 +526,9 @@ inline void RenderVerticalScrollbar(const char* idStr, ImRect trackRect, ImRect 
     f32 thickness = (trackRect.Contains(mousePos) || held) ? trackW : trackW * 0.6f;
     f32 xOff = (trackW - thickness) * 0.5f;
     ImRect visual(ImVec2(thumbRect.Min.x + xOff, thumbRect.Min.y), ImVec2(thumbRect.Max.x - xOff, thumbRect.Max.y));
-    ImU32 col = held ? ToImU32(Theme::Current.palette.SurfaceActive)
-              : hovered ? ToImU32(Theme::Current.palette.SurfaceHover)
-                        : ToImU32(Theme::Current.palette.Border);
+    ImU32 col = held ? Theme::Current.palette.SurfaceActive
+              : hovered ? Theme::Current.palette.SurfaceHover
+                        : Theme::Current.palette.Border;
     dl->AddRectFilled(visual.Min, visual.Max, col, thickness * 0.5f);
 }
 
@@ -568,7 +581,7 @@ int RenderTextWrappedCenteredEllipsis(ImDrawList* drawList, ImVec2 pos, ImVec2 s
             f32 centerX = pos.x + (size.x - line_width) * 0.5f;
 
             // Draw line
-            drawList->AddText(font, fontSize, ImVec2(centerX, pos.y + (lineCount * lineHeight)), ToImU32(Theme::Current.palette.Text), s, trimEnd);
+            drawList->AddText(font, fontSize, ImVec2(centerX, pos.y + (lineCount * lineHeight)), Theme::Current.palette.Text, s, trimEnd);
 
             s = lineEnd;
             // Advance past standard line breaks

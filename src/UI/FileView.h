@@ -44,42 +44,41 @@ inline int ShilSizeForMode(ViewMode mode){
     }
 }
 
+inline int ShiLSizeForIconSize(f32 iconSize){
+    if (iconSize < 16) return SHIL_SMALL;
+    if (iconSize < 32) return SHIL_LARGE;
+    if (iconSize < 48) return SHIL_EXTRALARGE;
+    return SHIL_JUMBO;
+}
+
+
 struct ItemInteraction {
     bool hovered;
     bool clicked;
 };
 
-// FIX 1: Double click timing mismatch. 
-// ButtonBehavior returns true on RELEASE. IsMouseDoubleClicked triggers on PRESS.
 inline ItemInteraction HandleItemInteraction(App& app, const DirParent& parent, const DirChild& child, ImGuiID id, const ImRect& rect){
-    ImGui::ItemAdd(rect, id);
-    bool hovered, held;
-    bool clicked = ImGui::ButtonBehavior(rect, id, &hovered, &held);
-    
-    // Check double click via hovered state, NOT the clicked state
-    bool doubleClicked = hovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
+    Interaction ia = MakeInteractive(id, rect);
+    bool doubleClicked = IsDoubleClick(id, ia.pressed);
     
     if (doubleClicked) {
         if (child.attributes & SFGAO_FOLDER){
             PCIDLIST_ABSOLUTE newPidl = GetFullPidl(parent.pidl.get(), child.pidl.get());
-            // ! showuld i change it to accept a PCIDLIST_ABSOLUTE, instead of WShell::Pidl
-            app.QueueCommand({CmdType::GoTo, WShell::Pidl(newPidl), 0, app.window.activeTabIndex, L""});
+            app.QueueCommand({CmdType::GoTo, WShell::Pidl(newPidl), 0, app.window.activeTabIndex, L""}); 
         }
         else
-            app.QueueCommand({CmdType::OpenFile, child.pidl.Clone(), {}, {}, L""});
-    } else if (clicked) {
+        app.QueueCommand({CmdType::OpenFile, child.pidl.Clone(), {}, {}, L""});
+    } 
+    else if (ia.pressed) {
         app.window.GetActiveTab().selectItem((child.hash), SelectMode::OneItem);
     }
-    return {hovered, clicked || doubleClicked};
+    return {ia.hovered || ia.pressed};
 }
 
 // FIX 2: Synchronous Icon Loading causes UI Freezing.
 // GetIconIndex calls Windows Shell API on the main thread. 
 // You MUST use your async request system here instead of synchronous fetching.
 inline void DrawItemIcon(ImDrawList* dl, App& app, const DirParent& parent, const DirChild& item, ImVec2 pos, f32 iconSize, int shilSize){
-    // if (!app.icons.IsCached(item.Hash(), shilSize)) { app.icons.RequestAsync(...); }
-    
-    // ImTextureID iconTex = 0; // Disabled synchronous call to prevent freezing
     ImTextureID iconTex = app.textures.GetTexture({app.icons.GetIconIndex(parent.shellFolder.Get(), item.pidl.get(), item.hash), shilSize});
     
     if (iconTex){
@@ -87,7 +86,7 @@ inline void DrawItemIcon(ImDrawList* dl, App& app, const DirParent& parent, cons
     } else {
         const bool isFolder = (item.attributes & SFGAO_FOLDER) != 0;
         const char* fallback = isFolder ? ICON_REG_FOLDER : ICON_REG_DOCUMENT;
-        DrawTextCenteredSingleLine(dl, pos, ImVec2(pos.x + iconSize, pos.y + iconSize), fallback, ToImU32(Theme::Current.palette.TextMuted), iconSize);
+        DrawTextCenteredSingleLine(dl, pos, ImVec2(pos.x + iconSize, pos.y + iconSize), fallback, Theme::Current.palette.TextMuted, iconSize);
     }
 }
 
@@ -154,7 +153,7 @@ inline void RenderSmallView(f32 dpi, App& app){
     const f32 iconSize = 16.0f * dpi;
     const f32 iconPad = 6.0f * dpi;
     const f32 textGap = 8.0f * dpi;
-    const ImU32 textCol = ToImU32(Theme::Current.palette.Text);
+    const ImU32 textCol = Theme::Current.palette.Text;
 
     const Directory& directory = activeTab.directory;
     const std::vector<DirChild>& dirChildren = directory.children;
@@ -201,7 +200,7 @@ inline void RenderListView(f32 dpi, App& app){
     const f32 xGap = 8.0f * dpi;
     const f32 cellHeight = p.height * dpi;
     const f32 iconSize = 16.0f * dpi;
-    const ImU32 textCol = ToImU32(Theme::Current.palette.Text);
+    const ImU32 textCol = Theme::Current.palette.Text;
     const f32 minColWidth = 120.0f * dpi;
     const f32 maxColWidth = p.width * dpi;
     const f32 availY = ImGui::GetContentRegionAvail().y;
@@ -275,7 +274,7 @@ inline void RenderDetailsView(f32 dpi, App& app){
     const f32 dateWidth = 150.0f * dpi;
     const f32 typeWidth = 120.0f * dpi;
     const f32 sizeWidth = 100.0f * dpi;
-    const ImU32 textCol = ToImU32(Theme::Current.palette.Text);
+    const ImU32 textCol = Theme::Current.palette.Text;
 
     // FIX 4: Removed ImGuiTableFlags_ScrollY. 
     // Tables with ScrollY fight with ImGuiListClipper. We wrap in a Child instead.
@@ -313,7 +312,8 @@ inline void RenderDetailsView(f32 dpi, App& app){
 
                     ImVec2 cellPos = ImGui::GetCursorScreenPos();
                     f32 availWidth = ImGui::GetContentRegionAvail().x;
-                    ImRect rowRect(cellPos, ImVec2(cellPos.x + ImGui::GetWindowWidth(), cellPos.y + cellHeight));
+                    f32 rowMaxX = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
+                    ImRect rowRect(cellPos, ImVec2(rowMaxX, cellPos.y + cellHeight));
                     
                     ImGuiID id = window->GetID((void*)(intptr_t)row);
                     ItemInteraction ia = HandleItemInteraction(app, directory.parent, child, id, rowRect);
@@ -329,7 +329,7 @@ inline void RenderDetailsView(f32 dpi, App& app){
 
                     ImGui::TableNextColumn();
                     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (cellHeight - ImGui::GetTextLineHeight()) * 0.5f);
-                    ImGui::TextColored(ImColor(ToImU32(Theme::Current.palette.TextMuted)), "-");
+                    ImGui::TextColored(ImColor(Theme::Current.palette.TextMuted), "-");
 
                     ImGui::TableNextColumn();
                     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (cellHeight - ImGui::GetTextLineHeight()) * 0.5f);
@@ -338,7 +338,7 @@ inline void RenderDetailsView(f32 dpi, App& app){
                     ImGui::TableNextColumn();
                     if (!isFolder){
                         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (cellHeight - ImGui::GetTextLineHeight()) * 0.5f);
-                        ImGui::TextColored(ImColor(ToImU32(Theme::Current.palette.TextMuted)), "-");
+                        ImGui::TextColored(ImColor(Theme::Current.palette.TextMuted), "-");
                     }
                     ImGui::PopID();
                 }
@@ -361,8 +361,8 @@ inline void RenderTilesView(f32 dpi, App& app){
     const f32 cellH = p.height * dpi;
     const f32 iconSize = cellH * 0.7f;
     const f32 lineHeight = ImGui::GetTextLineHeight();
-    const ImU32 textCol = ToImU32(Theme::Current.palette.Text);
-    const ImU32 mutedCol = ToImU32(Theme::Current.palette.TextMuted);
+    const ImU32 textCol = Theme::Current.palette.Text;
+    const ImU32 mutedCol = Theme::Current.palette.TextMuted;
 
     const Directory& directory = activeTab.directory;
     const std::vector<DirChild>& dirChildren = directory.children;

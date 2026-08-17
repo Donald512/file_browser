@@ -22,7 +22,7 @@ echo Checking Dependencies in %build_dir%
 :: Compile ImGui if the object files don't exist 
 if not exist %build_dir%\imgui.obj (
     echo [1/2] Compiling ImGui core libraries...
-    cl /nologo /c /Z7 /std:c++20 /I"include" /I"%imgui_root%" /I"%imgui_root%\backends" /I"%font_stuff%" ^
+    cl  /EHsc /nologo /c /Z7 /std:c++20 /I"include" /I"%imgui_root%" /I"%imgui_root%\backends" /I"%font_stuff%" ^
        "%imgui_root%\imgui.cpp" ^
        "%imgui_root%\imgui_widgets.cpp" ^
        "%imgui_root%\imgui_draw.cpp" ^
@@ -34,7 +34,7 @@ if not exist %build_dir%\imgui.obj (
 
 :: Compile project sources and link with cached ImGui .obj files
 echo [2/2] Compiling project files and linking...
-cl /nologo /Z7 /W4 /MP /std:c++20 ^
+cl  /EHsc /nologo /Z7 /W4 /MP /std:c++20 ^
    /I"include" ^
    /I"src" ^
    /I"src\Global\Icons" ^
