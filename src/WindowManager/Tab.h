@@ -27,7 +27,7 @@ enum class SelectMode {OneItem};
 
 struct FileViewState {
     // Change to user's last choice, or a setttings
-    ViewMode viewMode = ViewMode::List;   
+    ViewMode viewMode = ViewMode::Details;   
     SortMode sortMode = SortMode::Name;
     SortDirection sortDir = SortDirection::Ascending;
     bool showHidden = false;

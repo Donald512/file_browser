@@ -75,9 +75,7 @@ inline ItemInteraction HandleItemInteraction(App& app, const DirParent& parent, 
     return {ia.hovered || ia.pressed};
 }
 
-// FIX 2: Synchronous Icon Loading causes UI Freezing.
-// GetIconIndex calls Windows Shell API on the main thread. 
-// You MUST use your async request system here instead of synchronous fetching.
+
 inline void DrawItemIcon(ImDrawList* dl, App& app, const DirParent& parent, const DirChildren& children, size_t child, ImVec2 pos, f32 iconSize, int shilSize){
     ImTextureID iconTex = app.textures.GetTexture({app.icons.GetIconIndex(parent.shellFolder.Get(), children.GetChildPidl(child), children.hashes[child]), shilSize});
     
@@ -101,6 +99,16 @@ inline void RenderGridView(f32 dpi, App& app, ViewMode mode){
     if (!window || window->SkipItems) return;
     ImDrawList* dl = window->DrawList;
     auto& activeTab = app.window.GetActiveTab();
+    
+    const f32 padX = 16.0f * dpi;
+    const f32 padY = 12.0f * dpi;
+
+    ImVec2 areaMin = ImGui::GetCursorScreenPos();
+    ImVec2 areaMax = ImVec2(areaMin.x + ImGui::GetContentRegionAvail().x, areaMin.y + ImGui::GetContentRegionAvail().y);
+
+    ImVec2 contentMin = ImVec2(areaMin.x + padX, areaMin.y + padY);
+    f32 contentWidth = (areaMax.x - padX) - contentMin.x;
+
 
     GridViewParams p = GetGridParamsForMode(mode);
     const int shilSize = ShilSizeForMode(mode);
@@ -122,7 +130,7 @@ inline void RenderGridView(f32 dpi, App& app, ViewMode mode){
         bool isSelected = activeTab.isSelected(childHash);
         ImRect fullRect(cellPos, ImVec2(cellPos.x + itemWidth, cellPos.y + cellH));
 
-        ImGuiID id = window->GetID((void*)(intptr_t)i);
+        ImGuiID id = window->GetID((void*)(intptr_t)dirChildren.hashes[i]);
         ItemInteraction ia = HandleItemInteraction(app, directory.parent, dirChildren, i, id, fullRect);
         DrawSelectableBg(dl, fullRect, ia.hovered, isSelected, 4.0f * dpi);
 
@@ -162,7 +170,7 @@ inline void RenderSmallView(f32 dpi, App& app){
         bool isSelected = activeTab.isSelected(dirChildren.hashes[i]);
         ImRect fullRect(cellPos, ImVec2(cellPos.x + cellW, cellPos.y + cellH));
 
-        ImGuiID id = window->GetID((void*)(intptr_t)i);
+        ImGuiID id = window->GetID((void*)(intptr_t)dirChildren.hashes[i]);
         ItemInteraction ia = HandleItemInteraction(app, directory.parent, dirChildren, i, id, fullRect);
         DrawSelectableBg(dl, fullRect, ia.hovered, isSelected, 4.0f * dpi);
 
@@ -240,7 +248,7 @@ inline void RenderListView(f32 dpi, App& app){
             ImGui::SetCursorPos(ImVec2(currentColOffset, (f32)r * cellHeight));
             ImVec2 cellScreenPos = ImGui::GetCursorScreenPos();
             ImRect fullRect(cellScreenPos, ImVec2(cellScreenPos.x + currentColWidth, cellScreenPos.y + cellHeight));
-            ImGuiID id = window->GetID((void*)(intptr_t)i);
+            ImGuiID id = window->GetID((void*)(intptr_t)dirChildren.hashes[i]);
             ItemInteraction ia = HandleItemInteraction(app, directory.parent, dirChildren, i, id, fullRect);
             DrawSelectableBg(dl, fullRect, ia.hovered, isSelected, 4.0f * dpi);
 
@@ -258,92 +266,141 @@ inline void RenderListView(f32 dpi, App& app){
     ImGui::EndChild();
 }
 
+inline const char* KindLabel(SFGAOF attributes) {
+    return (attributes & SFGAO_FOLDER) ? "File folder" : "File";
+}
+
+inline const char* FormatFileSize(u64 size) {
+    static thread_local char buf[64];
+    if (size < 1024) snprintf(buf, sizeof(buf), "%llu B", size);
+    else if (size < 1024*1024) snprintf(buf, sizeof(buf), "%.1f KB", size / 1024.0);
+    else if (size < 1024*1024*1024) snprintf(buf, sizeof(buf), "%.1f MB", size / (1024.0*1024.0));
+    else snprintf(buf, sizeof(buf), "%.2f GB", size / (1024.0*1024.0*1024.0));
+    return buf;
+}
+
+inline const char* FormatFileTime(FILETIME ft) {
+    static thread_local char buf[128];
+    SYSTEMTIME st;
+    FileTimeToSystemTime(&ft, &st);
+    snprintf(buf, sizeof(buf), "%04d-%02d-%02d %02d:%02d", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute);
+    return buf;
+}
+
+
 inline void RenderDetailsView(f32 dpi, App& app){
     ImGuiWindow* window = ImGui::GetCurrentWindow();
     if (!window || window->SkipItems) return;
-    ImDrawList* dl = window->DrawList;
+    
     auto& activeTab = app.window.GetActiveTab();
 
     GridViewParams p = GetGridParamsForMode(ViewMode::Details);
     const f32 cellHeight = p.height * dpi;
     const f32 iconSize = 16.0f * dpi;
-    const f32 nameWidth = p.width * dpi;
-    const f32 dateWidth = 150.0f * dpi;
-    const f32 typeWidth = 120.0f * dpi;
-    const f32 sizeWidth = 100.0f * dpi;
+    f32 nameWidth = p.width * dpi;
+    f32 dateWidth = 150.0f * dpi;
+    f32 typeWidth = 120.0f * dpi;
+    f32 sizeWidth = 100.0f * dpi;
     const ImU32 textCol = Theme::Current.palette.Text;
+    const ImU32 mutedCol = Theme::Current.palette.TextMuted;
 
-    // FIX 4: Removed ImGuiTableFlags_ScrollY. 
-    // Tables with ScrollY fight with ImGuiListClipper. We wrap in a Child instead.
     ImGuiTableFlags flags =
         ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable |
-        ImGuiTableFlags_PadOuterX | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_NoBordersInBody;
+        ImGuiTableFlags_PadOuterX | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_NoBordersInBody |
+        ImGuiTableFlags_ScrollY | ImGuiTableFlags_RowBg | ImGuiTableFlags_NoHostExtendX; // shouldnt NoH
 
+        
+    ImVec2 tableSize(0.0f, ImGui::GetContentRegionAvail().y);
+        
     ImGui::PushStyleColor(ImGuiCol_TableHeaderBg, IM_COL32(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_TableBorderLight,  IM_COL32(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_TableBorderStrong, IM_COL32(0, 0, 0, 0));
+
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, Theme::Current.palette.SurfaceHover);
+    ImGui::PushStyleColor(ImGuiCol_HeaderActive,  Theme::Current.palette.SurfaceActive);
     
-    if (ImGui::BeginChild("DetailsChild", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_None)) {
-        if (ImGui::BeginTable("ExplorerDetails", 4, flags)){
-            ImGui::TableSetupScrollFreeze(0, 1);
-            ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, nameWidth);
-            ImGui::TableSetupColumn("Date modified", ImGuiTableColumnFlags_WidthFixed, dateWidth);
-            ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, typeWidth);
-            ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, sizeWidth);
-            ImGui::TableHeadersRow();
+    if (ImGui::BeginTable("ExplorerDetails", 4, flags, tableSize)){
+        ImGui::TableSetupScrollFreeze(0, 1); // Freezes the header row perfectly
+        ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, nameWidth);
+        ImGui::TableSetupColumn("Date modified", ImGuiTableColumnFlags_WidthFixed, dateWidth);
+        ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, typeWidth);
+        ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, sizeWidth);
+        ImGui::TableHeadersRow();
 
+        const Directory& directory = activeTab.directory;
+        const DirChildren& dirChildren = directory.children;
 
-            const Directory& directory = activeTab.directory;
-            const DirChildren& dirChildren = directory.children;
+        ImGuiListClipper clipper;
+        clipper.Begin((int)dirChildren.hashes.size(), cellHeight);
+        
+        while (clipper.Step()){
+            for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++){
+                bool isSelected = activeTab.isSelected(dirChildren.hashes[row]);
+                
+                ImGui::PushID(row);
+                ImGui::TableNextRow(ImGuiTableRowFlags_None, cellHeight);
+                ImGui::TableNextColumn();
+                
+                ImDrawList* dl = ImGui::GetWindowDrawList(); 
+                ImGuiWindow* currentWindow = ImGui::GetCurrentWindow();
+                ImVec2 cellPos = ImGui::GetCursorScreenPos();
+                
+                f32 tableMaxX = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
+                ImVec2 cellPadding = ImGui::GetStyle().CellPadding;
 
-            ImGuiListClipper clipper;
-            clipper.Begin((int)dirChildren.hashes.size(), cellHeight);
+                ImRect rowRect(
+                    ImVec2(cellPos.x - cellPadding.x, cellPos.y - cellPadding.y), 
+                    ImVec2(tableMaxX, cellPos.y + cellHeight - cellPadding.y)
+                );
+                
+                // Expanded so ButtonBehavior sees the whole row
+                ImGui::PushClipRect(rowRect.Min, ImVec2(tableMaxX, rowRect.Max.y), false);
+                ImGuiID id = currentWindow->GetID((void*)(intptr_t)dirChildren.hashes[row]);
+                ItemInteraction ia = HandleItemInteraction(app, directory.parent, dirChildren, row, id, rowRect);
+                ImGui::PopClipRect();
 
-            while (clipper.Step()){
-                for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++){
-                    bool isFolder = (dirChildren.attributes[row] & SFGAO_FOLDER) != 0;
-                    bool isSelected = activeTab.isSelected(dirChildren.hashes[row]);
-                    
-                    ImGui::PushID(row);
-                    ImGui::TableNextRow(ImGuiTableRowFlags_None, cellHeight);
-                    ImGui::TableNextColumn();
+                if (isSelected) ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, Theme::Current.palette.SurfaceActive);
+                else if (ia.hovered) ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, Theme::Current.palette.SurfaceHover);
 
-                    ImVec2 cellPos = ImGui::GetCursorScreenPos();
-                    f32 availWidth = ImGui::GetContentRegionAvail().x;
-                    f32 rowMaxX = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
-                    ImRect rowRect(cellPos, ImVec2(rowMaxX, cellPos.y + cellHeight));
-                    
-                    ImGuiID id = window->GetID((void*)(intptr_t)row);
-                    ItemInteraction ia = HandleItemInteraction(app, directory.parent, dirChildren, row, id, rowRect);
-                    DrawSelectableBg(dl, rowRect, ia.hovered, isSelected);
+                // --- COLU 0: NAME ---
+                f32 iconY = cellPos.y + (cellHeight - iconSize) * 0.5f;
+                DrawItemIcon(dl, app, directory.parent, dirChildren, row, ImVec2(cellPos.x + 4.0f * dpi, iconY), iconSize, SHIL_SMALL);
+                
+                f32 textX = cellPos.x + 4.0f * dpi + iconSize + 6.0f * dpi;
+                f32 maxTextWidth = ImGui::GetContentRegionAvail().x - (textX - cellPos.x);
+                ImRect textRect(ImVec2(textX, cellPos.y), ImVec2(textX + maxTextWidth, cellPos.y + cellHeight));
+                DrawTextEllipsisSingleLine(dl, textRect, dirChildren.GetChildName(row), textCol);
 
-                    f32 iconY = cellPos.y + (cellHeight - iconSize) * 0.5f;
-                    DrawItemIcon(dl, app, directory.parent, dirChildren, row, ImVec2(cellPos.x + 4.0f * dpi, iconY), iconSize, SHIL_SMALL);
-                    
-                    f32 textX = cellPos.x + 4.0f * dpi + iconSize + 6.0f * dpi;
-                    f32 maxTextWidth = availWidth - (textX - cellPos.x);
-                    ImRect textRect(ImVec2(textX, cellPos.y), ImVec2(textX + maxTextWidth, cellPos.y + cellHeight));
-                    DrawTextEllipsisSingleLine(dl, textRect, dirChildren.GetChildName(row), textCol);
+                // DATE ---
+                ImGui::TableNextColumn();
+                dl = ImGui::GetWindowDrawList(); 
+                ImVec2 datePos = ImGui::GetCursorScreenPos();
+                f32 dateLiveWidth = ImGui::GetContentRegionAvail().x;
+                const char* dateText = (dirChildren.lastWriteTimes[row].dwLowDateTime != 0 || dirChildren.lastWriteTimes[row].dwHighDateTime != 0) 
+                                    ? FormatFileTime(dirChildren.lastWriteTimes[row]) : "--";
+                ImGui::RenderTextClipped(datePos, ImVec2(datePos.x + dateLiveWidth, datePos.y + cellHeight), dateText, nullptr, nullptr, ImVec2(0.0f, 0.5f), nullptr);
+                
+                // TYPE ---
+                ImGui::TableNextColumn();
+                dl = ImGui::GetWindowDrawList();
+                ImVec2 typePos = ImGui::GetCursorScreenPos();
+                f32 typeLiveWidth = ImGui::GetContentRegionAvail().x;
+                ImGui::RenderTextClipped(typePos, ImVec2(typePos.x + typeLiveWidth, typePos.y + cellHeight), KindLabel(dirChildren.attributes[row]), nullptr, nullptr, ImVec2(0.0f, 0.5f), nullptr);
+                
+                // SIZE ---
+                ImGui::TableNextColumn();
+                dl = ImGui::GetWindowDrawList();
+                ImVec2 sizePos = ImGui::GetCursorScreenPos();
+                f32 liveSizeColWidth = ImGui::GetContentRegionAvail().x;
+                const char* sizeText = (dirChildren.sizes[row] != 0) ? FormatFileSize(dirChildren.sizes[row]) : "--";
+                ImGui::RenderTextClipped(sizePos, ImVec2(sizePos.x + liveSizeColWidth, sizePos.y + cellHeight), sizeText, nullptr, nullptr, ImVec2(1.0f, 0.5f), nullptr);
 
-                    ImGui::TableNextColumn();
-                    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (cellHeight - ImGui::GetTextLineHeight()) * 0.5f);
-                    ImGui::TextColored(ImColor(Theme::Current.palette.TextMuted), "-");
-
-                    ImGui::TableNextColumn();
-                    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (cellHeight - ImGui::GetTextLineHeight()) * 0.5f);
-                    // ImGui::TextUnformatted(KindLabel(child));
-
-                    ImGui::TableNextColumn();
-                    if (!isFolder){
-                        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (cellHeight - ImGui::GetTextLineHeight()) * 0.5f);
-                        ImGui::TextColored(ImColor(Theme::Current.palette.TextMuted), "-");
-                    }
-                    ImGui::PopID();
-                }
+                ImGui::PopID();
             }
-            ImGui::EndTable();
         }
+        ImGui::EndTable();
     }
-    ImGui::EndChild();
-    ImGui::PopStyleColor();
+    ImGui::PopStyleColor(5);
 }
 
 inline void RenderTilesView(f32 dpi, App& app){
@@ -367,7 +424,7 @@ inline void RenderTilesView(f32 dpi, App& app){
         bool isSelected = activeTab.isSelected(dirChildren.hashes[i]);
         ImRect fullRect(cellPos, ImVec2(cellPos.x + cellW, cellPos.y + cellH));
 
-        ImGuiID id = window->GetID((void*)(intptr_t)i);
+        ImGuiID id = window->GetID((void*)(intptr_t)dirChildren.hashes[i]);
         ItemInteraction ia = HandleItemInteraction(app, directory.parent, dirChildren, i, id, fullRect);
         DrawSelectableBg(dl, fullRect, ia.hovered, isSelected, 4.0f * dpi);
 
