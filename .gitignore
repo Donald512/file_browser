@@ -8,7 +8,7 @@ fileLstr/
 src/notes.txt
 include/old/
 test\color_pixel_inspector.py
-
+*
 !src/
 !include/
 !thirdparty/
