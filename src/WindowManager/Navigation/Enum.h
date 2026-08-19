@@ -9,6 +9,8 @@
 #include "BasicTypes.h"
 #include "Types/global.h"
 #include <iostream>
+#include <propkey.h>
+#include <propvarutil.h>
 
 #include <wrl/client.h>
 using Microsoft::WRL::ComPtr;
@@ -205,6 +207,7 @@ DirParent GetDirParent(PCIDLIST_ABSOLUTE folder){
     parent.pidl = WShell::Pidl(ILClone(folder));
     parent.hash = HashPidl(parent.pidl.get());
     parent.name = WShell::GetDisplayName(parent.pidl.get());
+    parent.lastWriteTime = WShell::GetModifiedTime(folder);
 
     return parent;
 }

@@ -16,6 +16,7 @@ struct DirParent{
     ComPtr<IShellFolder> shellFolder;
     WShell::Pidl pidl;  // Absolute pidl, like a full path
     std::string name;
+    FILETIME lastWriteTime = {0};
     u64 hash = 0;
 };
 
@@ -41,6 +42,17 @@ struct DirItem{
     std::string typeName{};  // Gonna change to a u64, since many of them have similar typenames
 };
 
+
+struct ItemView {
+    const char* name;
+    PCITEMID_CHILD pidl;
+    u64 hash;
+    SFGAOF attributes;
+    FILETIME lastWriteTime;
+    u64 size;
+
+    bool IsFolder() const { return (attributes & SFGAO_FOLDER) != 0; }
+};
 class DirChildren{
     public:
     std::vector<char> nameArena;
@@ -62,13 +74,28 @@ class DirChildren{
 
     const char* GetChildName(size_t index) const {
         // do i lowkey need the nameLength if it ends with a null terminator
-        return reinterpret_cast<const char*>(&nameArena[nameOffsets[index]]);
+        if (nameArena.empty()) return "";
+        return &nameArena[nameOffsets[index]];
     }
 
     PCITEMID_CHILD GetChildPidl(size_t index) const {
         return reinterpret_cast<PCITEMID_CHILD>(&pidlArena[pidlOffsets[index]]);
     }
+    
+    ItemView GetItem(size_t index) const;
 };
+
+ItemView DirChildren::GetItem(size_t index) const {
+    return ItemView{
+        GetChildName(index),
+        GetChildPidl(index),
+        hashes[index],
+        attributes[index],
+        lastWriteTimes[index],
+        sizes[index]
+    };
+}
+
 
 // Actually first goal is making the current Code a hybrid, switch to Pidl when virtual, before indexing folders recursively
 // do i need 8 arenas? for each DirList Item

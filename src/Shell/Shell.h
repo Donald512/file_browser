@@ -1,11 +1,14 @@
 #pragma once
 #include "Str.h"
-#include "Shlwapi.h"
-#include "ShlObj.h"
+#include <Shlwapi.h>
+#include <ShlObj.h>
 #include <optional>
 #include "ComUtils.h"
-#include "wrl/client.h"
+#include <wrl/client.h>
 #include "KnownSpecialFolders.h"
+#include <propsys.h>
+#include <propkey.h>
+#include <propvarutil.h>
 
 
 namespace WShell{
@@ -206,6 +209,26 @@ namespace WShell{
         return sfi.iIcon; // even if it fails, it returns 0
     }
 
+    inline FILETIME GetModifiedTime(PCIDLIST_ABSOLUTE pidl){
+        IPropertyStore* pStore = nullptr;
+
+        FILETIME lastWriteTime{};
+        if (SUCCEEDED(SHGetPropertyStoreFromIDList(pidl, GPS_FASTPROPERTIESONLY, IID_PPV_ARGS(&pStore)))){
+            PROPVARIANT propvar;
+            PropVariantInit(&propvar);
+
+            if (SUCCEEDED(pStore->GetValue(PKEY_DateModified, &propvar))){
+                if (propvar.vt == VT_FILETIME){
+                    lastWriteTime = propvar.filetime;
+                }
+                PropVariantClear(&propvar);
+            }
+            pStore->Release();
+        }
+        return lastWriteTime;
+    }
+
+
     inline bool ExecuteFile(PCIDLIST_ABSOLUTE file){
         if (!file) return false;
 
@@ -223,5 +246,6 @@ namespace WShell{
         }
         return true;
     }
+
 
 }

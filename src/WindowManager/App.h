@@ -56,6 +56,7 @@ struct App{
 
     Window window;
     TextureManager textures;
+    DirectoryManager directory;
     IconManager icons;
     SidebarManager sidebar;
 

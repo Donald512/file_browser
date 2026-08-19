@@ -20,9 +20,7 @@ struct WindowManager{};
 
 
 enum class Actions {Normal, Back, Forward, Refresh};
-enum class SortMode { Name, DateModified, Type, Size};
 enum class ViewMode { Icons, Small, List, Details, Tiles}; // feel like this belongs to  UI
-enum class SortDirection {Ascending, Descending };
 enum class SelectMode {OneItem};
 
 struct FileViewState {
@@ -48,7 +46,7 @@ class Tab{
         bool CanGoBack() const {return history.CanGoBack();}
         bool CanGoForward() const {return history.CanGoForward();}
         bool CanGoParent() const {
-            if (!directory.parent.pidl || ILIsEmpty(directory.parent.pidl.get())) return false;
+            if (!dir.parent.pidl || ILIsEmpty(dir.parent.pidl.get())) return false;
             return true;
         }
         bool GoBack(){
@@ -84,7 +82,7 @@ class Tab{
 
         Breadcrumbs breadcrumbs{};
         History history{};
-        Directory directory{};
+        Directory dir{};
         std::unordered_set<u64> selectedItems{};
         
         FileViewState viewState;
@@ -128,16 +126,16 @@ bool Tab::GoTo(PCIDLIST_ABSOLUTE dest, Actions action){
     // preventing currentFolder from being null, becasue it will crash ILIsEqual
 
     // skip check for Actions::Refresh so that it always navigates
-    if (action != Actions::Refresh && directory.parent.pidl && ILIsEqual(dest, directory.parent.pidl)){
+    if (action != Actions::Refresh && dir.parent.pidl && ILIsEqual(dest, dir.parent.pidl)){
         return false;
     }
-    directory.UpdateParent(dest);
+    dir.UpdateParent(dest);
 
-    if (action == Actions::Normal) history.Push(directory.parent.pidl.get()); 
-    breadcrumbs = GenerateBreadcrumbs(directory.parent.pidl.get());
+    if (action == Actions::Normal) history.Push(dir.parent.pidl.get()); 
+    breadcrumbs = GenerateBreadcrumbs(dir.parent.pidl.get());
     selectedItems.clear();
 
-    directory.updatedChildren = false;
+    dir.updatedChildren = false;
 
     return true;
 }
@@ -146,7 +144,7 @@ bool Tab::GoParent(){
     if (!CanGoParent()){
         return false;
     }
-    PIDLIST_ABSOLUTE parentPidl = ILClone(directory.parent.pidl.get());
+    PIDLIST_ABSOLUTE parentPidl = ILClone(dir.parent.pidl.get());
     if(!parentPidl) return false;
     ILRemoveLastID(parentPidl);
 
