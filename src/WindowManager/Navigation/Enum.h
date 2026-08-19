@@ -243,7 +243,7 @@ std::vector<DirChild> GetDirChildren(IShellFolder* parentShellFolder, PCIDLIST_A
         child.hash = HashCombinedPidl(parentPidl, child.pidl.get());
         child.name = WShell::GetDisplayName(pTarget, child.pidl.get(), SHGDN_NORMAL);
 
-        child.attributes = SFGAO_FOLDER | SFGAO_CANRENAME | SFGAO_CANDELETE;
+        child.attributes = SFGAO_FOLDER | SFGAO_CANRENAME | SFGAO_CANDELETE | SFGAO_HIDDEN;
         PCIDLIST_ABSOLUTE childPtr = child.pidl.get();
         pTarget->GetAttributesOf(1, (LPCITEMIDLIST*)&childPtr, &child.attributes);
 
@@ -311,7 +311,7 @@ DirChildren GetDirChildren2(IShellFolder* parentShellFolder, PCIDLIST_ABSOLUTE p
         children.hashes.push_back(HashCombinedPidl(parentPidl, pStoredPidl));
 
 
-        SFGAOF attrs = SFGAO_FOLDER | SFGAO_CANRENAME | SFGAO_CANDELETE;
+        SFGAOF attrs = SFGAO_FOLDER | SFGAO_CANRENAME | SFGAO_CANDELETE |SFGAO_HIDDEN;
         pTarget->GetAttributesOf(1, (LPCITEMIDLIST*)&pStoredPidl, &attrs);
         children.attributes.push_back(attrs);
         

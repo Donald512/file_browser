@@ -55,6 +55,7 @@ struct ItemView {
 };
 class DirChildren{
     public:
+    
     std::vector<char> nameArena;
     std::vector<u32>  nameOffsets;
     std::vector<u16>  nameLengths;

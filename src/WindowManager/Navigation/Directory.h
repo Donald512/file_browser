@@ -17,13 +17,11 @@ class Directory{
     DirParent parent;
     std::shared_ptr<const DirChildren> children;
 
-    std::vector<u32> sortedIndices;
-
     void UpdateParent(PCIDLIST_ABSOLUTE parentPidl){
         parent = GetDirParent(parentPidl);
     }
 
-    void UpdateChildren(DirectoryManager& directory, SortMode sm, SortDirection sd){
+    void UpdateChildren(DirectoryManager& directory, SortMode sm, SortDirection sd, bool showHidden){
         if (updatedChildren) return;
 
         UpdateParentShellFolder(parent);
@@ -37,10 +35,34 @@ class Directory{
         }
 
         Sort(sm, sd);
+
+        if (!showHidden){
+            RebuildNonHiddenIndices();
+        }
+        
         updatedChildren = true;
     }
 
-   void Sort(SortMode mode, SortDirection direction);
+    void RebuildNonHiddenIndices(){
+        nonHiddenIndices.clear();
+        nonHiddenIndices.reserve(sortedIndices.size());
+
+        for (u32 index : sortedIndices) {
+            if (!(children->attributes[index] & SFGAO_HIDDEN))
+                nonHiddenIndices.push_back(index);
+            std::cout << children->GetChildName(index) << " attributes: " << children->attributes[index] << std::endl;
+        }
+    }
+
+    const std::vector<u32>& VisibleIndices(bool showHidden) const {
+        return showHidden ? sortedIndices : nonHiddenIndices;
+    }
+
+    void Sort(SortMode mode, SortDirection direction);
+
+    private:
+        std::vector<u32> sortedIndices;
+        std::vector<u32> nonHiddenIndices;
 
 };
 
@@ -93,3 +115,4 @@ void Directory::Sort(SortMode mode, SortDirection direction) {
         }
     );
 }
+

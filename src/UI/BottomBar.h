@@ -84,6 +84,7 @@ void RenderBottombar(f32 dpi, App& app){
     const f32 lineHeight = ImGui::GetTextLineHeight();
     const f32 rounding = 8.0f * dpi;
     const ImU32& textCol = Theme::Current.palette.Text;
+    const ImU32& activeCol = Theme::Current.palette.SurfaceActive;
     const ImU32& hoverCol = Theme::Current.palette.SurfaceHover;
     const ImU32& accentCol = Theme::Current.palette.Accent;
     
@@ -123,18 +124,37 @@ void RenderBottombar(f32 dpi, App& app){
     const ImVec2 sortIconSize = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, sortIconText);
     
     const f32 sortElementWidth =  sortIconSize.x + distanceBetweeIconAndText + sortTextSize.x;
-
+    
     cursorX -= sortElementWidth;
-
+    
     ImRect sortRect(
         ImVec2(cursorX, bbarPos.y),
         ImVec2(cursorX + sortElementWidth, bbarPos.y + bbarSize.y)
     );
-
+    
     drawX = cursorX;
     drawX += DrawTextAtX(dl, drawX, sortRect, sortPlaceholderText, textCol).x + distanceBetweeIconAndText;
     DrawTextAtX(dl, drawX, sortRect, sortIconText, textCol);
     
+    // --------------
+    // - Hidden
+    // --------------
+    cursorX -= padX;
+    const char* hiddenIconText = vs.showHidden? ICON_REG_EYE : ICON_REG_EYE_OFF;
+
+    const ImVec2 hiddenIconSize = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, hiddenIconText);
+    
+    cursorX -= hiddenIconSize.x;
+
+    ImRect hiddenRect(
+        ImVec2(cursorX, bbarPos.y),
+        ImVec2(cursorX + hiddenIconSize.x, bbarPos.y + bbarSize.y)
+    );
+
+    if (RenderIconButton(hiddenRect, "hiddenToggle", hiddenIconText, 0, ImU32(0.0f), ImU32(0.0f))){
+        activeTab.ToggleShowHidden();
+    }
+
 
     dl->ChannelsSetCurrent(0);
     

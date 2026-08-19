@@ -81,6 +81,12 @@ class Tab{
         }
 
         void ReSort();
+        void ToggleShowHidden(){
+            viewState.showHidden = !viewState.showHidden;
+            if (viewState.showHidden == false){
+                dir.RebuildNonHiddenIndices();
+            }
+        }
 
         Breadcrumbs breadcrumbs{};
         History history{};
@@ -158,4 +164,7 @@ bool Tab::GoParent(){
 
 void Tab::ReSort(){
     dir.Sort(viewState.sortMode, viewState.sortDir);
+    if (!viewState.showHidden){
+        dir.RebuildNonHiddenIndices();
+    }
 }

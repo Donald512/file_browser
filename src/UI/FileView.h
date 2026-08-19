@@ -74,7 +74,10 @@ inline void DrawItemIcon(ImDrawList* dl, App& app, const DirParent& parent, cons
     ImTextureID iconTex = app.textures.GetTexture({app.icons.GetIconIndex(parent.shellFolder.Get(), child.pidl, child.hash), shilSize});
     
     if (iconTex){
-        dl->AddImage(iconTex, pos, ImVec2(pos.x + iconSize, pos.y + iconSize));
+        bool isHidden = (child.attributes & SFGAO_HIDDEN) != 0;
+        ImU32 tint = isHidden ? IM_COL32(255, 255, 255, 128) : IM_COL32(255, 255, 255, 255);
+
+        dl->AddImage(iconTex, pos, ImVec2(pos.x + iconSize, pos.y + iconSize), ImVec2(0, 0), ImVec2(1, 1), tint);
     } else {
         const char* fallback = child.IsFolder() ? ICON_REG_FOLDER : ICON_REG_DOCUMENT;
         DrawTextCenteredSingleLine(dl, pos, ImVec2(pos.x + iconSize, pos.y + iconSize), fallback, Theme::Current.palette.TextMuted, iconSize);
@@ -115,7 +118,7 @@ inline void RenderGridView(f32 dpi, App& app){
 
     const Directory& tabDir = activeTab.dir;
     const auto& dirChildren = tabDir.children;
-    const std::vector<u32>& dirChildrenRefs = tabDir.sortedIndices;
+    const std::vector<u32>& dirChildrenRefs = tabDir.VisibleIndices(vs.showHidden);
 
     // Cells are itemWidth wide but stride by itemWidth + xGap, so there's a
     // visible gap between them.
@@ -159,8 +162,9 @@ inline void RenderSmallView(f32 dpi, App& app){
     const ImU32 textCol = Theme::Current.palette.Text;
 
     const Directory& tabDir = activeTab.dir;
+    bool showHidden = activeTab.viewState.showHidden;
     const auto& dirChildren = tabDir.children;
-    const std::vector<u32>& dirChildrenRefs = tabDir.sortedIndices;
+    const std::vector<u32>& dirChildrenRefs = tabDir.VisibleIndices(showHidden);
 
     ForEachGridCell(dirChildrenRefs.size(), cellW, cellH, [&](size_t i, ImVec2 cellPos){
         auto child = dirChildren->GetItem(dirChildrenRefs[i]);
@@ -199,8 +203,9 @@ inline void RenderListView(f32 dpi, App& app){
     auto& activeTab = app.window.GetActiveTab();
 
     const Directory& tabDir = activeTab.dir;
+    bool showHidden = activeTab.viewState.showHidden;
     const auto& dirChildren = tabDir.children;
-    const std::vector<u32>& dirChildrenRefs = tabDir.sortedIndices;
+    const std::vector<u32>& dirChildrenRefs = tabDir.VisibleIndices(showHidden);
 
     const f32 xGap = 8.0f * dpi;
     const f32 cellHeight = p.height * dpi;
@@ -242,10 +247,10 @@ inline void RenderListView(f32 dpi, App& app){
         f32 currentColWidth = colWidths[c];
         f32 currentColOffset = colOffsets[c];
         for (int r = 0; r < rowsPerColumn; r++){
-            auto child = dirChildren->GetItem(dirChildrenRefs[r]);
-
+            
             int i = (c * rowsPerColumn) + r;
             if (i >= totalItems) break;
+            auto child = dirChildren->GetItem(dirChildrenRefs[i]);
 
             bool isSelected = activeTab.isSelected(child.hash);
             ImGui::PushID(i);
@@ -331,9 +336,11 @@ inline void RenderDetailsView(f32 dpi, App& app){
         ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, sizeWidth);
         ImGui::TableHeadersRow();
 
+
     const Directory& tabDir = activeTab.dir;
+    bool showHidden = activeTab.viewState.showHidden;
     const auto& dirChildren = tabDir.children;
-    const std::vector<u32>& dirChildrenRefs = tabDir.sortedIndices;
+    const std::vector<u32>& dirChildrenRefs = tabDir.VisibleIndices(showHidden);
 
         ImGuiListClipper clipper;
         clipper.Begin((int)dirChildrenRefs.size(), cellHeight);
@@ -425,8 +432,9 @@ inline void RenderTilesView(f32 dpi, App& app){
     // const ImU32 mutedCol = Theme::Current.palette.TextMuted;
     
     const Directory& tabDir = activeTab.dir;
+    bool showHidden = activeTab.viewState.showHidden;
     const auto& dirChildren = tabDir.children;
-    const std::vector<u32>& dirChildrenRefs = tabDir.sortedIndices;
+    const std::vector<u32>& dirChildrenRefs = tabDir.VisibleIndices(showHidden);
 
 
     ForEachGridCell(dirChildrenRefs.size(), cellW, cellH, [&](size_t i, ImVec2 cellPos){
@@ -458,7 +466,7 @@ inline void RenderTilesView(f32 dpi, App& app){
 inline void RenderFileGrid(f32 dpi, App& app){
     FileViewState& vs = app.window.GetActiveTab().viewState;
     ViewMode mode = vs.viewMode;
-    app.window.GetActiveTab().dir.UpdateChildren(app.directory, vs.sortMode, vs.sortDir);
+    app.window.GetActiveTab().dir.UpdateChildren(app.directory, vs.sortMode, vs.sortDir, vs.showHidden);
     switch (mode){
         case ViewMode::Icons:
             RenderGridView(dpi, app);
