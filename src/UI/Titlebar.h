@@ -346,6 +346,4 @@ inline void RenderTitlebar(f32 dpi, App& app, bool isMaximized = false){
     // Reserve space for the custom titlebar.
     ImGui::Dummy(ImVec2(0.0f, titleH + bottomBorderThickness));
 
-
-
 }

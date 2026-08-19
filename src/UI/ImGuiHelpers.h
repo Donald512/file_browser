@@ -278,7 +278,7 @@ inline void ForEachGridCell(size_t itemCount, f32 cellW, f32 cellH, Fn&& drawCel
 }
 
 
-bool RenderIconButton( const ImRect& rect, const char* idName, const char* icon, f32 rounding, ImU32 hoverCol, ImU32 activeCol, ImU32 textCol = Theme::Current.palette.Text, bool isDisabled = false){
+inline bool RenderIconButton( const ImRect& rect, const char* idName, const char* icon, f32 rounding, ImU32 hoverCol, ImU32 activeCol, ImU32 textCol = Theme::Current.palette.Text, bool isDisabled = false){
     bool hovered = false;
     bool held = false;
 
@@ -407,7 +407,7 @@ inline void ScrollTabIntoView(size_t tabIndex, f32 tabW, f32 gap, f32 availableW
 }    
  
 
-f32 RenderResizeHorizontalHandle(const char* idStr, ImVec2 topLeftPos, f32 width, f32 height, ImU32 activeCol, ImU32 hoverCol){
+inline f32 RenderResizeHorizontalHandle(const char* idStr, ImVec2 topLeftPos, f32 width, f32 height, ImU32 activeCol, ImU32 hoverCol){
     
     ImGuiWindow* window = ImGui::GetCurrentWindow();
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -449,7 +449,7 @@ f32 RenderResizeHorizontalHandle(const char* idStr, ImVec2 topLeftPos, f32 width
     return 0.0f;
 }    
 
-f32 RenderResizeVerticalHandle(const char* idStr, ImVec2 topLeftPos, f32 width, f32 handleHeight, ImU32 activeCol, ImU32 hoverCol){
+inline f32 RenderResizeVerticalHandle(const char* idStr, ImVec2 topLeftPos, f32 width, f32 handleHeight, ImU32 activeCol, ImU32 hoverCol){
     ImGuiWindow* window = ImGui::GetCurrentWindow();
     
     // Calculate bounding box based on width and the thin handle height
@@ -533,7 +533,7 @@ inline void RenderVerticalScrollbar(const char* idStr, ImRect trackRect, ImRect 
 }
 
 
-int RenderTextWrappedCenteredEllipsis(ImDrawList* drawList, ImVec2 pos, ImVec2 size, const char* text, const char* textEnd = nullptr, int maxLines = 0) {
+inline int RenderTextWrappedCenteredEllipsis(ImDrawList* drawList, ImVec2 pos, ImVec2 size, const char* text, const char* textEnd = nullptr, int maxLines = 0) {
     if (!text || !*text) return 0;
     if (!textEnd) textEnd = text + strlen(text);
 
@@ -565,7 +565,7 @@ int RenderTextWrappedCenteredEllipsis(ImDrawList* drawList, ImVec2 pos, ImVec2 s
             ImVec2 lineMax(pos.x + size.x, linePos.y + lineHeight);
 
             // Render line with trailing ellipsis (...)
-            // void ImGui::RenderTextEllipsis(ImDrawList* draw_list, const ImVec2& pos_min, const ImVec2& pos_max, float ellipsis_max_x, const char* text, const char* text_end_full, const ImVec2* text_size_if_known)
+            // void ImGui::RenderTextEllipsis(ImDrawList* draw_list, const ImVec2& pos_min, const ImVec2& pos_max, f32 ellipsis_max_x, const char* text, const char* text_end_full, const ImVec2* text_size_if_known)
             ImGui::RenderTextEllipsis(drawList, linePos, lineMax, lineMax.x, s, textEnd, nullptr);
             break; // Finished rendering (reached max lines)
         } 
@@ -591,4 +591,17 @@ int RenderTextWrappedCenteredEllipsis(ImDrawList* drawList, ImVec2 pos, ImVec2 s
         }
     }
     return lineCount;
+}
+
+inline void addSeparator(f32 padX, f32 width, f32 sepHeight){
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImVec2 p = ImGui::GetCursorScreenPos();
+
+    f32 lineY = p.y + (sepHeight * 0.5f);
+    
+    ImU32 lineCol = Theme::Current.palette.Border;
+    dl->AddLine(ImVec2(p.x + padX, lineY), ImVec2(p.x + width - padX, lineY), lineCol, 1.0f);
+
+    // Advance layout cursor so ImGui auto-resizes correctly
+    ImGui::Dummy(ImVec2(width, sepHeight)); 
 }

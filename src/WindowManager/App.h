@@ -36,6 +36,7 @@ struct UIState{
 enum class CmdType{ 
     NewTab, CloseTab, SwitchTab,
     GoTo, GoBack, GoForward, GoParent, Refresh,
+    ReSort,
     OpenFile,
     CopySelection, CutSelection, Paste,
     DeleteSelection, RenameSelected, NewFolder
@@ -99,6 +100,9 @@ void App::ProcessCommands(){
                 break;
             case CmdType::OpenFile:
                 WShell::ExecuteFile(cmd.targetPidl.get());
+                break;
+            case CmdType::ReSort:
+                window.tabs[cmd.tabIndex].ReSort();
                 break;
             
         }

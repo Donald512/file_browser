@@ -23,7 +23,7 @@ class Directory{
         parent = GetDirParent(parentPidl);
     }
 
-    void UpdateChildren(DirectoryManager& directory){
+    void UpdateChildren(DirectoryManager& directory, SortMode sm, SortDirection sd){
         if (updatedChildren) return;
 
         UpdateParentShellFolder(parent);
@@ -36,12 +36,14 @@ class Directory{
             sortedIndices[i] = i;
         }
 
+        Sort(sm, sd);
         updatedChildren = true;
     }
 
    void Sort(SortMode mode, SortDirection direction);
 
 };
+
 void Directory::Sort(SortMode mode, SortDirection direction) {
     if (!children || sortedIndices.empty()) return;
 

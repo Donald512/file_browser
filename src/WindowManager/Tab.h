@@ -80,6 +80,8 @@ class Tab{
             }
         }
 
+        void ReSort();
+
         Breadcrumbs breadcrumbs{};
         History history{};
         Directory dir{};
@@ -152,4 +154,8 @@ bool Tab::GoParent(){
     // NavigateTo only ever reads from what we give it, does not clone, makes it own copy
     WShell::Pidl owned(parentPidl); // wrap in RAII, taking ownership, not cloning again
     return GoTo(owned.get());
+}
+
+void Tab::ReSort(){
+    dir.Sort(viewState.sortMode, viewState.sortDir);
 }

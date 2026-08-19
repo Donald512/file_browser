@@ -120,7 +120,7 @@ inline void RenderGridView(f32 dpi, App& app){
     // Cells are itemWidth wide but stride by itemWidth + xGap, so there's a
     // visible gap between them.
     ForEachGridCell(dirChildrenRefs.size(), itemWidth + xGap, cellH, [&](size_t i, ImVec2 cellPos){
-        auto child = dirChildren->GetItem(i);
+        auto child = dirChildren->GetItem(dirChildrenRefs[i]);
 
         bool isSelected = activeTab.isSelected(child.hash);
         ImRect fullRect(cellPos, ImVec2(cellPos.x + itemWidth, cellPos.y + cellH));
@@ -163,7 +163,7 @@ inline void RenderSmallView(f32 dpi, App& app){
     const std::vector<u32>& dirChildrenRefs = tabDir.sortedIndices;
 
     ForEachGridCell(dirChildrenRefs.size(), cellW, cellH, [&](size_t i, ImVec2 cellPos){
-        auto child = dirChildren->GetItem(i);
+        auto child = dirChildren->GetItem(dirChildrenRefs[i]);
 
         bool isSelected = activeTab.isSelected(child.hash);
         ImRect fullRect(cellPos, ImVec2(cellPos.x + cellW, cellPos.y + cellH));
@@ -220,7 +220,7 @@ inline void RenderListView(f32 dpi, App& app){
     const int totalColumns = (totalItems + rowsPerColumn - 1) / rowsPerColumn;
     std::vector<f32> colWidths(totalColumns, minColWidth);
     for (int i = 0; i < totalItems; i++){
-        auto child = dirChildren->GetItem(i);
+        auto child = dirChildren->GetItem(dirChildrenRefs[i]);
 
         int c = i / rowsPerColumn;
         f32 textWidth = ImGui::CalcTextSize(child.name).x;
@@ -242,7 +242,7 @@ inline void RenderListView(f32 dpi, App& app){
         f32 currentColWidth = colWidths[c];
         f32 currentColOffset = colOffsets[c];
         for (int r = 0; r < rowsPerColumn; r++){
-            auto child = dirChildren->GetItem(r);
+            auto child = dirChildren->GetItem(dirChildrenRefs[r]);
 
             int i = (c * rowsPerColumn) + r;
             if (i >= totalItems) break;
@@ -340,7 +340,7 @@ inline void RenderDetailsView(f32 dpi, App& app){
         
         while (clipper.Step()){
             for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++){
-                auto child = dirChildren->GetItem(row);
+                auto child = dirChildren->GetItem(dirChildrenRefs[row]);
 
                 bool isSelected = activeTab.isSelected(child.hash);
                 
@@ -430,7 +430,7 @@ inline void RenderTilesView(f32 dpi, App& app){
 
 
     ForEachGridCell(dirChildrenRefs.size(), cellW, cellH, [&](size_t i, ImVec2 cellPos){
-        auto child = dirChildren->GetItem(i);
+        auto child = dirChildren->GetItem(dirChildrenRefs[i]);
 
         bool isSelected = activeTab.isSelected(child.hash);
         ImRect fullRect(cellPos, ImVec2(cellPos.x + cellW, cellPos.y + cellH));
@@ -456,8 +456,9 @@ inline void RenderTilesView(f32 dpi, App& app){
 }
 
 inline void RenderFileGrid(f32 dpi, App& app){
-    ViewMode mode = app.window.GetActiveTab().viewState.viewMode;
-    app.window.GetActiveTab().dir.UpdateChildren(app.directory);
+    FileViewState& vs = app.window.GetActiveTab().viewState;
+    ViewMode mode = vs.viewMode;
+    app.window.GetActiveTab().dir.UpdateChildren(app.directory, vs.sortMode, vs.sortDir);
     switch (mode){
         case ViewMode::Icons:
             RenderGridView(dpi, app);

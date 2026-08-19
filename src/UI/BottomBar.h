@@ -9,6 +9,7 @@
 #include "Tab.h"
 
 static HoverPanelState s_viewPanel;
+static HoverPanelState s_sortPanel;
 
 
 // const bool anchorHovered = anchorRect.Contains(ImGui::GetMousePos());
@@ -34,6 +35,31 @@ const char* GetIconForViewMode(ViewMode viewMode){
         case ViewMode::Details: return ICON_REG_APPS_LIST;
     }
     return ICON_REG_ICONS;
+}
+
+const char* GetLabelForSortMode(SortMode sortMode){
+    switch(sortMode){
+        case SortMode::Name: return "Name";
+        case SortMode::Size: return "Size";
+        case SortMode::DateModified: return "Date Modified";
+        case SortMode::Type: return "Type";
+    }
+    return "None";
+}
+
+const char* GetLabelForSortDir(SortDirection sortDir){
+    switch(sortDir){
+        case SortDirection::Ascending: return "Ascending";
+        case SortDirection::Descending: return "Descending";
+    }
+    return ICON_REG_ARROW_SORT_UP;
+}
+const char* GetIconForSortDir(SortDirection sortDir){
+    switch(sortDir){
+        case SortDirection::Ascending: return ICON_REG_ARROW_SORT_UP;
+        case SortDirection::Descending: return ICON_REG_ARROW_SORT_DOWN;
+    }
+    return ICON_REG_ARROW_SORT_UP;
 }
 
 void RenderBottombar(f32 dpi, App& app){
@@ -62,15 +88,18 @@ void RenderBottombar(f32 dpi, App& app){
     const ImU32& accentCol = Theme::Current.palette.Accent;
     
     f32 cursorX = bbarPos.x + bbarSize.x - padX;
-    // - View 
+    
     auto& vs = activeTab.viewState;
+    // --------------
+    // - View 
+    // --------------
     const char* viewIconText = GetIconForViewMode(vs.viewMode);
     const char* viewPlaceholderText = GetLabelForViewMode(vs.viewMode);
     
-    const ImVec2 iconSize = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, viewIconText);
+    const ImVec2 viewIconSize = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, viewIconText);
     const ImVec2 viewTextSize = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, viewPlaceholderText);
     
-    const f32 viewElementWidth =  iconSize.x + distanceBetweeIconAndText + viewTextSize.x;
+    const f32 viewElementWidth =  viewIconSize.x + distanceBetweeIconAndText + viewTextSize.x;
 
     cursorX -= viewElementWidth;
 
@@ -82,11 +111,31 @@ void RenderBottombar(f32 dpi, App& app){
     f32 drawX = cursorX;
     drawX += DrawTextAtX(dl, drawX, viewRect, viewIconText, textCol).x + distanceBetweeIconAndText;
     DrawTextAtX(dl, drawX, viewRect, viewPlaceholderText, textCol);
+
+    // --------------
+    // - Sort 
+    // --------------
+    cursorX -= padX;    // padding between hem
+    const char* sortPlaceholderText = GetLabelForSortMode(vs.sortMode);
+    const char* sortIconText = GetIconForSortDir(vs.sortDir);
     
-    // subtracting from cursorX here and drawing them!
-    // cursorX -= padX; // spacing between elements
-    // cursorX -= nextElementWidth;
+    const ImVec2 sortTextSize = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, sortPlaceholderText);
+    const ImVec2 sortIconSize = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, sortIconText);
     
+    const f32 sortElementWidth =  sortIconSize.x + distanceBetweeIconAndText + sortTextSize.x;
+
+    cursorX -= sortElementWidth;
+
+    ImRect sortRect(
+        ImVec2(cursorX, bbarPos.y),
+        ImVec2(cursorX + sortElementWidth, bbarPos.y + bbarSize.y)
+    );
+
+    drawX = cursorX;
+    drawX += DrawTextAtX(dl, drawX, sortRect, sortPlaceholderText, textCol).x + distanceBetweeIconAndText;
+    DrawTextAtX(dl, drawX, sortRect, sortIconText, textCol);
+    
+
     dl->ChannelsSetCurrent(0);
     
     f32 finalLeftEdge = cursorX - padX;
@@ -102,11 +151,11 @@ void RenderBottombar(f32 dpi, App& app){
 
     dl->ChannelsMerge();
 
-    const ImRect anchorRect = viewRect;
-    const bool anchorHovered = anchorRect.Contains(ImGui::GetMousePos());
-    const bool anchorClicked = anchorHovered && ImGui::IsMouseClicked(0);
+    const ImRect viewAnchorRect = viewRect;
+    const bool viewAnchorHovered = viewAnchorRect.Contains(ImGui::GetMousePos());
+    const bool viewAnchorClicked = viewAnchorHovered && ImGui::IsMouseClicked(0);
 
-    if (BeginHoverPanel(s_viewPanel, "##ViewModePanel", anchorRect, anchorHovered, anchorClicked, dpi)){
+    if (BeginHoverPanel(s_viewPanel, "##ViewModePanel", viewAnchorRect, viewAnchorHovered, viewAnchorClicked, dpi)){
         ImDrawList* hoverDl = ImGui::GetWindowDrawList();
 
         const f32 viewRowPadY = 4.0f * dpi;
@@ -152,6 +201,61 @@ void RenderBottombar(f32 dpi, App& app){
         EndHoverPanel(s_viewPanel);
     }
 
+    const ImRect sortAnchorRect = sortRect;
+    const bool sortAnchorHovered = sortAnchorRect.Contains(ImGui::GetMousePos());
+    const bool sortAnchorClicked = sortAnchorHovered && ImGui::IsMouseClicked(0);
+
+    if (BeginHoverPanel(s_sortPanel, "##sortModePanel", sortAnchorRect, sortAnchorHovered, sortAnchorClicked, dpi)){
+        ImDrawList* hoverDl = ImGui::GetWindowDrawList();
+
+        const f32 sortRowPadY = 4.0f * dpi;
+        const f32 rowW = 200.0f * dpi;
+        const f32 rowH = lineHeight + 2 * sortRowPadY;
+
+        ImGui::SetNextItemWidth(rowW);
+
+        auto sortRow = [&](SortMode* m, SortDirection* d, const char* label){
+            ImVec2 p = ImGui::GetCursorScreenPos();
+            ImRect r(p, ImVec2(p.x + rowW, p.y + rowH));
+            ImGuiID id = ImGui::GetID(label);
+            ImGui::ItemAdd(r, id);
+            bool hov = false;
+            bool held = false;
+            if (ImGui::ButtonBehavior(r, id, &hov, &held)){
+                if (m){
+                    vs.sortMode = *m;
+                }
+                else if (d){
+                    vs.sortDir = *d;
+                }
+                app.QueueCommand({CmdType::ReSort, {}, 0, app.window.activeTabIndex, L""});
+            }
+            if (m){
+                if (vs.sortMode == *m)      hoverDl->AddRectFilled(r.Min, r.Max, accentCol, 4.0f * dpi);
+                else if (hov)              hoverDl->AddRectFilled(r.Min, r.Max, hoverCol, 4.0f * dpi);
+            }
+            else if (d){
+                if (vs.sortDir == *d)      hoverDl->AddRectFilled(r.Min, r.Max, accentCol, 4.0f * dpi);
+                else if (hov)              hoverDl->AddRectFilled(r.Min, r.Max, hoverCol, 4.0f * dpi);
+            }
+
+            DrawTextSingleLine(hoverDl, ImVec2(r.Min.x + 24.0f*dpi, r.Min.y), r.Max, label, textCol, ImVec2(0.0f, 0.5f));
+            ImGui::Dummy(ImVec2(rowW, rowH)); // advance layout so AlwaysAutoResize measures height
+        };
+
+        SortMode sm[] = {SortMode::Name, SortMode::Size, SortMode::DateModified, SortMode::Type};
+        for (auto& m : sm){
+            sortRow(&m, nullptr, GetLabelForSortMode(m));
+        }
+        addSeparator(8.0f * dpi, rowW, 9.0f * dpi);
+        
+        SortDirection sd[] = {SortDirection::Ascending, SortDirection::Descending};
+        for (auto& d : sd){
+            sortRow(nullptr, &d, GetLabelForSortDir(d));
+        }
+
+        EndHoverPanel(s_sortPanel);
+    }
 
 
 
