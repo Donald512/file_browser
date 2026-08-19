@@ -33,6 +33,7 @@ class Directory{
 
     void UpdateChildren(){
         if (updatedChildren) return;
+        UpdateParentShellFolder(parent);
         children = GetDirChildren2(parent.shellFolder.Get(), parent.pidl.get());
         updatedChildren = true;
     }

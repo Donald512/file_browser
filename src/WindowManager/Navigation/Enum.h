@@ -206,20 +206,23 @@ DirParent GetDirParent(PCIDLIST_ABSOLUTE folder){
     parent.hash = HashPidl(parent.pidl.get());
     parent.name = WShell::GetDisplayName(parent.pidl.get());
 
-    if (ILIsEmpty(folder)){ // if is desktop Root
+    return parent;
+}
+
+void UpdateParentShellFolder(DirParent& parent){
+    if (ILIsEmpty(parent.pidl.get())){ // if is desktop Root
         SHGetDesktopFolder(&parent.shellFolder);
     }
     else {
-        HRESULT hr = SHBindToObject(nullptr, folder, nullptr, IID_PPV_ARGS(&parent.shellFolder));
-
+        HRESULT hr = SHBindToObject(nullptr, parent.pidl.get(), nullptr, IID_PPV_ARGS(&parent.shellFolder));
+    
         if (FAILED(hr)) {
             ComPtr<IShellFolder> desktop;
             if (SUCCEEDED(SHGetDesktopFolder(&desktop))) {
-                desktop->BindToObject(folder, nullptr, IID_PPV_ARGS(&parent.shellFolder));
+                desktop->BindToObject(parent.pidl.get(), nullptr, IID_PPV_ARGS(&parent.shellFolder));
             }
         }
     }
-    return parent;
 }
 
 std::vector<DirChild> GetDirChildren(IShellFolder* parentShellFolder, PCIDLIST_ABSOLUTE parentPidl){

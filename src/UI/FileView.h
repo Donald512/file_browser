@@ -20,22 +20,16 @@ struct GridViewParams {
 
 inline GridViewParams GetGridParamsForMode(ViewMode mode){
     switch (mode){
-        case ViewMode::ExtraLarge: return {271.0f, 260.0f};
-        case ViewMode::Large:      return {105.0f, 100.0f};
-        case ViewMode::Medium:     return {74.0f,  52.0f};
         case ViewMode::Small:      return {308.0f, 30.0f};
         case ViewMode::List:       return {308.0f, 30.0f};
         case ViewMode::Details:    return {308.0f, 30.0f};
         case ViewMode::Tiles:      return {250.0f, 52.0f};
-        default:                   return GetGridParamsForMode(ViewMode::Large);
     }
+    return {250.0f, 52.0f};
 }
 
 inline int ShilSizeForMode(ViewMode mode){
     switch (mode){
-        case ViewMode::ExtraLarge: return SHIL_JUMBO;
-        case ViewMode::Large:      return SHIL_JUMBO;
-        case ViewMode::Medium:     return SHIL_EXTRALARGE;
         case ViewMode::Small:      return SHIL_SMALL;
         case ViewMode::List:       return SHIL_SMALL;
         case ViewMode::Details:    return SHIL_SMALL;
@@ -94,7 +88,7 @@ inline void DrawItemIcon(ImDrawList* dl, App& app, const DirParent& parent, cons
 
 // FIX 3: Removed ImGuiTable from Grid views. 
 // ImGuiTable and ImGuiListClipper fight over Y-coordinates, causing overlaps and crashes.
-inline void RenderGridView(f32 dpi, App& app, ViewMode mode){
+inline void RenderGridView(f32 dpi, App& app){
     ImGuiWindow* window = ImGui::GetCurrentWindow();
     if (!window || window->SkipItems) return;
     ImDrawList* dl = window->DrawList;
@@ -107,17 +101,17 @@ inline void RenderGridView(f32 dpi, App& app, ViewMode mode){
     ImVec2 areaMax = ImVec2(areaMin.x + ImGui::GetContentRegionAvail().x, areaMin.y + ImGui::GetContentRegionAvail().y);
 
     ImVec2 contentMin = ImVec2(areaMin.x + padX, areaMin.y + padY);
-    f32 contentWidth = (areaMax.x - padX) - contentMin.x;
+    // f32 contentWidth = (areaMax.x - padX) - contentMin.x;
 
 
-    GridViewParams p = GetGridParamsForMode(mode);
-    const int shilSize = ShilSizeForMode(mode);
-    const f32 imageSize = p.height * dpi;
+    auto& vs = app.window.GetActiveTab().viewState;
+    const int shilSize = ShiLSizeForIconSize(vs.iconSize);
+    const f32 imageSize = vs.iconSize * dpi;
     const f32 xGap = 8.0f * dpi;
     const f32 yTextPadding = 4.0f * dpi;
     const f32 lineHeight = ImGui::GetFontSize();
-    const int maxLines = (mode == ViewMode::Medium) ? 1 : 3;
-    const f32 itemWidth = p.width * dpi;
+    const int maxLines = 3;
+    const f32 itemWidth = imageSize * 1.2f;
     const f32 cellH = imageSize + yTextPadding + (maxLines * lineHeight) + yTextPadding;
 
     const Directory& directory = activeTab.directory;
@@ -178,8 +172,7 @@ inline void RenderSmallView(f32 dpi, App& app){
         f32 iconY = cellPos.y + (cellH - iconSize) * 0.5f;
         DrawItemIcon(dl, app, directory.parent, dirChildren, i, ImVec2(iconX, iconY), iconSize, SHIL_SMALL);
 
-        ImRect textRect(ImVec2(iconX + iconSize + textGap, cellPos.y),
-                         ImVec2(cellPos.x + cellW - 8.0f * dpi, cellPos.y + cellH));
+        ImRect textRect(ImVec2(iconX + iconSize + textGap, cellPos.y),ImVec2(cellPos.x + cellW - 8.0f * dpi, cellPos.y + cellH));
         DrawTextEllipsisSingleLine(dl, textRect, dirChildren.GetChildName(i), textCol);
     });
 }
@@ -302,7 +295,7 @@ inline void RenderDetailsView(f32 dpi, App& app){
     f32 typeWidth = 120.0f * dpi;
     f32 sizeWidth = 100.0f * dpi;
     const ImU32 textCol = Theme::Current.palette.Text;
-    const ImU32 mutedCol = Theme::Current.palette.TextMuted;
+    // const ImU32 mutedCol = Theme::Current.palette.TextMuted;
 
     ImGuiTableFlags flags =
         ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable |
@@ -362,7 +355,7 @@ inline void RenderDetailsView(f32 dpi, App& app){
                 if (isSelected) ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, Theme::Current.palette.SurfaceActive);
                 else if (ia.hovered) ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, Theme::Current.palette.SurfaceHover);
 
-                // --- COLU 0: NAME ---
+                // NAME ---
                 f32 iconY = cellPos.y + (cellHeight - iconSize) * 0.5f;
                 DrawItemIcon(dl, app, directory.parent, dirChildren, row, ImVec2(cellPos.x + 4.0f * dpi, iconY), iconSize, SHIL_SMALL);
                 
@@ -448,10 +441,8 @@ inline void RenderFileGrid(f32 dpi, App& app){
     ViewMode mode = app.window.GetActiveTab().viewState.viewMode;
     app.window.GetActiveTab().directory.UpdateChildren();
     switch (mode){
-        case ViewMode::ExtraLarge:
-        case ViewMode::Large:
-        case ViewMode::Medium:
-            RenderGridView(dpi, app, mode);
+        case ViewMode::Icons:
+            RenderGridView(dpi, app);
             break;
         case ViewMode::Small:
             RenderSmallView(dpi, app);

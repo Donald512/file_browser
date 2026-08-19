@@ -21,13 +21,14 @@ struct WindowManager{};
 
 enum class Actions {Normal, Back, Forward, Refresh};
 enum class SortMode { Name, DateModified, Type, Size};
-enum class ViewMode { ExtraLarge, Large, Medium, Small, List, Details, Tiles}; // feel like this belongs to  UI
+enum class ViewMode { Icons, Small, List, Details, Tiles}; // feel like this belongs to  UI
 enum class SortDirection {Ascending, Descending };
 enum class SelectMode {OneItem};
 
 struct FileViewState {
     // Change to user's last choice, or a setttings
-    ViewMode viewMode = ViewMode::Details;   
+    ViewMode viewMode = ViewMode::Details;
+    f32 iconSize = 104.0f;
     SortMode sortMode = SortMode::Name;
     SortDirection sortDir = SortDirection::Ascending;
     bool showHidden = false;

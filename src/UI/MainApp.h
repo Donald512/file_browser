@@ -12,6 +12,7 @@
 #include "App.h"
 #include "ImGuiHelpers.h"
 #include "FileView.h"
+#include "BottomBar.h"
 
 inline void InitializeUI(f32 screenW, f32 screenH){
     (void)screenW;
@@ -68,8 +69,17 @@ inline void GameLoop( f32 screenW, f32 screenH, f32 mouseX, f32 mouseY, bool isM
     if (ImGui::BeginChild("Content", ImVec2(screenW - sidebarW, screenH - topH), false)){
         RenderCommandbar(dpi, app);    
 
-        if (ImGui::BeginChild("FileViewArea", ImVec2(0, 0), false)) {
+        const f32 bottombarH = TitlebarHeight * dpi;
+
+        if (ImGui::BeginChild("FileViewArea", ImVec2(0, -bottombarH * 1.1f), false)) { // tiny padding 
             RenderFileGrid(dpi, app);
+        }
+        ImGui::EndChild();
+        // Now this child will take the remaining height perfectly!
+        ImGui::Dummy(ImVec2(0, bottombarH * 0.1f)); // the tiny padding
+        if (ImGui::BeginChild("Bottombar", ImVec2(0.0f, bottombarH), false)) {
+            // Render view mode toggles, status info, etc.
+            RenderBottombar(dpi, app);
         }
         ImGui::EndChild();
     }
