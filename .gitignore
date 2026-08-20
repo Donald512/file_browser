@@ -10,6 +10,7 @@ include/old/
 test\color_pixel_inspector.py
 *
 !src/
+!src/Global/
 !include/
 !thirdparty/
 !build.bat
