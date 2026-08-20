@@ -86,10 +86,48 @@ namespace WShell{
         return "";
     }
 
+    bool GetPidlTypeName(IShellFolder* pParent, PCITEMID_CHILD childPidl, wchar_t* outBuffer, UINT maxChars) {
+        if (!pParent || !childPidl || !outBuffer || maxChars == 0) return false;
+
+        ComPtr<IShellFolder2> pFolder2;
+        if (FAILED(pParent->QueryInterface(IID_PPV_ARGS(&pFolder2)))) return false;
+
+        VARIANT var;
+        VariantInit(&var);
+        
+        // PKEY_ItemTypeText gets the localized "Type" string (e.g. "Text Document", "File folder")
+        HRESULT hr = pFolder2->GetDetailsEx(childPidl, &PKEY_ItemTypeText, &var);
+        
+        if (SUCCEEDED(hr) && var.vt == VT_BSTR && var.bstrVal != nullptr) {
+            wcsncpy_s(outBuffer, maxChars, var.bstrVal, _TRUNCATE);
+            VariantClear(&var);
+            return true;
+        }
+
+        VariantClear(&var);
+        outBuffer[0] = L'\0';
+        return false;
+    }
+        
+
+    bool GetItemTypeName(PCIDLIST_ABSOLUTE parentPidl, IShellFolder* pParent, PCITEMID_CHILD child, wchar_t* out) {
+        ComPtr<IShellItem2> item;
+        if (FAILED(SHCreateItemWithParent(parentPidl, pParent, child, IID_PPV_ARGS(&item)))) 
+            return false;
+
+        PWSTR text = nullptr;
+        if (FAILED(item->GetString(PKEY_ItemTypeText, &text))) 
+            return false;
+
+        out = text;
+        CoTaskMemFree(text);
+        return true;
+    }
+
     
     Pidl GetFullPath(const wchar_t* widePath){
 
-    WShell::Pidl pidl(nullptr);
+        WShell::Pidl pidl(nullptr);
         DWORD attrs = 0;
 
         // Try as a standard path or GUID Parsing Name (e.g. "C:\Windows" or "::{GUID}")

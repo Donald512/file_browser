@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <vector>
 #include <string>
+#include "TypenameManager.h"
 
 struct GridViewParams {
     f32 width;
@@ -123,7 +124,7 @@ inline void RenderGridView(f32 dpi, App& app){
     // Cells are itemWidth wide but stride by itemWidth + xGap, so there's a
     // visible gap between them.
     ForEachGridCell(dirChildrenRefs.size(), itemWidth + xGap, cellH, [&](size_t i, ImVec2 cellPos){
-        auto child = dirChildren->GetItem(dirChildrenRefs[i]);
+        auto child = dirChildren->GetItem(dirChildrenRefs[i], app.typeStore);
 
         bool isSelected = activeTab.isSelected(child.hash);
         ImRect fullRect(cellPos, ImVec2(cellPos.x + itemWidth, cellPos.y + cellH));
@@ -167,7 +168,7 @@ inline void RenderSmallView(f32 dpi, App& app){
     const std::vector<u32>& dirChildrenRefs = tabDir.VisibleIndices(showHidden);
 
     ForEachGridCell(dirChildrenRefs.size(), cellW, cellH, [&](size_t i, ImVec2 cellPos){
-        auto child = dirChildren->GetItem(dirChildrenRefs[i]);
+        auto child = dirChildren->GetItem(dirChildrenRefs[i], app.typeStore);
 
         bool isSelected = activeTab.isSelected(child.hash);
         ImRect fullRect(cellPos, ImVec2(cellPos.x + cellW, cellPos.y + cellH));
@@ -225,7 +226,7 @@ inline void RenderListView(f32 dpi, App& app){
     const int totalColumns = (totalItems + rowsPerColumn - 1) / rowsPerColumn;
     std::vector<f32> colWidths(totalColumns, minColWidth);
     for (int i = 0; i < totalItems; i++){
-        auto child = dirChildren->GetItem(dirChildrenRefs[i]);
+        auto child = dirChildren->GetItem(dirChildrenRefs[i], app.typeStore);
 
         int c = i / rowsPerColumn;
         f32 textWidth = ImGui::CalcTextSize(child.name).x;
@@ -250,7 +251,7 @@ inline void RenderListView(f32 dpi, App& app){
             
             int i = (c * rowsPerColumn) + r;
             if (i >= totalItems) break;
-            auto child = dirChildren->GetItem(dirChildrenRefs[i]);
+            auto child = dirChildren->GetItem(dirChildrenRefs[i], app.typeStore);
 
             bool isSelected = activeTab.isSelected(child.hash);
             ImGui::PushID(i);
@@ -311,7 +312,7 @@ inline void RenderDetailsView(f32 dpi, App& app){
     f32 typeWidth = 120.0f * dpi;
     f32 sizeWidth = 100.0f * dpi;
     const ImU32 textCol = Theme::Current.palette.Text;
-    // const ImU32 mutedCol = Theme::Current.palette.TextMuted;
+    const ImU32 mutedCol = Theme::Current.palette.TextMuted;
 
     ImGuiTableFlags flags =
         ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable |
@@ -347,7 +348,7 @@ inline void RenderDetailsView(f32 dpi, App& app){
         
         while (clipper.Step()){
             for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++){
-                auto child = dirChildren->GetItem(dirChildrenRefs[row]);
+                auto child = dirChildren->GetItem(dirChildrenRefs[row], app.typeStore);
 
                 bool isSelected = activeTab.isSelected(child.hash);
                 
@@ -390,24 +391,36 @@ inline void RenderDetailsView(f32 dpi, App& app){
                 dl = ImGui::GetWindowDrawList(); 
                 ImVec2 datePos = ImGui::GetCursorScreenPos();
                 f32 dateLiveWidth = ImGui::GetContentRegionAvail().x;
-                const char* dateText = (child.lastWriteTime.dwLowDateTime != 0 || child.lastWriteTime.dwHighDateTime != 0) 
-                                    ? FormatFileTime(child.lastWriteTime) : "--";
-                ImGui::RenderTextClipped(datePos, ImVec2(datePos.x + dateLiveWidth, datePos.y + cellHeight), dateText, nullptr, nullptr, ImVec2(0.0f, 0.5f), nullptr);
+                const char* dateText = (child.lastWriteTime.dwLowDateTime != 0 || child.lastWriteTime.dwHighDateTime != 0) ? FormatFileTime(child.lastWriteTime) : "--";
+                ImRect dateRect(
+                    ImVec2(datePos.x, datePos.y), 
+                    ImVec2(datePos.x + dateLiveWidth, datePos.y + cellHeight)
+                );
+                DrawTextEllipsisSingleLine(dl, dateRect, dateText, mutedCol);
                 
                 // TYPE ---
                 ImGui::TableNextColumn();
                 dl = ImGui::GetWindowDrawList();
                 ImVec2 typePos = ImGui::GetCursorScreenPos();
                 f32 typeLiveWidth = ImGui::GetContentRegionAvail().x;
-                ImGui::RenderTextClipped(typePos, ImVec2(typePos.x + typeLiveWidth, typePos.y + cellHeight), KindLabel(child.attributes), nullptr, nullptr, ImVec2(0.0f, 0.5f), nullptr);
-                
+                const char* typeName = child.typeName[0] ? child.typeName : "--"; 
+                // ImGui::RenderTextClipped(typePos, ImVec2(typePos.x + typeLiveWidth, typePos.y + cellHeight), typeName, nullptr, nullptr, ImVec2(0.0f, 0.5f), nullptr);
+                ImRect typeRect(
+                    ImVec2(typePos.x, typePos.y), 
+                    ImVec2(typePos.x + typeLiveWidth, typePos.y + cellHeight)
+                );
+                DrawTextEllipsisSingleLine(dl, typeRect, typeName, mutedCol);
+
+
                 // SIZE ---
                 ImGui::TableNextColumn();
                 dl = ImGui::GetWindowDrawList();
                 ImVec2 sizePos = ImGui::GetCursorScreenPos();
                 f32 liveSizeColWidth = ImGui::GetContentRegionAvail().x;
                 const char* sizeText = (child.size != 0) ? FormatFileSize(child.size) : "--";
+                ImGui::PushStyleColor(ImGuiCol_Text, mutedCol);
                 ImGui::RenderTextClipped(sizePos, ImVec2(sizePos.x + liveSizeColWidth, sizePos.y + cellHeight), sizeText, nullptr, nullptr, ImVec2(1.0f, 0.5f), nullptr);
+                ImGui::PopStyleColor();
 
                 ImGui::PopID();
             }
@@ -429,7 +442,7 @@ inline void RenderTilesView(f32 dpi, App& app){
     const f32 iconSize = cellH * 0.7f;
     const f32 lineHeight = ImGui::GetTextLineHeight();
     const ImU32 textCol = Theme::Current.palette.Text;
-    // const ImU32 mutedCol = Theme::Current.palette.TextMuted;
+    const ImU32 mutedCol = Theme::Current.palette.TextMuted;
     
     const Directory& tabDir = activeTab.dir;
     bool showHidden = activeTab.viewState.showHidden;
@@ -438,7 +451,7 @@ inline void RenderTilesView(f32 dpi, App& app){
 
 
     ForEachGridCell(dirChildrenRefs.size(), cellW, cellH, [&](size_t i, ImVec2 cellPos){
-        auto child = dirChildren->GetItem(dirChildrenRefs[i]);
+        auto child = dirChildren->GetItem(dirChildrenRefs[i], app.typeStore);
 
         bool isSelected = activeTab.isSelected(child.hash);
         ImRect fullRect(cellPos, ImVec2(cellPos.x + cellW, cellPos.y + cellH));
@@ -456,9 +469,14 @@ inline void RenderTilesView(f32 dpi, App& app){
         if (textMaxWidth > 0.0f){
             ImRect nameRect(ImVec2(textX, cellPos.y + 4.0f * dpi), ImVec2(textX + textMaxWidth, cellPos.y + 4.0f * dpi + lineHeight));
             DrawTextEllipsisSingleLine(dl, nameRect, child.name, textCol);
-            // dl->AddText(ImGui::GetFont(), ImGui::GetFontSize(),
-            //     ImVec2(textX, cellPos.y + 4.0f * dpi + lineHeight + 2.0f * dpi),
-            //     mutedCol, KindLabel(child));
+            const char* typeName = child.typeName[0] ? child.typeName : "--";
+            f32 typeY = cellPos.y + 4.0f * dpi + lineHeight + 2.0f * dpi;
+            ImRect typeRect(
+                ImVec2(textX, typeY),
+                ImVec2(textX + textMaxWidth, typeY + lineHeight)
+            );
+            DrawTextEllipsisSingleLine(dl, typeRect, typeName, mutedCol);
+            // dl->AddText(ImGui::GetFont(), ImGui::GetFontSize(), ImVec2(textX, cellPos.y + 4.0f * dpi + lineHeight + 2.0f * dpi), mutedCol, typeName);
         }
     });
 }
@@ -466,7 +484,7 @@ inline void RenderTilesView(f32 dpi, App& app){
 inline void RenderFileGrid(f32 dpi, App& app){
     FileViewState& vs = app.window.GetActiveTab().viewState;
     ViewMode mode = vs.viewMode;
-    app.window.GetActiveTab().dir.UpdateChildren(app.directory, vs.sortMode, vs.sortDir, vs.showHidden);
+    app.window.GetActiveTab().dir.UpdateChildren(app.directory, app.typeStore, vs.sortMode, vs.sortDir, vs.showHidden);
     switch (mode){
         case ViewMode::Icons:
             RenderGridView(dpi, app);

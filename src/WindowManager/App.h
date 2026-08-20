@@ -8,6 +8,7 @@
 #include "IconManager.h"
 #include "TextureManager.h"
 #include "sidebarEnum.h"
+#include "TypenameManager.h"
 
 #include "Tab.h"
 
@@ -60,6 +61,7 @@ struct App{
     DirectoryManager directory;
     IconManager icons;
     SidebarManager sidebar;
+    TypenameStore typeStore;
 
     std::vector<AppCommand> commandQueue;
 
@@ -102,7 +104,7 @@ void App::ProcessCommands(){
                 WShell::ExecuteFile(cmd.targetPidl.get());
                 break;
             case CmdType::ReSort:
-                window.tabs[cmd.tabIndex].ReSort();
+                window.tabs[cmd.tabIndex].ReSort(typeStore);
                 break;
             
         }

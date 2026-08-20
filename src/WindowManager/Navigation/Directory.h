@@ -5,6 +5,7 @@
 #include "Enum.h"
 #include "Icons.h"
 #include "DirectoryManager.h"
+#include "TypenameManager.h"
 
 #include <algorithm>
 #include <cstring>
@@ -21,11 +22,11 @@ class Directory{
         parent = GetDirParent(parentPidl);
     }
 
-    void UpdateChildren(DirectoryManager& directory, SortMode sm, SortDirection sd, bool showHidden){
+    void UpdateChildren(DirectoryManager& directory, TypenameStore& typeStore, SortMode sm, SortDirection sd, bool showHidden){
         if (updatedChildren) return;
 
         UpdateParentShellFolder(parent);
-        children = directory.GetOrRequest(parent.shellFolder.Get(),parent.pidl.get(),parent.hash);
+        children = directory.GetOrRequest(parent.shellFolder.Get(), typeStore, parent.pidl.get(), parent.hash);
 
         size_t count = children->ItemCount();
         sortedIndices.resize(count);
@@ -34,7 +35,7 @@ class Directory{
             sortedIndices[i] = i;
         }
 
-        Sort(sm, sd);
+        Sort(typeStore, sm, sd);
 
         if (!showHidden){
             RebuildNonHiddenIndices();
@@ -50,7 +51,7 @@ class Directory{
         for (u32 index : sortedIndices) {
             if (!(children->attributes[index] & SFGAO_HIDDEN))
                 nonHiddenIndices.push_back(index);
-            std::cout << children->GetChildName(index) << " attributes: " << children->attributes[index] << std::endl;
+            // std::cout << children->GetChildName(index) << " attributes: " << children->attributes[index] << std::endl;
         }
     }
 
@@ -58,7 +59,7 @@ class Directory{
         return showHidden ? sortedIndices : nonHiddenIndices;
     }
 
-    void Sort(SortMode mode, SortDirection direction);
+    void Sort(TypenameStore& typeStore, SortMode mode, SortDirection direction);
 
     private:
         std::vector<u32> sortedIndices;
@@ -66,14 +67,14 @@ class Directory{
 
 };
 
-void Directory::Sort(SortMode mode, SortDirection direction) {
+void Directory::Sort(TypenameStore& typeStore, SortMode mode, SortDirection direction) {
     if (!children || sortedIndices.empty()) return;
 
     std::sort(sortedIndices.begin(), sortedIndices.end(), 
-        [this, mode, direction](u32 idxA, u32 idxB) {
+        [this, mode, direction, &typeStore](u32 idxA, u32 idxB) {
             // Grab lightweight views for both items being compared
-            auto a = children->GetItem(idxA);
-            auto b = children->GetItem(idxB);
+            auto a = children->GetItem(idxA, typeStore);
+            auto b = children->GetItem(idxB, typeStore);
 
             // Folders always stay at the top
             if (a.IsFolder() != b.IsFolder()) {
@@ -92,8 +93,7 @@ void Directory::Sort(SortMode mode, SortDirection direction) {
                     break;
 
                 case SortMode::Type:
-                    // If you have a type string or extension helper
-                    cmp = _stricmp(a.name, b.name); 
+                    cmp = _stricmp(a.typeName, b.typeName); 
                     break;
 
                 case SortMode::Size:

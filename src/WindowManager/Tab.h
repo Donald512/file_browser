@@ -6,6 +6,7 @@
 #include <unordered_set>
 #include "Enum.h"
 #include "Directory.h"
+#include "TypenameManager.h"
 
 
 template <typename T>
@@ -80,7 +81,7 @@ class Tab{
             }
         }
 
-        void ReSort();
+        void ReSort(TypenameStore& typeStore);
         void ToggleShowHidden(){
             viewState.showHidden = !viewState.showHidden;
             if (viewState.showHidden == false){
@@ -162,8 +163,8 @@ bool Tab::GoParent(){
     return GoTo(owned.get());
 }
 
-void Tab::ReSort(){
-    dir.Sort(viewState.sortMode, viewState.sortDir);
+void Tab::ReSort(TypenameStore& typeStore){
+    dir.Sort(typeStore,viewState.sortMode, viewState.sortDir);
     if (!viewState.showHidden){
         dir.RebuildNonHiddenIndices();
     }

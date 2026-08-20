@@ -15,6 +15,8 @@
 #pragma comment(lib, "Advapi32.lib")
 #pragma comment(lib, "propsys.lib")
 #pragma comment(lib, "Ole32.lib")
+#pragma comment(lib, "OleAut32.lib")
+
 
 
 int main (void){

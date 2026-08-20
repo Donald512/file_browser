@@ -7,6 +7,7 @@
 #include "Lazy.h"
 #include <string>
 #include "IconManager.h"
+#include "TypenameManager.h"
 
 #include <wrl/client.h>
 using Microsoft::WRL::ComPtr;
@@ -45,6 +46,7 @@ struct DirItem{
 
 struct ItemView {
     const char* name;
+    const char* typeName;
     PCITEMID_CHILD pidl;
     u64 hash;
     SFGAOF attributes;
@@ -55,7 +57,7 @@ struct ItemView {
 };
 class DirChildren{
     public:
-    
+
     std::vector<char> nameArena;
     std::vector<u32>  nameOffsets;
     std::vector<u16>  nameLengths;
@@ -70,6 +72,7 @@ class DirChildren{
     std::vector<SFGAOF>   attributes;
     std::vector<FILETIME> lastWriteTimes;
     std::vector<u64>      sizes;
+    std::vector<u16>      typenameIndex;
     
     size_t ItemCount() const { return hashes.size(); }
 
@@ -83,12 +86,13 @@ class DirChildren{
         return reinterpret_cast<PCITEMID_CHILD>(&pidlArena[pidlOffsets[index]]);
     }
     
-    ItemView GetItem(size_t index) const;
+    ItemView GetItem(size_t index, TypenameStore& typeStore) const;
 };
 
-ItemView DirChildren::GetItem(size_t index) const {
+ItemView DirChildren::GetItem(size_t index, TypenameStore& typeStore) const {
     return ItemView{
         GetChildName(index),
+        typeStore.GetTypename(typenameIndex[index]),
         GetChildPidl(index),
         hashes[index],
         attributes[index],

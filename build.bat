@@ -37,7 +37,9 @@ echo [2/2] Compiling project files and linking...
 cl  /EHsc /nologo /Z7 /W4 /MP /std:c++20 ^
    /I"include" ^
    /I"src" ^
+   /I"src\Global" ^
    /I"src\Global\Icons" ^
+   /I"src\Global\Textures" ^
    /I"src\Navigation" ^
    /I"src\Setup" ^
    /I"src\Shell" ^

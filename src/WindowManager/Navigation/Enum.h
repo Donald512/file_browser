@@ -11,6 +11,7 @@
 #include <iostream>
 #include <propkey.h>
 #include <propvarutil.h>
+#include "TypenameManager.h"
 
 #include <wrl/client.h>
 using Microsoft::WRL::ComPtr;
@@ -258,7 +259,7 @@ std::vector<DirChild> GetDirChildren(IShellFolder* parentShellFolder, PCIDLIST_A
     return children;
 }
 
-DirChildren GetDirChildren2(IShellFolder* parentShellFolder, PCIDLIST_ABSOLUTE parentPidl){
+DirChildren GetDirChildren2(IShellFolder* parentShellFolder, PCIDLIST_ABSOLUTE parentPidl, TypenameStore& typeStore){
     DirChildren children{};
     if (!parentShellFolder) return children;
 
@@ -272,6 +273,7 @@ DirChildren GetDirChildren2(IShellFolder* parentShellFolder, PCIDLIST_ABSOLUTE p
     children.pidlLengths.reserve(baseline);
     children.nameOffsets.reserve(baseline);
     children.nameLengths.reserve(baseline);
+    children.typenameIndex.reserve(baseline);
     children.pidlArena.reserve(baseline * 64); // Guess ~64 bytes per PIDL
     children.nameArena.reserve(baseline * 48); // Guess ~48 bytes per name
 
@@ -307,6 +309,20 @@ DirChildren GetDirChildren2(IShellFolder* parentShellFolder, PCIDLIST_ABSOLUTE p
         children.nameOffsets.push_back(nameOffset);
         children.nameLengths.push_back((u16)(sizeNeeded - 1));
 
+        wchar_t typeBuffer[MAX_PATH] = { 0 }; 
+        WShell::GetPidlTypeName(pTarget, pStoredPidl, typeBuffer, sizeof(typeBuffer));
+
+        int typeSizeNeeded = Str::GetRequiredWideToUtf8Size(typeBuffer);
+        u16 assignedTypeIdx = TypenameStore::InvalidIndex;
+
+        if (typeSizeNeeded > 0){
+            std::vector<char> tempTypeBuffer(typeSizeNeeded);
+            Str::WriteUtf8CharToBufferFromWide(typeBuffer, tempTypeBuffer.data(), typeSizeNeeded);
+
+            // Pass the transient string to pool intern storage
+            assignedTypeIdx = typeStore.GetOrCreateId(tempTypeBuffer.data());
+        }
+        children.typenameIndex.push_back(assignedTypeIdx);
 
         children.hashes.push_back(HashCombinedPidl(parentPidl, pStoredPidl));
 
@@ -337,6 +353,7 @@ DirChildren GetDirChildren2(IShellFolder* parentShellFolder, PCIDLIST_ABSOLUTE p
     shrinkVec(children.pidlLengths);
     shrinkVec(children.nameOffsets);
     shrinkVec(children.nameLengths);
+    shrinkVec(children.typenameIndex); 
     shrinkVec(children.pidlArena);
     shrinkVec(children.nameArena);
 
