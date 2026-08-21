@@ -84,7 +84,7 @@ void RenderBottombar(f32 dpi, App& app){
     const f32 lineHeight = ImGui::GetTextLineHeight();
     const f32 rounding = 8.0f * dpi;
     const ImU32& textCol = Theme::Current.palette.Text;
-    const ImU32& activeCol = Theme::Current.palette.SurfaceActive;
+    // const ImU32& activeCol = Theme::Current.palette.SurfaceActive;
     const ImU32& hoverCol = Theme::Current.palette.SurfaceHover;
     const ImU32& accentCol = Theme::Current.palette.Accent;
     

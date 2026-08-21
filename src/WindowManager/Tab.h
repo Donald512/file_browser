@@ -19,7 +19,6 @@ inline T ExploraClamp(T value, T minValue, T maxValue){
 // maybe this for multiple different windows
 struct WindowManager{};
 
-
 enum class Actions {Normal, Back, Forward, Refresh};
 enum class ViewMode { Icons, Small, List, Details, Tiles}; // feel like this belongs to  UI
 enum class SelectMode {OneItem};
@@ -39,6 +38,14 @@ struct FileViewState {
     
     f32 gridIconSize = 64.0f; 
 };
+
+struct SelectionState {
+    std::unordered_set<u64> selectedHashes;
+    u64 focusHash = 0;
+    u64 anchorHash = 0;
+    int anchorVisualIndex = -1; // for Shift-Click range calculations
+};
+
 
 class Tab{
     public:
@@ -67,18 +74,10 @@ class Tab{
             GoTo(startFolder);
         }
 
+        void SelectItem(u64 i, SelectMode mode);
+            
         bool isSelected(u64 i) const{
-            return selectedItems.find(i) != selectedItems.end();
-        }
-
-        void selectItem(u64 i, SelectMode mode){
-            switch (mode){
-                case SelectMode::OneItem:{
-                    selectedItems.clear();
-                    selectedItems.insert(i);
-                    break;
-                }
-            }
+            return selectionState.selectedHashes.find(i) != selectionState.selectedHashes.end();
         }
 
         void ReSort(TypenameStore& typeStore);
@@ -92,12 +91,9 @@ class Tab{
         Breadcrumbs breadcrumbs{};
         History history{};
         Directory dir{};
-        std::unordered_set<u64> selectedItems{};
         
         FileViewState viewState;
-        
-    private:
-        // WShell::Pidl currentFolder; // Prolly the same as Breadcrumbs.crumbs.back()
+        SelectionState selectionState;
 
 };
 
@@ -142,7 +138,7 @@ bool Tab::GoTo(PCIDLIST_ABSOLUTE dest, Actions action){
 
     if (action == Actions::Normal) history.Push(dir.parent.pidl.get()); 
     breadcrumbs = GenerateBreadcrumbs(dir.parent.pidl.get());
-    selectedItems.clear();
+    selectionState.selectedHashes.clear();
 
     dir.updatedChildren = false;
 
@@ -167,5 +163,15 @@ void Tab::ReSort(TypenameStore& typeStore){
     dir.Sort(typeStore,viewState.sortMode, viewState.sortDir);
     if (!viewState.showHidden){
         dir.RebuildNonHiddenIndices();
+    }
+}
+
+void Tab::SelectItem(u64 i, SelectMode mode){
+    switch (mode){
+        case SelectMode::OneItem:{
+            selectionState.selectedHashes.clear();
+            selectionState.selectedHashes.insert(i);
+            break;
+        }
     }
 }

@@ -38,6 +38,7 @@ cl  /EHsc /nologo /Z7 /W4 /MP /std:c++20 ^
    /I"include" ^
    /I"src" ^
    /I"src\Global" ^
+   /I"src\Global\CtxMenu" ^
    /I"src\Global\Icons" ^
    /I"src\Global\Textures" ^
    /I"src\Navigation" ^

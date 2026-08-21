@@ -3,6 +3,7 @@
 #include <string>
 #include "WinFramework.h"
 #include "BasicTypes.h"
+#include "search.h"
 
 namespace Str{
 
@@ -128,3 +129,4 @@ namespace Str{
         return cleanText;
     }
 }
+

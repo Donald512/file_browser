@@ -1,4 +1,7 @@
+
 #pragma once
+#include <string>
+#include "WinFramework.h"
 #include "BasicTypes.h"
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -13,6 +16,7 @@
 #include <vector>
 #include <string>
 #include "TypenameManager.h"
+#include "CtxMenuUI.h"
 
 struct GridViewParams {
     f32 width;
@@ -52,9 +56,11 @@ struct ItemInteraction {
     bool clicked;
 };
 
+
 inline ItemInteraction HandleItemInteraction(App& app, const DirParent& parent, const ItemView& child, ImGuiID id, const ImRect& rect){
     Interaction ia = MakeInteractive(id, rect);
     bool doubleClicked = IsDoubleClick(id, ia.pressed);
+    bool rightClicked = ImGui::IsMouseClicked(ImGuiMouseButton_Right) && ia.hovered;
     
     if (doubleClicked) {
         PCIDLIST_ABSOLUTE newPidl = GetFullPidl(parent.pidl.get(), child.pidl);
@@ -65,7 +71,17 @@ inline ItemInteraction HandleItemInteraction(App& app, const DirParent& parent, 
         else app.QueueCommand({CmdType::OpenFile, WShell::Pidl(newPidl), {}, {}, L""});
     } 
     else if (ia.pressed) {
-        app.window.GetActiveTab().selectItem(child.hash, SelectMode::OneItem);
+        app.window.GetActiveTab().SelectItem(child.hash, SelectMode::OneItem);
+    }
+    else if (rightClicked){
+        if (app.window.GetActiveTab().isSelected(child.hash)){
+            PCIDLIST_ABSOLUTE fullPidl = GetFullPidl(parent.pidl.get(), child.pidl);
+            ctxMenuItems = GetContextMenu(activeContextMenu, fullPidl, app.gfx.d3dDevice.Get());
+        }
+        else{
+            ctxMenuItems = GetBackgroundContextMenu(activeContextMenu, parent.pidl, app.gfx.d3dDevice.Get());
+        }
+        openRightClickMenu = true;
     }
     return {ia.hovered || ia.pressed};
 }
@@ -132,6 +148,7 @@ inline void RenderGridView(f32 dpi, App& app){
         ImGuiID id = window->GetID((void*)(intptr_t)child.hash);
         ItemInteraction ia = HandleItemInteraction(app, tabDir.parent, child, id, fullRect);
         DrawSelectableBg(dl, fullRect, ia.hovered, isSelected, 4.0f * dpi);
+
 
         f32 iconX = cellPos.x + (itemWidth - imageSize) * 0.5f;
         DrawItemIcon(dl, app, tabDir.parent, child, ImVec2(iconX, cellPos.y), imageSize, shilSize);
@@ -484,22 +501,38 @@ inline void RenderTilesView(f32 dpi, App& app){
 inline void RenderFileGrid(f32 dpi, App& app){
     FileViewState& vs = app.window.GetActiveTab().viewState;
     ViewMode mode = vs.viewMode;
+    
+    openRightClickMenu = false;
+    
     app.window.GetActiveTab().dir.UpdateChildren(app.directory, app.typeStore, vs.sortMode, vs.sortDir, vs.showHidden);
+    
     switch (mode){
         case ViewMode::Icons:
-            RenderGridView(dpi, app);
-            break;
+        RenderGridView(dpi, app);
+        break;
         case ViewMode::Small:
-            RenderSmallView(dpi, app);
-            break;
+        RenderSmallView(dpi, app);
+        break;
         case ViewMode::List:
-            RenderListView(dpi, app);
-            break;
+        RenderListView(dpi, app);
+        break;
         case ViewMode::Details:
-            RenderDetailsView(dpi, app);
-            break;
+        RenderDetailsView(dpi, app);
+        break;
         case ViewMode::Tiles:
-            RenderTilesView(dpi, app);
-            break;
+        RenderTilesView(dpi, app);
+        break;
     }
+    
+    if (openRightClickMenu){
+        ImGui::OpenPopup("ItemContextMenu");
+        ImGui::SetNextWindowPos(ImGui::GetMousePos());
+    }
+    
+    PushMenuTheme(dpi);
+    if (ImGui::BeginPopup("ItemContextMenu")) {
+        RenderContextMenuStructure(ctxMenuItems, app.gfx.hwnd, dpi);
+        ImGui::EndPopup();
+    }
+    PopMenuTheme();
 }
