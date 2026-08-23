@@ -7,6 +7,7 @@
 #include "Enum.h"
 #include "Directory.h"
 #include "TypenameManager.h"
+#include <optional>
 
 
 template <typename T>
@@ -30,6 +31,7 @@ struct FileViewState {
     SortMode sortMode = SortMode::Name;
     SortDirection sortDir = SortDirection::Ascending;
     bool showHidden = false;
+
     
     // UI Directives (The "Magic" variables)
     std::optional<u64> scrollToItemId = std::nullopt;
@@ -40,10 +42,13 @@ struct FileViewState {
 };
 
 struct SelectionState {
+    bool justNavigated = false;
     std::unordered_set<u64> selectedHashes;
-    u64 focusHash = 0;
-    u64 anchorHash = 0;
+    std::optional<u64> focusHash = std::nullopt;
+    std::optional<u64> anchorHash = std::nullopt;
     int anchorVisualIndex = -1; // for Shift-Click range calculations
+    bool isAnyItemHovered = false;
+    double lastKeyboardNavTime = 0.0;
 };
 
 
@@ -74,10 +79,14 @@ class Tab{
             GoTo(startFolder);
         }
 
-        void SelectItem(u64 i, SelectMode mode);
-            
+        // void SelectItem(u64 i, SelectMode mode);
+        void DeselectAllItemsAndSelect(u64 i);
+        void DeselectItem(u64 i);
+        void AddItemToSelection(u64 i);
+        void DeselectAllItems();
+        
         bool isSelected(u64 i) const{
-            return selectionState.selectedHashes.find(i) != selectionState.selectedHashes.end();
+            return selState.selectedHashes.find(i) != selState.selectedHashes.end();
         }
 
         void ReSort(TypenameStore& typeStore);
@@ -93,7 +102,7 @@ class Tab{
         Directory dir{};
         
         FileViewState viewState;
-        SelectionState selectionState;
+        SelectionState selState;
 
 };
 
@@ -138,7 +147,7 @@ bool Tab::GoTo(PCIDLIST_ABSOLUTE dest, Actions action){
 
     if (action == Actions::Normal) history.Push(dir.parent.pidl.get()); 
     breadcrumbs = GenerateBreadcrumbs(dir.parent.pidl.get());
-    selectionState.selectedHashes.clear();
+    selState.selectedHashes.clear();
 
     dir.updatedChildren = false;
 
@@ -166,12 +175,19 @@ void Tab::ReSort(TypenameStore& typeStore){
     }
 }
 
-void Tab::SelectItem(u64 i, SelectMode mode){
-    switch (mode){
-        case SelectMode::OneItem:{
-            selectionState.selectedHashes.clear();
-            selectionState.selectedHashes.insert(i);
-            break;
-        }
-    }
+
+void Tab::DeselectAllItemsAndSelect(u64 i){
+    selState.selectedHashes.clear();
+    selState.selectedHashes.insert(i);
+}
+
+void Tab::AddItemToSelection(u64 i){
+    selState.selectedHashes.insert(i);
+}
+
+void Tab::DeselectItem(u64 i){
+    selState.selectedHashes.erase(i);
+}
+void Tab::DeselectAllItems(){
+    selState.selectedHashes.clear();
 }

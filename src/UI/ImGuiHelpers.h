@@ -1,8 +1,8 @@
 #pragma once
 
 #include "BasicTypes.h"
-#include "imgui.h"
 #include "imgui_internal.h"
+#include "imgui.h"
 
 #include <cfloat>
 #include <cmath>
@@ -80,20 +80,6 @@ private:
     f32 target = 0.0f;
     bool initialized = false;
 };
-
-
-// if palette is stored as 0..255 colors.
-// template <typename ColorT>
-// inline ImU32 ToImU32(const ColorT& c){
-//     return IM_COL32((int)c.r, (int)c.g, (int)c.b, (int)c.a);
-// }    
-
-// // if 0..1.
-// inline ImU32 ToImU32(const ImVec4& c){
-//     return ImGui::ColorConvertFloat4ToU32(c);
-// }    
-
-
 
 
 // align {0,0.5} = left, {0.5,0.5} = center, {1,0.5} = right.
@@ -192,10 +178,8 @@ inline f32 CenterY(const ImRect& rect, f32 itemHeight){
 // loops locally.
 // ---------------------------------------------------------------------------
 
-// Standardized hit-testing for a rect that already has an ImGuiID (or one you
-// build yourself, e.g. window->GetID(...) or window->GetID((void*)index)).
-// This is just ItemAdd + ButtonBehavior named and packaged - it doesn't
-// replace ImGui::InvisibleButton (which already does the same thing when you
+// Standardized hit-testing for a rect that already has an ImGuiID (or one built by me e.g. window->GetID(...) or window->GetID((void*)index)).
+// This is just ItemAdd + ButtonBehavior named and packaged - it doesn't replace ImGui::InvisibleButton (which already does the same thing when you
 // want ImGui to also own cursor placement), it's for the places that were
 // doing ItemAdd/ButtonBehavior by hand with raw bools.
 struct Interaction {
@@ -205,9 +189,15 @@ struct Interaction {
 };
 
 inline Interaction MakeInteractive(ImGuiID id, const ImRect& rect){
-    ImGui::ItemAdd(rect, id);
-    Interaction it;
-    it.pressed = ImGui::ButtonBehavior(rect, id, &it.hovered, &it.held);
+    Interaction it{};
+    // ItemAdd returns true ONLY if the item is inside the visible clip rect
+    const auto extraFlags = (int)ImGuiItemFlags_NoNav | (int)ImGuiItemFlags_NoNavDisableMouseHover;
+    // So, Adding ImGuiItemFlags_NoNav because else, it causes undeterministic behaviour, imgui internal focus engine moves the hover 
+    // So, Adding ImGuiItemFlags_NoNavDisableMouseHover because else, it causes the annoying behavior of where the item appears to lose focus, when the keyboard is used
+    if (ImGui::ItemAdd(rect, id, nullptr, extraFlags)) {
+        it.pressed = ImGui::ButtonBehavior(rect, id, &it.hovered, &it.held, ImGuiButtonFlags_NoNavFocus);
+    }
+    it.hovered = it.hovered && rect.Contains(ImGui::GetMousePos());
     return it;
 }
 
@@ -233,48 +223,8 @@ inline bool IsDoubleClick(ImGuiID id, bool clickedThisFrame){
 // Sidebar.h's RenderItemRow for an example) - this only decides the color.
 inline void DrawSelectableBg(ImDrawList* dl, const ImRect& rect, bool hovered, bool selected, f32 rounding = 0.0f){
     if (!hovered && !selected) return;
-    ImU32 col = selected ? Theme::Current.palette.SurfaceActive
-                          : Theme::Current.palette.SurfaceHover;
+    ImU32 col = selected ? Theme::Current.palette.SurfaceActive:  Theme::Current.palette.SurfaceHover;
     dl->AddRectFilled(rect.Min, rect.Max, col, rounding);
-}
-
-// Iterates a clipped, wrapping grid of fixed-stride cells: handles column
-// count, ImGuiListClipper, and per-row cursor advancement. `cellW` is the
-// horizontal stride between cells (it can be bigger than what you actually
-// draw, if you want a gap - see RenderGridView's use of itemWidth + xGap).
-// `drawCell(index, cellScreenPos)` only needs to draw what's inside one cell;
-// PushID/PopID around the index is handled here.
-template <typename Fn>
-inline void ForEachGridCell(size_t itemCount, f32 cellW, f32 cellH, Fn&& drawCell){
-    if (itemCount == 0 || cellW <= 0.0f) return;
-    cellH = (std::max)(cellH, 1.0f); // guard against ListClipper infinite loop
-
-    const f32 availW = ImGui::GetContentRegionAvail().x;
-    u16 columns = (u16)(availW / cellW);
-    columns = (std::max)(columns, (u16)1);
-
-    const u16 totalRows = (u16)std::ceil((f32)itemCount / columns);
-    if (totalRows == 0) return;
-
-    ImGuiListClipper clipper;
-    clipper.Begin(totalRows, cellH);
-
-    const ImVec2 startPos = ImGui::GetCursorScreenPos();
-
-    while (clipper.Step()){
-        for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++){
-            for (u16 col = 0; col < columns; col++){
-                const size_t i = (size_t)row * columns + col;
-                if (i >= itemCount) break;
-
-                ImVec2 cellPos(startPos.x + col * cellW, ImGui::GetCursorScreenPos().y);
-                ImGui::PushID((int)i);
-                drawCell(i, cellPos);
-                ImGui::PopID();
-            }
-            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + cellH);
-        }
-    }
 }
 
 

@@ -71,9 +71,12 @@ inline void GameLoop( f32 screenW, f32 screenH, f32 mouseX, f32 mouseY, bool isM
 
         const f32 bottombarH = TitlebarHeight * dpi;
 
+        ImGui::PushStyleVar(ImGuiStyleVar_ScrollbarSize, 18.0f * dpi);
         if (ImGui::BeginChild("FileViewArea", ImVec2(0, -bottombarH * 1.1f), false)) { // tiny padding 
             RenderFileGrid(dpi, app);
         }
+        ImGui::PopStyleVar();
+
         ImGui::EndChild();
         // Now this child will take the remaining height perfectly!
         ImGui::Dummy(ImVec2(0, bottombarH * 0.1f)); // the tiny padding
