@@ -35,9 +35,14 @@ inline void RenderGridView(f32 dpi, App& app){
     const f32 itemWidth = imageSize * kIconsWidthMultiplier;
     const f32 cellH = imageSize + yTextPadding + (maxLines * lineHeight) + yTextPadding;
 
+    auto& activeTab = app.window.GetActiveTab();
     DirListing listing = GetVisibleListing(app);
 
-    int focusedItemIndex = GetFocusedItemIndex(app);
+
+    int focusedItemIndex = -1;
+    if (activeTab.selState.justNavigated && activeTab.selState.focusHash.has_value()){
+        focusedItemIndex = GetFocusedItemIndex(app);
+    }
 
     // Cells are itemWidth wide but stride by itemWidth + xGap, so there's a visible gap between them.
     ForEachGridCell(listing.refs.size(), itemWidth + layout.xGap, cellH + layout.yGap, [&](size_t i, ImVec2 cellPos){
@@ -72,7 +77,10 @@ inline void RenderSmallView(f32 dpi, App& app){
     DirListing listing = GetVisibleListing(app);
     auto& activeTab = app.window.GetActiveTab();
 
-    int focusedItemIndex = GetFocusedItemIndex(app);
+    int focusedItemIndex = -1;
+    if (activeTab.selState.justNavigated && activeTab.selState.focusHash.has_value()){
+        focusedItemIndex = GetFocusedItemIndex(app);
+    }
 
     ForEachGridCell(listing.refs.size(), layout.cellWidth + layout.xGap, layout.cellWidth + layout.yGap, [&](size_t i, ImVec2 cellPos){
         auto child = listing.dir.children->GetItem(listing.refs[i], app.typeStore);
@@ -174,16 +182,13 @@ inline void RenderDetailsView(f32 dpi, App& app){
     ImGuiWindow* window = ImGui::GetCurrentWindow();
     if (!window || window->SkipItems) return;
 
-
     const auto layout = GetFileviewLayoutForMode(ViewMode::Details, dpi);
 
     const ImU32 textCol = Theme::Current.palette.Text;
     const ImU32 mutedCol = Theme::Current.palette.TextMuted;
 
+    ImGuiTableFlags flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | ImGuiTableFlags_PadOuterX | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_NoBordersInBody | ImGuiTableFlags_ScrollY;
 
-    ImGuiTableFlags flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | ImGuiTableFlags_PadOuterX | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_NoBordersInBody | ImGuiTableFlags_ScrollY | ImGuiTableFlags_RowBg | ImGuiTableFlags_NoHostExtendX |ImGuiTableFlags_ScrollX;
-
-        
     ImVec2 tableSize(0.0f, ImGui::GetContentRegionAvail().y);
         
     ImGui::PushStyleColor(ImGuiCol_TableHeaderBg, IM_COL32(0, 0, 0, 0));
@@ -193,8 +198,8 @@ inline void RenderDetailsView(f32 dpi, App& app){
     ImGui::PushStyleColor(ImGuiCol_HeaderHovered, Theme::Current.palette.SurfaceHover);
     ImGui::PushStyleColor(ImGuiCol_HeaderActive,  Theme::Current.palette.SurfaceActive);
     
-
     if (ImGui::BeginTable("ExplorerDetails", 4, flags, tableSize)){
+        ImGui::GetCurrentWindow()->Flags |= ImGuiWindowFlags_NoNavInputs; 
         ImGui::TableSetupScrollFreeze(0, 1); // Freezes the header row perfectly
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch, 0.5f);
         ImGui::TableSetupColumn("Date modified", ImGuiTableColumnFlags_WidthStretch, 0.1f);
@@ -213,17 +218,17 @@ inline void RenderDetailsView(f32 dpi, App& app){
             }
         }
 
+        f32 viewH = ImGui::GetWindowHeight(); 
         if (focusRow >= 0) {
             f32 rowStride = layout.cellHeight + layout.yGap;
             f32 itemY = focusRow * rowStride;
             f32 scrollY = ImGui::GetScrollY();
             // Subtract roughly the header height so it doesn't hide under the frozen header
-            f32 viewH = ImGui::GetWindowHeight() - ImGui::GetFrameHeight(); 
             
             if (itemY < scrollY) {
                 ImGui::SetScrollY(itemY);
             } else if (itemY + layout.cellHeight > scrollY + viewH) {
-                ImGui::SetScrollY(itemY + layout.cellHeight - viewH);
+                ImGui::SetScrollY(itemY + layout.cellHeight * 2 - viewH);   // doesnt bring the item into view, so im multiplying by 2, or maybe add GetFrameHeight?
             }
         }
 
@@ -233,11 +238,11 @@ inline void RenderDetailsView(f32 dpi, App& app){
         while (clipper.Step()){
             for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++){
                 auto child = listing.dir.children->GetItem(listing.refs[row], app.typeStore);
-
+                
                 bool isSelected = activeTab.isSelected(child.hash);
                 
                 ImGui::PushID(row);
-                ImGui::TableNextRow(ImGuiTableRowFlags_None, layout.cellHeight + layout.yGap);
+                ImGui::TableNextRow(ImGuiTableRowFlags_None, layout.cellHeight);
                 ImGui::TableNextColumn();
                 
                 ImDrawList* dl = ImGui::GetWindowDrawList(); 
@@ -246,7 +251,7 @@ inline void RenderDetailsView(f32 dpi, App& app){
                 
                 f32 tableMaxX = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
                 ImVec2 cellPadding = ImGui::GetStyle().CellPadding;
-
+                
                 // restrict rowRect to cell Height ignoring layout.yGap
                 ImRect rowRect(
                     ImVec2(cellPos.x - cellPadding.x, cellPos.y - cellPadding.y), 
@@ -254,18 +259,17 @@ inline void RenderDetailsView(f32 dpi, App& app){
                 );
                 
                 // Expanded so ButtonBehavior sees the whole row
-                ImGui::PushClipRect(rowRect.Min, ImVec2(tableMaxX, rowRect.Max.y), false);
+                ImGui::PushClipRect(rowRect.Min, ImVec2(tableMaxX, ImMin(rowRect.Max.y, viewH + window->Pos.y)), false);
+                ImU32 bgCol = 0;
                 ImGuiID id = currentWindow->GetID((void*)(intptr_t)child.hash);
                 ItemInteraction ia = HandleItemInteraction(app, listing.dir.parent, child, row, id, rowRect);
                 ImGui::PopClipRect();
-
-                if (isSelected) {
-                    ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, Theme::Current.palette.SurfaceActive);
-                } 
-                else if (ia.hovered) { 
-                    ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, Theme::Current.palette.SurfaceHover);
-                }
-
+                if (isSelected)      bgCol = Theme::Current.palette.SurfaceActive;
+                else if (ia.hovered) bgCol = Theme::Current.palette.SurfaceHover;
+                else if (row & 1)    bgCol = ImGui::GetColorU32(ImGuiCol_TableRowBgAlt);
+                
+                // if (bgCol != 0)      dl->AddRectFilled(rowRect.Min, rowRect.Max, bgCol);
+                if (bgCol != 0)      ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, bgCol);
                 
                 // NAME ---
                 f32 iconY = cellPos.y + (layout.cellHeight - layout.iconSize) * 0.5f;
@@ -305,13 +309,15 @@ inline void RenderDetailsView(f32 dpi, App& app){
                 ImGui::TableNextColumn();
                 dl = ImGui::GetWindowDrawList();
                 ImVec2 sizePos = ImGui::GetCursorScreenPos();
-                f32 liveSizeColWidth = ImGui::GetContentRegionAvail().x;
+                f32 liveSizeColWidth = ImGui::GetContentRegionAvail().x - layout.xGap;
                 const char* sizeText = (child.size != 0) ? FormatFileSize(child.size) : "--";
                 ImGui::PushStyleColor(ImGuiCol_Text, mutedCol);
                 ImGui::RenderTextClipped(sizePos, ImVec2(sizePos.x + liveSizeColWidth, sizePos.y + layout.cellHeight), sizeText, nullptr, nullptr, ImVec2(1.0f, 0.5f), nullptr);
                 ImGui::PopStyleColor();
 
                 ImGui::PopID();
+
+                ImGui::TableNextRow(ImGuiTableRowFlags_None, layout.yGap);
             }
         }
         ImGui::EndTable();
@@ -335,10 +341,7 @@ inline void RenderTilesView(f32 dpi, App& app){
 
     int focusedItemIndex = -1;
     if (activeTab.selState.justNavigated && activeTab.selState.focusHash.has_value()){
-        for (size_t i = 0; i < listing.refs.size(); i++){
-            auto c = listing.dir.children->GetItem(listing.refs[i], app.typeStore);
-            if (c.hash == activeTab.selState.focusHash) { focusedItemIndex = (int)i; break; }
-        }
+        focusedItemIndex = GetFocusedItemIndex(app);
     }
 
     ForEachGridCell(listing.refs.size(), layout.cellWidth + layout.xGap, layout.cellHeight + layout.yGap, [&](size_t i, ImVec2 cellPos){
@@ -368,184 +371,6 @@ inline void RenderTilesView(f32 dpi, App& app){
 }
 
 
-inline void KeyboardNavigationInteraction(f32 dpi, App& app){
-    auto& activeTab = app.window.GetActiveTab();
-    FileViewState& vs = activeTab.viewState;
-    ViewMode mode = vs.viewMode;
-    SelectionState& selState = activeTab.selState;
-
-    selState.justNavigated = false; 
-
-    DirListing listing = GetVisibleListing(app);
-    int totalItems = (int)listing.refs.size();
-
-    // Early exit and clean reset if empty
-    if (totalItems == 0) {
-        selState.focusHash = 0;
-        selState.anchorVisualIndex = -1;
-        selState.anchorHash = 0;
-        return;
-    }
-
-    // Find current focus index strictly by hash
-    int focusIdx = -1;
-    bool foundFocusIdx = false;
-    if (selState.focusHash.has_value()){
-        for (int i = 0; i < totalItems; i++) {
-            auto c = listing.dir.children->GetItem(listing.refs[i], app.typeStore);
-            if (c.hash == selState.focusHash) { 
-                focusIdx = i; 
-                foundFocusIdx = true;
-                break; 
-            }
-        }
-    }
-        
-    // If focus is lost, invalid, or 0, reset it
-    if (!foundFocusIdx) {
-        selState.focusHash = std::nullopt;
-        selState.anchorVisualIndex = -1;
-        selState.anchorHash = std::nullopt;
-    }
-
-    bool shift = ImGui::GetIO().KeyShift;
-    bool ctrl = ImGui::GetIO().KeyCtrl;
-    int newFocusIdx = focusIdx;
-    bool navOccurred = false;
-
-
-    int columns = 1;
-    int rowsPerColumn = 1;
-    f32 availW = ImGui::GetContentRegionAvail().x;
-
-    if (mode == ViewMode::List) {
-        rowsPerColumn = ComputeListRowsPerColumn(dpi);
-    }
-    else if (mode == ViewMode::Details) {
-        columns = 1;
-    } 
-    else {
-        f32 itemStride = GetGridItemStride(mode, dpi, vs.iconSize);
-        if (itemStride > 0.0f) {
-            columns = (int)(availW / itemStride);
-            if (columns < 1) columns = 1;
-        }
-    }
-    ImGuiKey keyPressed = ImGuiKey_None;
-
-    // Handle Input (Only if window is hovered, including child windows)
-    if (ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup | ImGuiHoveredFlags_ChildWindows)){
-        
-        // Arrow Keys: Branch logic for List (vertical wrap) vs Grid (horizontal wrap)
-        if (mode == ViewMode::List) {
-            if (ImGui::IsKeyPressed(ImGuiKey_DownArrow))  { 
-                newFocusIdx += 1; 
-                navOccurred = true; 
-                keyPressed = ImGuiKey_DownArrow;
-            }
-            if (ImGui::IsKeyPressed(ImGuiKey_UpArrow))    { 
-                newFocusIdx -= 1; 
-                navOccurred = true; 
-                keyPressed = ImGuiKey_UpArrow;
-            }
-            if (ImGui::IsKeyPressed(ImGuiKey_RightArrow)) { 
-                newFocusIdx += rowsPerColumn; 
-                navOccurred = true; 
-                keyPressed = ImGuiKey_RightArrow;
-            }
-            if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))  { 
-                newFocusIdx -= rowsPerColumn; 
-                navOccurred = true; 
-                keyPressed = ImGuiKey_LeftArrow;
-            }
-        }
-        else if (mode == ViewMode::Details) {
-            if (ImGui::IsKeyPressed(ImGuiKey_DownArrow)) { newFocusIdx += 1; navOccurred = true; keyPressed = ImGuiKey_DownArrow; }
-            if (ImGui::IsKeyPressed(ImGuiKey_UpArrow))   { newFocusIdx -= 1; navOccurred = true; keyPressed = ImGuiKey_UpArrow; }
-            // Left/Right: no horizontal axis in a single-column table, so no-op
-        }
-        else {
-            if (ImGui::IsKeyPressed(ImGuiKey_DownArrow))  { 
-                newFocusIdx += columns; 
-                navOccurred = true; 
-                keyPressed = ImGuiKey_DownArrow;
-            }
-            if (ImGui::IsKeyPressed(ImGuiKey_UpArrow))    { 
-                newFocusIdx -= columns; 
-                navOccurred = true; 
-                keyPressed = ImGuiKey_UpArrow;
-            }
-            if (ImGui::IsKeyPressed(ImGuiKey_RightArrow)) { 
-                newFocusIdx += 1; 
-                navOccurred = true; 
-                keyPressed = ImGuiKey_RightArrow;
-            }
-            if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))  { 
-                newFocusIdx -= 1; 
-                navOccurred = true; 
-                keyPressed = ImGuiKey_LeftArrow;
-            }
-        }
-
-        if (ImGui::IsKeyPressed(ImGuiKey_Home))       { newFocusIdx = 0; navOccurred = true; }
-        if (ImGui::IsKeyPressed(ImGuiKey_End))        { newFocusIdx = totalItems - 1; navOccurred = true; }
-        if (ImGui::IsKeyPressed(ImGuiKey_PageDown))   { newFocusIdx += (mode == ViewMode::List ? rowsPerColumn : columns) * 10; navOccurred = true; }
-        if (ImGui::IsKeyPressed(ImGuiKey_PageUp))     { newFocusIdx -= (mode == ViewMode::List ? rowsPerColumn : columns) * 10; navOccurred = true; }
-
-        if (navOccurred){
-            selState.justNavigated = true;
-            selState.lastKeyboardNavTime = ImGui::GetTime();
-
-            std::cout << "NAV OCCURED ====================================================>" << std::endl;
-            const char* keyName = ImGui::GetKeyName(keyPressed);
-            printf("Key Pressed: %s\n", keyName);
-            DEBUGPrintFocusedItems(app);
-
-            newFocusIdx = std::clamp(newFocusIdx, 0, totalItems - 1);
-            auto newChild = listing.dir.children->GetItem(listing.refs[newFocusIdx], app.typeStore);
-             
-            if (shift) {
-                int start = (std::min)(selState.anchorVisualIndex, newFocusIdx);
-                int end = (std::max)(selState.anchorVisualIndex, newFocusIdx);
-                if (!ctrl) activeTab.DeselectAllItems();
-                for (int i = start; i <= end; i++) {
-                    auto c = listing.dir.children->GetItem(listing.refs[i], app.typeStore);
-                    activeTab.AddItemToSelection(c.hash);
-                }
-            }
-            else if (!ctrl){
-                activeTab.DeselectAllItemsAndSelect(newChild.hash);
-                selState.anchorVisualIndex = newFocusIdx;
-                selState.anchorHash = newChild.hash;
-            }
-            
-            // Update focus hash ONLY on explicit navigation
-            selState.focusHash = newChild.hash;
-        }
-
-        // Spacebar: Toggle selection of focused item
-        if (ImGui::IsKeyPressed(ImGuiKey_Space)) {
-            auto focusChild = listing.dir.children->GetItem(listing.refs[focusIdx], app.typeStore);
-            if (activeTab.isSelected(focusChild.hash)){
-                activeTab.DeselectItem(focusChild.hash);
-            } else {
-                activeTab.AddItemToSelection(focusChild.hash);
-            }
-        }
-        
-        // Enter: Open / Navigate
-        if (ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter)) {
-            auto focusChild = listing.dir.children->GetItem(listing.refs[focusIdx], app.typeStore);
-            PCIDLIST_ABSOLUTE newPidl = GetFullPidl(listing.dir.parent.pidl.get(), focusChild.pidl);
-            if (focusChild.IsFolder()){
-                app.QueueCommand({CmdType::GoTo, WShell::Pidl(newPidl), 0, app.window.activeTabIndex, L""}); 
-            } else {
-                app.QueueCommand({CmdType::OpenFile, WShell::Pidl(newPidl), {}, {}, L""});
-            }
-        }
-    }
-}
-
 inline void RenderFileGrid(f32 dpi, App& app){
     auto& activeTab = app.window.GetActiveTab();
     FileViewState& vs = activeTab.viewState;
@@ -559,11 +384,7 @@ inline void RenderFileGrid(f32 dpi, App& app){
     activeTab.dir.UpdateChildren(app.directory, app.typeStore, vs.sortMode, vs.sortDir, vs.showHidden);
 
     if (mode == ViewMode::List){
-        // List view lives inside its own scrolling child, and only there is
-        // the real available height (after child padding + scrollbar
-        // reservation) known. Keyboard nav has to run INSIDE that same child
-        // so its row math can never drift from what's actually drawn - that
-        // drift was the source of the diagonal-jump / phantom-selection bug.
+        // List view lives inside its own scrolling child, and only there is the real available height (after child padding + scrollbar reservation) known. Keyboard nav has to run INSIDE that same child so its row math can never drift from what's actually drawn - that drift was the source of the diagonal-jump.
         ImGuiChildFlags childFlags = ImGuiChildFlags_NavFlattened;
         ImGuiWindowFlags windowFlags = ImGuiWindowFlags_HorizontalScrollbar;
         if (ImGui::BeginChild("FileViewList", ImVec2(0, 0), childFlags, windowFlags)){

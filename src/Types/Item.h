@@ -54,6 +54,7 @@ struct ItemView {
     u64 size;
 
     bool IsFolder() const { return (attributes & SFGAO_FOLDER) != 0; }
+    bool IsHidden() const { return (attributes & SFGAO_HIDDEN) != 0; }
 };
 class DirChildren{
     public:

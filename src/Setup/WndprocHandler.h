@@ -9,14 +9,16 @@
 #include "App.h"
 #include "imgui_fonts.h"
 #include "theme.h"
+#include "ClipboardManager.h"
 
 #include "UI/global.h"
 
 inline bool g_dpiChanged = false;
 inline bool g_dpiFromWndproc = 1.0f;
 
-bool g_isResizing = false;
-bool g_isMinimized = false;
+inline bool g_isResizing = false;
+inline bool g_isMinimized = false;
+inline bool g_appReady = false;
 
 // Forward declare message handler from imgui_impl_win32.cpp
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -172,8 +174,10 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam){
 
     case WM_SIZE: {
         if (wParam == SIZE_MINIMIZED) {
-            return 0; // Do not resize swapchain to 0x0
+            g_isMinimized = true;
+            return 0;
         }
+        g_isMinimized = false;
         
         UINT width = LOWORD(lParam);
         UINT height = HIWORD(lParam);
@@ -193,6 +197,15 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam){
         // Forces a redraw *during* the drag, instead of waiting for you to let go
         InvalidateRect(app->gfx.hwnd, NULL, FALSE);
         
+        return 0;
+    }
+    case WM_PAINT:{
+        if (g_appReady && !g_isMinimized) RenderFrame(*app);
+        ::ValidateRect(hWnd, nullptr); // clears the invalid region so Windows stops re-sending WM_PAINT
+        return 0;
+    }
+    case WM_CLIPBOARDUPDATE:{
+        QueryClipBoardCutItems(*app);
         return 0;
     }
 

@@ -8,6 +8,7 @@
 #include "BasicTypes.h"
 #include "imgui_fonts.h"
 #include "theme.h"
+#include "MainApp.h"
 
 
 
@@ -72,7 +73,7 @@ inline void ShutdownImGui(HWND hwnd, ID3D11Device** ppD3dDevice, ID3D11DeviceCon
     ImGui_ImplDX11_Shutdown();
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();
-
+ 
     CleanupDeviceD3D(ppD3dDevice, ppD3dContext, ppSwapChain, ppRenderTargetView);
     ::DestroyWindow(hwnd);
     ::UnregisterClassW(wc.lpszClassName, wc.hInstance);
@@ -91,6 +92,53 @@ void doIfDpiChanges(f32 dpi){
     ImGui_ImplDX11_CreateDeviceObjects();
 }
 
+void RenderFrame(App& app){
+    if (app.gfx.swapChainOccluded){
+        if (app.gfx.swapChain->Present(0, DXGI_PRESENT_TEST) == DXGI_STATUS_OCCLUDED)
+            return;                          // genuinely still occluded, skip this frame
+        app.gfx.swapChainOccluded = false;  
+    }
 
+    // Do the swap-chain resize here too, not just in main()'s loop —
+    // during a live drag, main()'s loop never runs, so this is the only
+    // place a pending resize will actually get applied before Present.
+    // Handle window resize (we don't resize directly in the WM_SIZE handler)
+    if (app.gfx.resizeWidth != 0 && app.gfx.resizeHeight != 0){
+
+        // Unbind the render target from the context !!!
+        ID3D11RenderTargetView* nullRTV = nullptr;
+        app.gfx.d3dContext->OMSetRenderTargets(1, &nullRTV, nullptr);
+
+        CleanupRenderTarget(app.gfx.renderTargetView.GetAddressOf());
+
+        app.gfx.swapChain->ResizeBuffers(0, app.gfx.resizeWidth, app.gfx.resizeHeight, DXGI_FORMAT_UNKNOWN, 0);
+        app.gfx.resizeWidth = app.gfx.resizeHeight = 0;
+
+        CreateRenderTarget(app.gfx.swapChain.Get(), app.gfx.d3dDevice.Get(), app.gfx.renderTargetView.GetAddressOf());
+    }
+
+    app.textures.NextFrame(); 
+    ImGui_Backend_NewFrame();
+    ImGui::NewFrame();
+    // ========
+    // toggle with F1
+    static bool showMetrics = false;
+    static bool showIDStackTool = false;
+    if (ImGui::IsKeyPressed(ImGuiKey_F1)) showMetrics = !showMetrics;
+    if (ImGui::IsKeyPressed(ImGuiKey_F2)) showIDStackTool = !showIDStackTool;
+    if (showMetrics) ImGui::ShowMetricsWindow();
+    if (showIDStackTool) ImGui::ShowIDStackToolWindow();
+    // ========
+
+    // UI::Render(app);
+    ImGuiIO& io = ImGui::GetIO();
+    GameLoop(app.gfx.width, app.gfx.height, io.MousePos.x, io.MousePos.y, io.MouseDown[0], io.DeltaTime, app.ui.dpi, app, ::IsZoomed(app.gfx.hwnd));
+
+    ImGui::Render();
+
+    app.ProcessCommands();
+
+    MyGraphicsAPI_PresentFrame(app.ui.clearColor, app.gfx.renderTargetView.Get(), app.gfx.d3dContext.Get(), app.gfx.swapChain.Get(), &app.gfx.swapChainOccluded); 
+}
 // !!!!!!---------------------------------------------------------------------------------------
 

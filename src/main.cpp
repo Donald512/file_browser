@@ -4,6 +4,7 @@
 #include "App.h"
 #include "deviceCreation.h"
 #include "imgui_render_boilerplate.h"
+#include "ClipboardManager.h"
 
 #include "WndprocHandler.h"
 #include "MainApp.h"
@@ -44,17 +45,24 @@ int main (void){
     if (!InitializeGraphicsAPI(app.gfx.hwnd, wc, app.gfx.d3dDevice.GetAddressOf(),app.gfx.d3dContext.GetAddressOf(),app.gfx.swapChain.GetAddressOf(), app.gfx.renderTargetView.GetAddressOf())) return 1;
 
     app.textures.Init(app.gfx.d3dDevice.Get(), app.gfx.d3dContext.Get());
-
-    ::ShowWindow(app.gfx.hwnd, SW_SHOWMAXIMIZED);
-    ::UpdateWindow(app.gfx.hwnd);
-
-    InitializeImGui(app.gfx.hwnd, app.gfx.d3dDevice.Get() ,app.gfx.d3dContext.Get(), &app.ui.dpi);
     
+    InitializeImGui(app.gfx.hwnd, app.gfx.d3dDevice.Get() ,app.gfx.d3dContext.Get(), &app.ui.dpi);
+
     RECT rect;
     ::GetClientRect(app.gfx.hwnd, &rect);
     f32 initialWidth = (f32)(rect.right - rect.left);
     f32 initialHeight = (f32)(rect.bottom - rect.top);
     InitializeUI(initialWidth, initialHeight);
+    
+    g_appReady = true;
+
+    ::ShowWindow(app.gfx.hwnd, SW_SHOWMAXIMIZED);
+    ::UpdateWindow(app.gfx.hwnd);
+
+    AddClipboardFormatListener(app.gfx.hwnd);
+
+    g_cfDropEffect = RegisterClipboardFormat(CFSTR_PREFERREDDROPEFFECT);
+    g_cfShellIDList = RegisterClipboardFormat(CFSTR_SHELLIDLIST);
     
     bool running = true;
     while (running) {
@@ -68,50 +76,19 @@ int main (void){
         }
 
         if (!running) break;
-        app.gfx.swapChainOccluded = false;
+
+        // When minimized, skip rendering entirely. Calling Present() on a minimized window with VSync enabled causes the GPU driver to block indefinitely
+        if (g_isMinimized) {
+            ::Sleep(10); 
+            continue;
+        }
         if (g_dpiChanged){
             doIfDpiChanges(g_dpiFromWndproc);
             app.ui.dpi = g_dpiFromWndproc;
             g_dpiChanged = false;
         }
 
-        // Handle window resize (we don't resize directly in the WM_SIZE handler)
-        if (app.gfx.resizeWidth != 0 && app.gfx.resizeHeight != 0){
-
-            // Unbind the render target from the context !!!
-            ID3D11RenderTargetView* nullRTV = nullptr;
-            app.gfx.d3dContext->OMSetRenderTargets(1, &nullRTV, nullptr);
-
-            CleanupRenderTarget(app.gfx.renderTargetView.GetAddressOf());
-
-            app.gfx.swapChain->ResizeBuffers(0, app.gfx.resizeWidth, app.gfx.resizeHeight, DXGI_FORMAT_UNKNOWN, 0);
-            app.gfx.resizeWidth = app.gfx.resizeHeight = 0;
-
-            CreateRenderTarget(app.gfx.swapChain.Get(), app.gfx.d3dDevice.Get(), app.gfx.renderTargetView.GetAddressOf());
-        }
-
-        app.textures.NextFrame(); 
-        ImGui_Backend_NewFrame();
-        ImGui::NewFrame();
-        // ========
-        // toggle with F1
-        static bool showMetrics = false;
-        static bool showIDStackTool = false;
-        if (ImGui::IsKeyPressed(ImGuiKey_F1)) showMetrics = !showMetrics;
-        if (ImGui::IsKeyPressed(ImGuiKey_F2)) showIDStackTool = !showIDStackTool;
-        if (showMetrics) ImGui::ShowMetricsWindow();
-        if (showIDStackTool) ImGui::ShowIDStackToolWindow();
-        // ========
-
-        // UI::Render(app);
-        ImGuiIO& io = ImGui::GetIO();
-        GameLoop(app.gfx.width, app.gfx.height, io.MousePos.x, io.MousePos.y, io.MouseDown[0], io.DeltaTime, app.ui.dpi, app, ::IsZoomed(app.gfx.hwnd));
-
-        ImGui::Render();
-
-        app.ProcessCommands();
-
-        MyGraphicsAPI_PresentFrame(app.ui.clearColor, app.gfx.renderTargetView.Get(), app.gfx.d3dContext.Get(), app.gfx.swapChain.Get(), &app.gfx.swapChainOccluded); 
+        RenderFrame(app);
     }
 
     ::UnregisterClassW(wc.lpszClassName, wc.hInstance);

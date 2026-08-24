@@ -3,6 +3,7 @@
 #include <ShlObj.h>
 #include "BasicTypes.h"
 
+
 namespace WShell{
     class Pidl{
     public:
@@ -104,5 +105,50 @@ u64 HashCombinedPidl(PCIDLIST_ABSOLUTE parent, PCITEMID_CHILD child) {
         hash ^= 0; hash *= 1099511628211ULL;
     }
 
+    return hash;
+}
+
+// FNV-1a hash, case-insensitive
+inline u64 HashIdentityString(const std::wstring& str){
+    if (str.empty()) return 0;
+    u64 hash = 1469598103934665603ULL;
+    for (wchar_t c : str){
+        hash ^= (u64)towlower(c);
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
+
+// Resolve a PIDL to its canonical identity string.
+// SIGDN_FILESYSPATH first (real files → "C:\Users\...\foo"),
+// SIGDN_DESKTOPABSOLUTEPARSING fallback (virtual items → "::{CLSID}\...").
+// Same object always resolves to the same string, regardless of whether
+// the PIDL is "lean" (clipboard CIDA) or "rich" (EnumObjects).
+inline std::wstring GetPidlIdentityString(PCIDLIST_ABSOLUTE fullPidl){
+    PWSTR path = nullptr;
+    if (SUCCEEDED(SHGetNameFromIDList(fullPidl, SIGDN_FILESYSPATH, &path))){
+        std::wstring result = path;
+        CoTaskMemFree(path);
+        return result;
+    }
+    if (SUCCEEDED(SHGetNameFromIDList(fullPidl, SIGDN_DESKTOPABSOLUTEPARSING, &path))){
+        std::wstring result = path;
+        CoTaskMemFree(path);
+        return result;
+    }
+    return L"";
+}
+
+// Overload 1: absolute PIDL (used for your listing items)
+inline u64 HashItemIdentity(PCIDLIST_ABSOLUTE fullPidl){
+    return HashIdentityString(GetPidlIdentityString(fullPidl));
+}
+
+// Overload 2: parent + child (used for clipboard CIDA items)
+inline u64 HashItemIdentity(PCIDLIST_ABSOLUTE parentPidl, LPCITEMIDLIST childPidl){
+    PIDLIST_ABSOLUTE fullPidl = ILCombine(parentPidl, childPidl);
+    if (!fullPidl) return 0;
+    u64 hash = HashItemIdentity(fullPidl);
+    ILFree(fullPidl);
     return hash;
 }
