@@ -2,6 +2,7 @@
 
 #include <ShlObj.h>
 #include "BasicTypes.h"
+#include <string>
 
 
 namespace WShell{

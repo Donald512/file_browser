@@ -324,7 +324,7 @@ DirChildren GetDirChildren2(IShellFolder* parentShellFolder, PCIDLIST_ABSOLUTE p
         }
         children.typenameIndex.push_back(assignedTypeIdx);
 
-        children.hashes.push_back(HashCombinedPidl(parentPidl, pStoredPidl));
+        children.hashes.push_back(HashItemIdentity(parentPidl, pStoredPidl));
 
 
         SFGAOF attrs = SFGAO_FOLDER | SFGAO_CANRENAME | SFGAO_CANDELETE |SFGAO_HIDDEN;
