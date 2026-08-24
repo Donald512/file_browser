@@ -4,7 +4,6 @@
 #include "App.h"
 #include "deviceCreation.h"
 #include "imgui_render_boilerplate.h"
-#include "ClipboardManager.h"
 
 #include "WndprocHandler.h"
 #include "MainApp.h"
@@ -21,7 +20,7 @@
 
 
 int main (void){
-    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    OleInitialize(nullptr);  // Calls CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
     GetSpecialFolders();
 
@@ -61,8 +60,7 @@ int main (void){
 
     AddClipboardFormatListener(app.gfx.hwnd);
 
-    g_cfDropEffect = RegisterClipboardFormat(CFSTR_PREFERREDDROPEFFECT);
-    g_cfShellIDList = RegisterClipboardFormat(CFSTR_SHELLIDLIST);
+
     
     bool running = true;
     while (running) {
@@ -93,7 +91,7 @@ int main (void){
 
     ::UnregisterClassW(wc.lpszClassName, wc.hInstance);
     ShutdownImGui(app.gfx.hwnd, app.gfx.d3dDevice.GetAddressOf() ,app.gfx.d3dContext.GetAddressOf(), app.gfx.swapChain.GetAddressOf(), app.gfx.renderTargetView.GetAddressOf(), wc);
-    CoUninitialize();
+    OleUninitialize();
     printf("Exited succefully\n");
     return 0;
 

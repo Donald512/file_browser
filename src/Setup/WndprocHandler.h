@@ -9,7 +9,6 @@
 #include "App.h"
 #include "imgui_fonts.h"
 #include "theme.h"
-#include "ClipboardManager.h"
 
 #include "UI/global.h"
 
@@ -205,7 +204,7 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam){
         return 0;
     }
     case WM_CLIPBOARDUPDATE:{
-        QueryClipBoardCutItems(*app);
+        QueryClipBoardCutItems(app->gfx.hwnd, app->clipBoardCutItems);
         return 0;
     }
 

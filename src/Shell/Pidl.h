@@ -52,7 +52,7 @@ namespace WShell{
 
 
 
-u64 HashPidl(PCIDLIST_ABSOLUTE pidl){
+inline u64 HashPidl(PCIDLIST_ABSOLUTE pidl){
     if (!pidl) return 0;
 
     // Pure in-memory FNV-1a over the raw ITEMIDLIST bytes. ILGetSize() just walks the
@@ -70,12 +70,12 @@ u64 HashPidl(PCIDLIST_ABSOLUTE pidl){
 }
 
 // Should be non const so it can be freed
-PIDLIST_ABSOLUTE GetFullPidl(PCIDLIST_ABSOLUTE parent, PCITEMID_CHILD child){
+inline PIDLIST_ABSOLUTE GetFullPidl(PCIDLIST_ABSOLUTE parent, PCITEMID_CHILD child){
     return ILCombine(parent, child);
 }
 
 
-u64 HashCombinedPidl(PCIDLIST_ABSOLUTE parent, PCITEMID_CHILD child) {
+inline u64 HashCombinedPidl(PCIDLIST_ABSOLUTE parent, PCITEMID_CHILD child) {
     u64 hash = 1469598103934665603ULL; // FNV offset basis
     const unsigned char* bytes;
     UINT size;

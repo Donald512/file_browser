@@ -53,6 +53,7 @@ cl  /EHsc /nologo /Z7 /W4 /MP /std:c++20 ^
    /I"%imgui_root%\misc" ^
    /I"%font_stuff%" ^
    "%source_file%" ^
+   "src\Global\ClipboardManager.cpp" ^
    "src\Setup\imgui_fonts.cpp" ^
    "src\UI\Theme.cpp" ^
    "%build_dir%\imgui.obj" ^

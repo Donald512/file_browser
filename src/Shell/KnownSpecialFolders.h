@@ -10,17 +10,15 @@ constexpr CLSID CLSID_HOME =
     { 0xf874310e, 0xb6b7, 0x47dc, { 0xbc, 0x84, 0xb9, 0xe6, 0xb3, 0x8f, 0x59, 0x03 } };
 
 namespace SpecialFolders{
-    WShell::Pidl pidlThisPC;
-    WShell::Pidl pidlHome;
-    WShell::Pidl pidlDesktop;
-    WShell::Pidl pidlQuickAccess;
-    WShell::Pidl pidlNetwork;
-    WShell::Pidl pidlRecycleBin;
-    WShell::Pidl pidlDocuments;
-    WShell::Pidl pidlDownloads;
-
-
-    WShell::Pidl defaultStartupFolder;
+    inline WShell::Pidl pidlThisPC;
+    inline WShell::Pidl pidlHome;
+    inline WShell::Pidl pidlDesktop;
+    inline WShell::Pidl pidlQuickAccess;
+    inline WShell::Pidl pidlNetwork;
+    inline WShell::Pidl pidlRecycleBin;
+    inline WShell::Pidl pidlDocuments;
+    inline WShell::Pidl pidlDownloads;
+    inline WShell::Pidl defaultStartupFolder;
 }
 
 

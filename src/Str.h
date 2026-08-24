@@ -102,7 +102,7 @@ namespace Str{
         return result;
     }
 
-    std::string SanitizeWString(const wchar_t* wide){
+    inline std::string SanitizeWString(const wchar_t* wide){
         std::wstring wstr(wide);
         wstr.erase(std::remove_if(wstr.begin(), wstr.end(), [](wchar_t c) {
             return c == L'\r' || c == 0x200E || c == 0x200F || c == 0x202A || c == 0x202B || c == 0x202C;
@@ -110,7 +110,7 @@ namespace Str{
         return WideToString(wstr.c_str());
     }
 
-    std::wstring CleanAmpersands(const std::wstring& rawText){
+    inline std::wstring CleanAmpersands(const std::wstring& rawText){
         std::wstring cleanText;
         cleanText.reserve(rawText.length());
 

@@ -86,7 +86,7 @@ namespace WShell{
         return "";
     }
 
-    bool GetPidlTypeName(IShellFolder* pParent, PCITEMID_CHILD childPidl, wchar_t* outBuffer, UINT maxChars) {
+    inline bool GetPidlTypeName(IShellFolder* pParent, PCITEMID_CHILD childPidl, wchar_t* outBuffer, UINT maxChars) {
         if (!pParent || !childPidl || !outBuffer || maxChars == 0) return false;
 
         ComPtr<IShellFolder2> pFolder2;
@@ -110,7 +110,7 @@ namespace WShell{
     }
         
 
-    bool GetItemTypeName(PCIDLIST_ABSOLUTE parentPidl, IShellFolder* pParent, PCITEMID_CHILD child, wchar_t* out) {
+    inline bool GetItemTypeName(PCIDLIST_ABSOLUTE parentPidl, IShellFolder* pParent, PCITEMID_CHILD child, wchar_t* out) {
         ComPtr<IShellItem2> item;
         if (FAILED(SHCreateItemWithParent(parentPidl, pParent, child, IID_PPV_ARGS(&item)))) 
             return false;
@@ -125,7 +125,7 @@ namespace WShell{
     }
 
     
-    Pidl GetFullPath(const wchar_t* widePath){
+    inline Pidl GetFullPath(const wchar_t* widePath){
 
         WShell::Pidl pidl(nullptr);
         DWORD attrs = 0;

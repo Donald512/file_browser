@@ -370,16 +370,19 @@ inline void RenderTilesView(f32 dpi, App& app){
     }, focusedItemIndex);
 }
 
+static std::vector<PCITEMID_CHILD> g_selectedPidls;
 
 inline void RenderFileGrid(f32 dpi, App& app){
     auto& activeTab = app.window.GetActiveTab();
     FileViewState& vs = activeTab.viewState;
+    SelectionState& selState = activeTab.selState;
     ViewMode mode = vs.viewMode;
 
     // Reset hover state at the beginning of the frame
     activeTab.selState.isAnyItemHovered = false; 
     
-    openRightClickMenu = false;
+    g_openRightClickMenu = false;
+    g_menuIsForChildren = false;
     
     activeTab.dir.UpdateChildren(app.directory, app.typeStore, vs.sortMode, vs.sortDir, vs.showHidden);
 
@@ -416,18 +419,27 @@ inline void RenderFileGrid(f32 dpi, App& app){
         if (!activeTab.selState.isAnyItemHovered) {
             activeTab.DeselectAllItems();
             ctxMenuItems = GetBackgroundContextMenu(activeContextMenu, activeTab.dir.parent.pidl, app.gfx.d3dDevice.Get());
-            openRightClickMenu = true;
+            g_openRightClickMenu = true;
+            g_menuIsForChildren = false;
         }
     }
     
-    if (openRightClickMenu){
-        ImGui::OpenPopup("ItemContextMenu");
+    if (g_openRightClickMenu){
+        
+        if (g_menuIsForChildren){
+            g_selectedPidls = GetSelectedItems(activeTab);
+            ctxMenuItems = GetContextMenu(activeContextMenu, activeTab.dir.parent.pidl.get(), g_selectedPidls, app.gfx.hwnd, app.gfx.d3dDevice.Get());
+        }
+        // elsel, do nothing, alreay gotten by isRightClick
+
         ImGui::SetNextWindowPos(ImGui::GetMousePos());
+        ImGui::OpenPopup("ItemContextMenu");
     }
     
     PushMenuTheme(dpi);
     if (ImGui::BeginPopup("ItemContextMenu")) {
-        RenderContextMenuStructure(ctxMenuItems, app.gfx.hwnd, dpi);
+
+        RenderContextMenuStructure(ctxMenuItems, activeTab.dir.parent.pidl.get(), g_selectedPidls, app.gfx.hwnd, dpi);
         ImGui::EndPopup();
     }
     PopMenuTheme();

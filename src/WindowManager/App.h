@@ -10,6 +10,7 @@
 #include "sidebarEnum.h"
 #include "TypenameManager.h"
 #include "variant"
+#include "AppDeclerations.h"
 
 #include "Tab.h"
 
@@ -74,6 +75,7 @@ struct App{
     TypenameStore typeStore;
 
     std::vector<AppCommand> commandQueue;
+    std::unordered_set<u64> clipBoardCutItems{};
 
     void QueueCommand(AppCommand cmd){
         commandQueue.push_back(std::move(cmd));
