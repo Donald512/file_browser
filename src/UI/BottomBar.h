@@ -248,7 +248,7 @@ void RenderBottombar(f32 dpi, App& app){
                 else if (d){
                     vs.sortDir = *d;
                 }
-                app.QueueCommand({CmdType::ReSort, {}, 0, app.window.activeTabIndex, L""});
+                app.QueueCommand(Cmd_ReSort{app.window.activeTabIndex});
             }
             if (m){
                 if (vs.sortMode == *m)      hoverDl->AddRectFilled(r.Min, r.Max, accentCol, 4.0f * dpi);

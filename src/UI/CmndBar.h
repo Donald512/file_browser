@@ -35,17 +35,18 @@ inline void RenderCommandbar(f32 dpi, App& app){
     };
 
     const Tab& tab = app.window.GetActiveTab();
+    const size_t tabIndex = app.window.activeTabIndex;
     if (cmdBarButton("NavGoBack",    ICON_REG_ARROW_LEFT,      tab.CanGoBack())){
-        app.QueueCommand({ CmdType::GoBack, {}, 0, 0, L"" });
+        app.QueueCommand(Cmd_GoBack{tabIndex});
     }
     if (cmdBarButton("NavGoForward", ICON_REG_ARROW_RIGHT,     tab.CanGoForward())) {
-        app.QueueCommand({ CmdType::GoForward, {}, 0, 0, L"" });
+        app.QueueCommand(Cmd_GoForward{tabIndex});
     }
     if (cmdBarButton("NavGoParent",  ICON_REG_ARROW_UP,        tab.CanGoParent()))  { 
-        app.QueueCommand({ CmdType::GoParent, {}, 0, 0, L"" });
+        app.QueueCommand(Cmd_GoParent{tabIndex});
     }
     if (cmdBarButton("NavRefresh",   ICON_REG_ARROW_CLOCKWISE, true))               {
-        app.QueueCommand({ CmdType::Refresh, {}, 0, 0, L"" });
+        app.QueueCommand(Cmd_Refresh{tabIndex});
     }
     if (cmdBarButton("HistoryDropdown",   ICON_REG_CHEVRON_DOWN, true)){ /* Open Dropdown showing visited tabs, like a history, but listing everything in history vector, not just up to currentIndex */ 
     }
@@ -118,7 +119,8 @@ inline void RenderCommandbar(f32 dpi, App& app){
 
         // 6. Handle Navigation Clicks
         if (textInteract.pressed && !isLast) {
-            app.QueueCommand({ CmdType::GoTo, crumb.pidl.Clone(), crumb.hash, app.window.activeTabIndex, L"" });
+            app.QueueCommand(Cmd_GoTo{app.window.activeTabIndex, crumb.pidl.Clone()});
+
         }
         
         if (chevInteract.pressed) {

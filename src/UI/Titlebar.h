@@ -282,12 +282,12 @@ inline void RenderTitlebar(f32 dpi, App& app, bool isMaximized = false){
             bool clickConsumed = false;
             
             if (closeHovered && ImGui::IsMouseClicked(0)){
-                app.QueueCommand({ CmdType::CloseTab, {}, 0, i, L"" });
+                app.QueueCommand(Cmd_CloseTab{activeTabIndex});
                 clickConsumed = true;
             }
 
             if (!clickConsumed && isHovered && ImGui::IsMouseClicked(0)){
-                app.QueueCommand({ CmdType::SwitchTab, {}, 0, i, L"" });
+                app.QueueCommand(Cmd_SwitchTab{i});
             }
         }
         currentX += tabW + gapBetweenTabs;
@@ -330,7 +330,7 @@ inline void RenderTitlebar(f32 dpi, App& app, bool isMaximized = false){
     if (newTabRect.Min.x <= titleRect.Min.x + sidebarHeaderW + titleH) return;
 
     if (RenderIconButton(newTabRect, "NewTabButton", ICON_REG_ADD, 4.0f * dpi, surfaceHoverCol, surfaceHoverCol, textCol)){
-        app.QueueCommand({ CmdType::NewTab, {}, 0, 0, L"" });
+        app.QueueCommand(Cmd_NewTab{});
     }
     
     const ImRect tabChevronRect(

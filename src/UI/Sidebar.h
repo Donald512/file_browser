@@ -244,7 +244,7 @@ inline void RenderSidebar(f32 dpi, App& app){
 
                     bool isSelected = app.window.GetActiveTab().dir.parent.hash == item.hash;
                     if (RenderItemRow(rowID.c_str(), iconTex, item.name.c_str(), isSelected, dpi, 30.0f * dpi, {4.0f * dpi, 4.0f * dpi}, 4.0f * dpi, indent)){
-                        app.QueueCommand({CmdType::GoTo, item.pidl.Clone(), item.hash, app.window.activeTabIndex, L""});
+                        app.QueueCommand(Cmd_GoTo {app.window.activeTabIndex, item.pidl.Clone()});
                     }
                 }
             }
