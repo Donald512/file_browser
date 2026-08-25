@@ -16,7 +16,7 @@ void shrinkVec(std::vector<T>& vec){
 }
 
 // Simple FNV-1a 64-bit hash function
-static uint64_t HashString(const char* str) {
+inline uint64_t HashString(const char* str) {
     uint64_t hash = 14695981039346656037ULL;
     while (*str) {
         hash ^= static_cast<uint64_t>(*str++);

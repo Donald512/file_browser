@@ -11,6 +11,10 @@ test\color_pixel_inspector.py
 *
 !src/
 !src/Global/
+!src/Global/Icons
+!src/Global/Textures
+!src\WindowManager\AppDeclerations.h
+
 !include/
 !thirdparty/
 !build.bat

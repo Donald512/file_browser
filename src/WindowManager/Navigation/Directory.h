@@ -22,38 +22,9 @@ class Directory{
         parent = GetDirParent(parentPidl);
     }
 
-    void UpdateChildren(DirectoryManager& directory, TypenameStore& typeStore, SortMode sm, SortDirection sd, bool showHidden){
-        if (updatedChildren) return;
+    void UpdateChildren(DirectoryManager& directory, TypenameStore& typeStore, SortMode sm, SortDirection sd, bool showHidden);
 
-        UpdateParentShellFolder(parent);
-        children = directory.GetOrRequest(parent.shellFolder.Get(), typeStore, parent.pidl.get(), parent.hash);
-
-        size_t count = children->ItemCount();
-        sortedIndices.resize(count);
-
-        for(u32 i = 0; i < count; i++){
-            sortedIndices[i] = i;
-        }
-
-        Sort(typeStore, sm, sd);
-
-        if (!showHidden){
-            RebuildNonHiddenIndices();
-        }
-        
-        updatedChildren = true;
-    }
-
-    void RebuildNonHiddenIndices(){
-        nonHiddenIndices.clear();
-        nonHiddenIndices.reserve(sortedIndices.size());
-
-        for (u32 index : sortedIndices) {
-            if (!(children->attributes[index] & SFGAO_HIDDEN))
-                nonHiddenIndices.push_back(index);
-            // std::cout << children->GetChildName(index) << " attributes: " << children->attributes[index] << std::endl;
-        }
-    }
+    void RebuildNonHiddenIndices();
 
     const std::vector<u32>& VisibleIndices(bool showHidden) const {
         return showHidden ? sortedIndices : nonHiddenIndices;
@@ -67,7 +38,40 @@ class Directory{
 
 };
 
-void Directory::Sort(TypenameStore& typeStore, SortMode mode, SortDirection direction) {
+inline void Directory::UpdateChildren(DirectoryManager& directory, TypenameStore& typeStore, SortMode sm, SortDirection sd, bool showHidden){
+    if (updatedChildren) return;
+
+    UpdateParentShellFolder(parent);
+    children = directory.GetOrRequest(parent.shellFolder.Get(), typeStore, parent.pidl.get(), parent.hash);
+
+    size_t count = children->ItemCount();
+    sortedIndices.resize(count);
+
+    for(u32 i = 0; i < count; i++){
+        sortedIndices[i] = i;
+    }
+
+    Sort(typeStore, sm, sd);
+
+    if (!showHidden){
+        RebuildNonHiddenIndices();
+    }
+    
+    updatedChildren = true;
+}
+
+inline void Directory::RebuildNonHiddenIndices(){
+    nonHiddenIndices.clear();
+    nonHiddenIndices.reserve(sortedIndices.size());
+
+    for (u32 index : sortedIndices) {
+        if (!(children->attributes[index] & SFGAO_HIDDEN))
+            nonHiddenIndices.push_back(index);
+        // std::cout << children->GetChildName(index) << " attributes: " << children->attributes[index] << std::endl;
+    }
+}
+
+inline void Directory::Sort(TypenameStore& typeStore, SortMode mode, SortDirection direction) {
     if (!children || sortedIndices.empty()) return;
 
     std::sort(sortedIndices.begin(), sortedIndices.end(), 

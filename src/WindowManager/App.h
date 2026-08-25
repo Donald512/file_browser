@@ -4,14 +4,12 @@
 #include "imgui.h"
 #include "BasicTypes.h"
 #include <wrl/client.h>
+#include <variant>
 
 #include "IconManager.h"
 #include "TextureManager.h"
 #include "sidebarEnum.h"
 #include "TypenameManager.h"
-#include "variant"
-#include "AppDeclerations.h"
-
 #include "Tab.h"
 
 using Microsoft::WRL::ComPtr;
@@ -84,15 +82,15 @@ struct App{
 };
 
 
-void App::ProcessCommands() {
+inline void App::ProcessCommands() {
     for (auto& cmd : commandQueue) {
         std::visit(overloaded{
             [&](Cmd_NewTab& c)    { window.NewTab(c.targetPidl.get()); },
             [&](Cmd_CloseTab& c)  { window.CloseTab(c.tabIndex); },
             [&](Cmd_SwitchTab& c) { window.SetActiveTab(c.tabIndex); },
             [&](Cmd_GoTo& c)      { window.tabs[c.tabIndex].GoTo(c.targetPidl.get(), Actions::Normal); },
-            [&](Cmd_Rename& c)    { /* Handle rename */ },
-            [&](Cmd_Delete& c)    { },
+            [&](Cmd_Rename& c)    { (void)c; },
+            [&](Cmd_Delete& c)    { (void)c; },
             [&](Cmd_Refresh& c)   { window.tabs[c.tabIndex].Refresh(); },
             [&](Cmd_GoBack& c)    { window.tabs[c.tabIndex].GoBack(); },
             [&](Cmd_GoForward& c) { window.tabs[c.tabIndex].GoForward(); },

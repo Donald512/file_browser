@@ -11,7 +11,7 @@
 #include "IconManager.h"
 
 #include "SidebarEnum.h"
-
+#include "App.h"
 #include <cfloat>
 
 inline bool RenderSectionHeader(const char* id, const char* headerGlyph, const char* label, bool isOpen, bool isDisabled, f32 dpi, f32 h, ImVec2 xFramePadding, f32 frameRounding){

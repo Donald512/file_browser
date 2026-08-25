@@ -31,7 +31,7 @@ class History{
 };
 
 
-bool History::Push(PCIDLIST_ABSOLUTE folder){
+inline bool History::Push(PCIDLIST_ABSOLUTE folder){
     visited.erase(visited.begin() + currentIndex + 1, visited.end());
 
     visited.push_back(WShell::Pidl(ILClone(folder)));

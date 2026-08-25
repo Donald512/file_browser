@@ -3,10 +3,12 @@
 #include "BasicTypes.h"
 #include "imgui_internal.h"
 #include "imgui.h"
+#include "theme.h"
 
 #include <cfloat>
 #include <cmath>
 #include <vector>
+
 
 struct HitTestRegistry {
     // Stores screen-space bounding boxes of UI elements that accept clicks

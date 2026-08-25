@@ -8,6 +8,9 @@
 #include "Directory.h"
 #include "TypenameManager.h"
 #include <optional>
+#include "KnownSpecialFolders.h"
+#include "Breadcrumbs.h"
+
 
 
 template <typename T>
@@ -134,7 +137,7 @@ struct Window{
 };
     
 
-bool Tab::GoTo(PCIDLIST_ABSOLUTE dest, Actions action){
+inline bool Tab::GoTo(PCIDLIST_ABSOLUTE dest, Actions action){
     if (!dest) return false;
     // change currentFolder, update directory, and push new path to history
     // preventing currentFolder from being null, becasue it will crash ILIsEqual
@@ -154,7 +157,7 @@ bool Tab::GoTo(PCIDLIST_ABSOLUTE dest, Actions action){
     return true;
 }
 
-bool Tab::GoParent(){
+inline bool Tab::GoParent(){
     if (!CanGoParent()){
         return false;
     }
@@ -168,7 +171,7 @@ bool Tab::GoParent(){
     return GoTo(owned.get());
 }
 
-void Tab::ReSort(TypenameStore& typeStore){
+inline void Tab::ReSort(TypenameStore& typeStore){
     dir.Sort(typeStore,viewState.sortMode, viewState.sortDir);
     if (!viewState.showHidden){
         dir.RebuildNonHiddenIndices();
@@ -176,18 +179,18 @@ void Tab::ReSort(TypenameStore& typeStore){
 }
 
 
-void Tab::DeselectAllItemsAndSelect(u64 i){
+inline void Tab::DeselectAllItemsAndSelect(u64 i){
     selState.selectedHashes.clear();
     selState.selectedHashes.insert(i);
 }
 
-void Tab::AddItemToSelection(u64 i){
+inline void Tab::AddItemToSelection(u64 i){
     selState.selectedHashes.insert(i);
 }
 
-void Tab::DeselectItem(u64 i){
+inline void Tab::DeselectItem(u64 i){
     selState.selectedHashes.erase(i);
 }
-void Tab::DeselectAllItems(){
+inline void Tab::DeselectAllItems(){
     selState.selectedHashes.clear();
 }

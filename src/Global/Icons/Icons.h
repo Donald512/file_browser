@@ -4,7 +4,7 @@
 
 
 
-u32 QuerySystemIconIndex(PCIDLIST_ABSOLUTE pidl, const wchar_t* pszPath, DWORD dwFileAttributes, UINT uFlags) {
+inline u32 QuerySystemIconIndex(PCIDLIST_ABSOLUTE pidl, const wchar_t* pszPath, DWORD dwFileAttributes, UINT uFlags) {
     SHFILEINFOW sfi = {};
 
     // Ensure SHGFI_SYSICONINDEX is always set

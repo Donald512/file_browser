@@ -5,7 +5,6 @@
 #include "deviceCreation.h"
 #include "imgui_render_boilerplate.h"
 
-#include "WndprocHandler.h"
 #include "MainApp.h"
 
 #pragma comment(lib, "comctl32.lib")
@@ -17,7 +16,14 @@
 #pragma comment(lib, "Ole32.lib")
 #pragma comment(lib, "OleAut32.lib")
 
+LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
+bool g_dpiChanged = false;
+f32 g_dpiFromWndproc = 1.0f;
+
+bool g_isResizing = false;
+bool g_isMinimized = false;
+bool g_appReady = false;
 
 int main (void){
     OleInitialize(nullptr);  // Calls CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
@@ -49,10 +55,7 @@ int main (void){
 
     RECT rect;
     ::GetClientRect(app.gfx.hwnd, &rect);
-    f32 initialWidth = (f32)(rect.right - rect.left);
-    f32 initialHeight = (f32)(rect.bottom - rect.top);
-    InitializeUI(initialWidth, initialHeight);
-    
+
     g_appReady = true;
 
     ::ShowWindow(app.gfx.hwnd, SW_SHOWMAXIMIZED);

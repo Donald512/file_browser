@@ -90,7 +90,7 @@ class DirChildren{
     ItemView GetItem(size_t index, TypenameStore& typeStore) const;
 };
 
-ItemView DirChildren::GetItem(size_t index, TypenameStore& typeStore) const {
+inline ItemView DirChildren::GetItem(size_t index, TypenameStore& typeStore) const {
     return ItemView{
         GetChildName(index),
         typeStore.GetTypename(typenameIndex[index]),
