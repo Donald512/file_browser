@@ -23,7 +23,7 @@ inline void RenderTitlebar(f32 dpi, App& app, bool isMaximized = false){
     const std::vector<Tab>& tabs = app.window.tabs;
     const size_t activeTabIndex = app.window.activeTabIndex;
     const TextureManager& textures = app.textures;
-    const IconManager& icons = app.icons;
+    IconManager& icons = app.icons;
 
     g_HitTestRegistry.Clear();
     

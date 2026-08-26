@@ -11,6 +11,7 @@
 #include "sidebarEnum.h"
 #include "TypenameManager.h"
 #include "Tab.h"
+#include "TaskSystem.h"
 
 using Microsoft::WRL::ComPtr;
 
@@ -67,13 +68,17 @@ struct App{
 
     Window window;
     TextureManager textures;
+    
+    TaskSystem tasks;
+
     DirectoryManager directory;
-    IconManager icons;
+    IconManager icons{tasks};
     SidebarManager sidebar;
     TypenameStore typeStore;
 
     std::vector<AppCommand> commandQueue;
     std::unordered_set<u64> clipBoardCutItems{};
+
 
     void QueueCommand(AppCommand cmd){
         commandQueue.push_back(std::move(cmd));

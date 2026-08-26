@@ -39,7 +39,7 @@ void IterateFolder(PCIDLIST_ABSOLUTE folder, DWORD shcontfFlags, Func&& callback
 }
 
 template <typename Func>
-void IterateFolder(IShellFolder* pFolder, DWORD shcontfFlags, Func&& callback) {
+void IterateFolder(IShellFolder* pFolder, DWORD shcontfFlags, Func&& callback, const std::atomic<bool>& cancelled) {
     if (!pFolder) return;
 
     ComPtr<IEnumIDList> enumerator;
@@ -48,14 +48,20 @@ void IterateFolder(IShellFolder* pFolder, DWORD shcontfFlags, Func&& callback) {
     PITEMID_CHILD childPidl = nullptr;
     ULONG fetched = 0;
 
-    while (enumerator->Next(1, &childPidl, &fetched) == S_OK) {
+    while (!cancelled && enumerator->Next(1, &childPidl, &fetched) == S_OK) {
         callback(pFolder, childPidl);
         
-        if(childPidl){ // if the lambda stole it, pChild will be null
-            CoTaskMemFree(childPidl);   
-        }
+        // if the lambda stole it, pChild will be null
+        if(childPidl)  CoTaskMemFree(childPidl);   
     }
 }
+
+struct DirectoryBuildResult{
+    DirChildren children;
+    std::vector<std::string> rawTypes;
+    FILETIME modifiedTime;
+    u64 hash;
+};
 
 std::vector<DirItem> EnumFolder(PCIDLIST_ABSOLUTE folder, DirItem* parentItem = nullptr);
 

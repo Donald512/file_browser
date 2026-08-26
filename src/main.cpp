@@ -32,6 +32,8 @@ int main (void){
 
     App app{};
 
+    
+
     app.window.NewTab(SpecialFolders::defaultStartupFolder);
     app.window.NewTab(SpecialFolders::pidlHome);
     app.window.NewTab(SpecialFolders::pidlQuickAccess);

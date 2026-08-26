@@ -150,7 +150,7 @@ inline bool RenderItemRow(const char* id, ImTextureID icon, const char* label, b
 inline void RenderSidebar(f32 dpi, App& app){
     SidebarManager& sidebarManager = app.sidebar;
     const TextureManager& textures = app.textures;
-    const IconManager& icons = app.icons;
+    IconManager& icons = app.icons;
 
     const f32 sidebarW = g_sidebarWidthAnim.Get();
     if (sidebarW <= 1.0f) return;
