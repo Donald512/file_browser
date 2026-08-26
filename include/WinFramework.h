@@ -4,7 +4,10 @@
 // target Windows 7 or later
     #define _WIN32_WINNT 0x0601
 #endif
- 
+
+#ifndef WINVER
+    #define WINVER 0x0A00
+#endif
 
 #ifndef STRICT
     #define STRICT
@@ -16,7 +19,7 @@
 // (or all) of these defines (it will increase build time though).
 // #define WIN32_LEAN_AND_MEAN  // for Shell APIs
 #define NOGDICAPMASKS
-#define NOSYSMETRICS
+// #define NOSYSMETRICS
 #define NOMENUS
 // #define NOICONS
 #define NORASTEROPS
