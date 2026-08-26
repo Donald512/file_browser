@@ -1,5 +1,9 @@
 #pragma once
+#include <vector>
 #include <iostream>
+#include "BasicTypes.h"
+#include "WinFramework.h"
+#include <filesystem>
 
 #define PRINTERR \
     do { \
@@ -16,10 +20,10 @@ void shrinkVec(std::vector<T>& vec){
 }
 
 // Simple FNV-1a 64-bit hash function
-inline uint64_t HashString(const char* str) {
-    uint64_t hash = 14695981039346656037ULL;
+inline u64 HashString(const char* str) {
+    u64 hash = 14695981039346656037ULL;
     while (*str) {
-        hash ^= static_cast<uint64_t>(*str++);
+        hash ^= static_cast<u64>(*str++);
         hash *= 1099511628211ULL;
     }
     return hash;
@@ -40,4 +44,10 @@ inline const char* FormatFileTime(FILETIME ft) {
     FileTimeToSystemTime(&ft, &st);
     snprintf(buf, sizeof(buf), "%04d-%02d-%02d %02d:%02d", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute);
     return buf;
+}
+
+inline std::string GetExeDirectoryUtf8() {
+    wchar_t path[MAX_PATH];
+    GetModuleFileNameW(NULL, path, MAX_PATH);
+    return std::filesystem::path(path).parent_path().string();
 }

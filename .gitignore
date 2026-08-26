@@ -5,6 +5,7 @@ fileLstr/
 *.exe
 *.pdb
 *.ilk
+src/.vs/
 src/notes.txt
 include/old/
 test\color_pixel_inspector.py

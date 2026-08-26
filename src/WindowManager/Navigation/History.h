@@ -32,10 +32,26 @@ class History{
 
 
 inline bool History::Push(PCIDLIST_ABSOLUTE folder){
-    visited.erase(visited.begin() + currentIndex + 1, visited.end());
+    if (!folder){
+        return false;
+    }
 
-    visited.push_back(WShell::Pidl(ILClone(folder)));
-    currentIndex++;
+    const i64 eraseFrom = currentIndex + 1;
+    if (eraseFrom < 0 || eraseFrom > (i64)visited.size()){
+        return false;
+    }
+
+    visited.erase(visited.begin() + eraseFrom, visited.end());
+
+    PIDLIST_ABSOLUTE cloned = ILClone(folder);
+
+    if (!cloned){
+        return false;
+    }
+
+    visited.push_back(WShell::Pidl(cloned));
+    currentIndex = (i64)(visited.size() - 1);
+
     return true;
 }   
 

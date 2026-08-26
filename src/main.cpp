@@ -71,12 +71,15 @@ int main (void){
         // A. Handle Windows events (clicks, closes, moves)
         MSG msg;
         while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
+            ::TranslateMessage(&msg);
+            ::DispatchMessage(&msg);
             if (msg.message == WM_QUIT) running = false;
         }
 
         if (!running) break;
+
+        if (g_appReady && !g_isMinimized) RenderFrame(app);
+        else ::Sleep(10);
 
         // When minimized, skip rendering entirely. Calling Present() on a minimized window with VSync enabled causes the GPU driver to block indefinitely
         if (g_isMinimized) {
@@ -89,7 +92,6 @@ int main (void){
             g_dpiChanged = false;
         }
 
-        RenderFrame(app);
     }
 
     ::UnregisterClassW(wc.lpszClassName, wc.hInstance);

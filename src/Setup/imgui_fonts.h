@@ -4,14 +4,14 @@
 #include "imgui.h"
 #include "BasicTypes.h"
 #include <string>
-
+#include <global.h>
 
 
 // Only 1 current Font available at anytiem
 
 struct FontPaths {
     std::string Primary = "C:\\Windows\\Fonts\\segoeui.ttf"; // Consider making this dynamic/configurable
-    std::string Icons   = "thirdparty/fontstuff/FluentSystemIcons-Regular.ttf";
+    std::string Icons   = GetExeDirectoryUtf8() + "\\fontstuff\\FluentSystemIcons-Regular.ttf";
     std::string Emoji   = "C:\\Windows\\Fonts\\seguiemj.ttf";
 };
 

@@ -2,7 +2,7 @@
 
 #include "imgui.h"
 #include "BasicTypes.h"
-#include "global.h"
+#include "UIglobals.h"
 #include "theme.h"
 #include "iconRegular.h"
 #include "ImGuiHelpers.h"
