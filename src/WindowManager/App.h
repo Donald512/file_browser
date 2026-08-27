@@ -66,14 +66,17 @@ struct App{
     UIState ui{};
     GraphicsContext gfx;
 
-    Window window;
     TextureManager textures;
     
     TaskSystem tasks;
-    TypenameStore typeStore;
-
-    DirectoryManager directory{tasks, typeStore};
+    
     IconManager icons{tasks};
+    
+    TypenameStore typeStore;
+    DirectoryManager directory{tasks, typeStore};
+    
+    Window window{directory};
+
     SidebarManager sidebar;
 
     std::vector<AppCommand> commandQueue;
@@ -101,7 +104,7 @@ inline void App::ProcessCommands() {
             [&](Cmd_GoForward& c) { window.tabs[c.tabIndex].GoForward(); },
             [&](Cmd_GoParent& c)  { window.tabs[c.tabIndex].GoParent(); },
             [&](Cmd_OpenFile& c)  { WShell::ExecuteFile(c.targetPidl.get()); },
-            [&](Cmd_ReSort& c)    { window.tabs[c.tabIndex].ReSort(typeStore); },
+            [&](Cmd_ReSort& c)    { window.tabs[c.tabIndex].ReSort(); },
         }, cmd);
     }
     commandQueue.clear();

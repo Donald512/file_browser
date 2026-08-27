@@ -24,26 +24,6 @@ inline T ExploraClamp(T value, T minValue, T maxValue){
 struct WindowManager{};
 
 enum class Actions {Normal, Back, Forward, Refresh};
-enum class ViewMode { Icons, Small, List, Details, Tiles}; // feel like this belongs to  UI
-enum class SelectMode {OneItem};
-
-struct FileViewState {
-    // Change to user's last choice, or a setttings
-    ViewMode viewMode = ViewMode::Details;
-    f32 iconSize = 104.0f;
-    SortMode sortMode = SortMode::Name;
-    SortDirection sortDir = SortDirection::Ascending;
-    bool showHidden = false;
-
-    
-    // UI Directives (The "Magic" variables)
-    std::optional<u64> scrollToItemId = std::nullopt;
-    std::optional<u64> renamingItemId = std::nullopt;
-    float scrollY = 0.0f;
-    
-    f32 gridIconSize = 64.0f; 
-};
-
 struct SelectionState {
     bool justNavigated = false;
     std::unordered_set<u64> selectedHashes;
@@ -57,66 +37,70 @@ struct SelectionState {
 
 class Tab{
     public:
-        bool GoTo(PCIDLIST_ABSOLUTE dest, Actions action = Actions::Normal);
-        
-        bool CanGoBack() const {return history.CanGoBack();}
-        bool CanGoForward() const {return history.CanGoForward();}
-        bool CanGoParent() const {
-            if (!dir.parent.pidl || ILIsEmpty(dir.parent.pidl.get())) return false;
-            return true;
+    
+    Tab(DirectoryManager& dirManager, PCIDLIST_ABSOLUTE startFolder) : dirManager(&dirManager){
+        GoTo(startFolder);
+    }
+    bool GoTo(PCIDLIST_ABSOLUTE dest, Actions action = Actions::Normal);
+    
+    bool CanGoBack() const {return history.CanGoBack();}
+    bool CanGoForward() const {return history.CanGoForward();}
+    bool CanGoParent() const {
+        if (!dir.parent.pidl || ILIsEmpty(dir.parent.pidl.get())) return false;
+        return true;
+    }
+    bool GoBack(){
+        if (!history.Back()) return false;
+        return GoTo(history.Current(),  Actions::Back);
+    }
+    bool GoForward(){
+        if (!history.Forward()) return false;
+        return GoTo(history.Current(), Actions::Forward);      
+    }
+    bool GoParent();
+    bool Refresh(){
+        return GoTo(history.Current(), Actions::Refresh);
+    }
+    
+    // void SelectItem(u64 i, SelectMode mode);
+    void DeselectAllItemsAndSelect(u64 i);
+    void DeselectItem(u64 i);
+    void AddItemToSelection(u64 i);
+    void DeselectAllItems();
+    
+    bool isSelected(u64 i) const{
+        return selState.selectedHashes.find(i) != selState.selectedHashes.end();
+    }
+    
+    void ReSort();
+    void ToggleShowHidden(){
+        viewState.showHidden = !viewState.showHidden;
+        if (viewState.showHidden == false){
+            dir.RebuildNonHiddenIndices();
         }
-        bool GoBack(){
-            if (!history.Back()) return false;
-            return GoTo(history.Current(), Actions::Back);
-        }
-        bool GoForward(){
-            if (!history.Forward()) return false;
-            return GoTo(history.Current(), Actions::Forward);      
-        }
-        bool GoParent();
-        bool Refresh(){
-            return GoTo(history.Current(), Actions::Refresh);
-        }
-
-        Tab(PCIDLIST_ABSOLUTE startFolder){
-            GoTo(startFolder);
-        }
-
-        // void SelectItem(u64 i, SelectMode mode);
-        void DeselectAllItemsAndSelect(u64 i);
-        void DeselectItem(u64 i);
-        void AddItemToSelection(u64 i);
-        void DeselectAllItems();
-        
-        bool isSelected(u64 i) const{
-            return selState.selectedHashes.find(i) != selState.selectedHashes.end();
-        }
-
-        void ReSort(TypenameStore& typeStore);
-        void ToggleShowHidden(){
-            viewState.showHidden = !viewState.showHidden;
-            if (viewState.showHidden == false){
-                dir.RebuildNonHiddenIndices();
-            }
-        }
-
-        Breadcrumbs breadcrumbs{};
-        History history{};
-        Directory dir{};
-        
-        FileViewState viewState;
-        SelectionState selState;
-
+    }
+    
+    Breadcrumbs breadcrumbs{};
+    History history{};
+    Directory dir{};
+    
+    FileViewState viewState;
+    SelectionState selState;
+    private:
+        DirectoryManager* dirManager;
 };
 
 // Maybe Window manager handles multiple windows, or maybe its not neccessary
 struct Window{
+    DirectoryManager& directory;
+    Window(DirectoryManager& dm) : directory(dm) {}
+
     std::vector<Tab> tabs{};
     size_t activeTabIndex = 0;  // or maybe vector for tile windows
     
     void NewTab(PCIDLIST_ABSOLUTE startFolder = SpecialFolders::defaultStartupFolder){
         if (!startFolder) startFolder = SpecialFolders::defaultStartupFolder;
-        tabs.emplace_back(startFolder);
+        tabs.emplace_back(directory, startFolder);
         activeTabIndex = tabs.size() - 1;
     }
 
@@ -125,14 +109,10 @@ struct Window{
         activeTabIndex = ExploraClamp(activeTabIndex, (size_t) 0, tabs.size() - 1);
     }
 
-    Tab& GetActiveTab(){
-        return tabs[activeTabIndex];
-    }
+    Tab& GetActiveTab(){ return tabs[activeTabIndex];}
 
     void SetActiveTab(size_t tabIndex){
-        if (tabIndex < tabs.size()){
-            activeTabIndex = tabIndex;
-        }
+        if (tabIndex < tabs.size()){ activeTabIndex = tabIndex; }
     }
 };
     
@@ -153,14 +133,14 @@ inline bool Tab::GoTo(PCIDLIST_ABSOLUTE dest, Actions action){
     selState.selectedHashes.clear();
 
     dir.ClearForNav();
+    // activeTab.dir.UpdateChildren(app.directory, app.typeStore, vs.sortMode, vs.sortDir, vs.showHidden);
+    dir.UpdateChildren(*dirManager, viewState);
 
     return true;
 }
 
 inline bool Tab::GoParent(){
-    if (!CanGoParent()){
-        return false;
-    }
+    if (!CanGoParent()) return false;
     PIDLIST_ABSOLUTE parentPidl = ILClone(dir.parent.pidl.get());
     if(!parentPidl) return false;
     ILRemoveLastID(parentPidl);
@@ -171,8 +151,8 @@ inline bool Tab::GoParent(){
     return GoTo(owned.get());
 }
 
-inline void Tab::ReSort(TypenameStore& typeStore){
-    dir.Sort(typeStore,viewState.sortMode, viewState.sortDir);
+inline void Tab::ReSort(){
+    dir.Sort(dirManager->GetTypeStore(), viewState.sortMode, viewState.sortDir);
     if (!viewState.showHidden){
         dir.RebuildNonHiddenIndices();
     }
@@ -184,13 +164,6 @@ inline void Tab::DeselectAllItemsAndSelect(u64 i){
     selState.selectedHashes.insert(i);
 }
 
-inline void Tab::AddItemToSelection(u64 i){
-    selState.selectedHashes.insert(i);
-}
-
-inline void Tab::DeselectItem(u64 i){
-    selState.selectedHashes.erase(i);
-}
-inline void Tab::DeselectAllItems(){
-    selState.selectedHashes.clear();
-}
+inline void Tab::AddItemToSelection(u64 i){    selState.selectedHashes.insert(i);}
+inline void Tab::DeselectItem(u64 i){    selState.selectedHashes.erase(i);}
+inline void Tab::DeselectAllItems(){    selState.selectedHashes.clear();}

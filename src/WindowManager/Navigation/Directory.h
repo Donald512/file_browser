@@ -12,6 +12,26 @@
 
 enum class SortMode { Name, DateModified, Type, Size};
 enum class SortDirection {Ascending, Descending };
+enum class ViewMode { Icons, Small, List, Details, Tiles}; // feel like this belongs to  UI
+
+
+struct FileViewState {
+    // Change to user's last choice, or a setttings
+    ViewMode viewMode = ViewMode::Details;
+    f32 iconSize = 104.0f;
+    SortMode sortMode = SortMode::Name;
+    SortDirection sortDir = SortDirection::Ascending;
+    bool showHidden = false;
+
+    
+    // UI Directives (The "Magic" variables)
+    std::optional<u64> scrollToItemId = std::nullopt;
+    std::optional<u64> renamingItemId = std::nullopt;
+    float scrollY = 0.0f;
+    
+    f32 gridIconSize = 64.0f; 
+};
+
 class Directory{
     public:
     bool updatedChildren = false;
@@ -22,7 +42,7 @@ class Directory{
         parent = GetDirParent(parentPidl);
     }
 
-    void UpdateChildren(DirectoryManager& directory, TypenameStore& typeStore, SortMode sm, SortDirection sd, bool showHidden);
+    void UpdateChildren(DirectoryManager& directory, FileViewState vs);
     void ClearForNav();
     void RebuildNonHiddenIndices();
 
@@ -38,11 +58,11 @@ class Directory{
 
 };
 
-inline void Directory::UpdateChildren(DirectoryManager& directory, TypenameStore& typeStore, SortMode sm, SortDirection sd, bool showHidden){
+inline void Directory::UpdateChildren(DirectoryManager& dirManager, FileViewState vs){
     if (updatedChildren) return;
 
     UpdateParentShellFolder(parent);
-    children = directory.GetOrRequest(parent.pidl.get(), parent.hash);
+    children = dirManager.GetOrRequest(parent.pidl.get(), parent.hash);
 
     if (!children) return;
 
@@ -53,9 +73,9 @@ inline void Directory::UpdateChildren(DirectoryManager& directory, TypenameStore
         sortedIndices[i] = i;
     }
 
-    Sort(typeStore, sm, sd);
+    Sort(dirManager.GetTypeStore(), vs.sortMode, vs.sortDir);
 
-    if (!showHidden){
+    if (!vs.showHidden){
         RebuildNonHiddenIndices();
     }
     

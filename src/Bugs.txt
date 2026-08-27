@@ -1,0 +1,14 @@
+Bug: App hangs when restoring from minimize (only when minimizing from maximized)
+App: Maximized -> Minimize -> Restore (Freezes, no inputs pass through)
+App: Maximized -> Windowed -> Minimize -> Restore (to windowed) (No Freeze)
+When i minimized, then restored, the App froze, and could only be stopped from Ctrl + C in the terminal. 
+Originally thought the problem was a graphics problem because the debugger showed that the program was stuck inside Present()
+Cause: WM_NCALCSIZE had a clamp:
+    if (IsZoomed(hWnd)) rect = monitor work area, 
+    Basically, if window is maximized, make its rectangle fill the monitor
+But, windows still considers a window maximized while it is minimized if it was maximized before, (so when the user restores, they go back to maximize)
+But when the user clicked Minimize from Maximized, 
+Windows tries to shrink the window and animate it towards the taskbar (lerping?), but at the same time, the WM_NCALCSIZE code changed the value windows was referencing to maximized (so, windows is trying to decrease the rect size, but my code says "No, you are maximized, so make yourself fullscreen) which confised Windows, and the graphics side got stuck waiting, causing the freeze during present 
+was fixed by moving the maximize-side code to WM_GETMINMAXINFO
+
+

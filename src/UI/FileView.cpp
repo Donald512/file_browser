@@ -386,7 +386,7 @@ void RenderFileGrid(f32 dpi, App& app){
     g_openRightClickMenu = false;
     g_menuIsForChildren = false;
     
-    activeTab.dir.UpdateChildren(app.directory, app.typeStore, vs.sortMode, vs.sortDir, vs.showHidden);
+    activeTab.dir.UpdateChildren(app.directory, vs);    // needs to be polled every frame, in case data is ready 
 
     if (mode == ViewMode::List){
         // List view lives inside its own scrolling child, and only there is the real available height (after child padding + scrollbar reservation) known. Keyboard nav has to run INSIDE that same child so its row math can never drift from what's actually drawn - that drift was the source of the diagonal-jump.
