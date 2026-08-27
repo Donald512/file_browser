@@ -70,11 +70,11 @@ struct App{
     TextureManager textures;
     
     TaskSystem tasks;
+    TypenameStore typeStore;
 
-    DirectoryManager directory;
+    DirectoryManager directory{tasks, typeStore};
     IconManager icons{tasks};
     SidebarManager sidebar;
-    TypenameStore typeStore;
 
     std::vector<AppCommand> commandQueue;
     std::unordered_set<u64> clipBoardCutItems{};

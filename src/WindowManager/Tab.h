@@ -152,7 +152,7 @@ inline bool Tab::GoTo(PCIDLIST_ABSOLUTE dest, Actions action){
     breadcrumbs = GenerateBreadcrumbs(dir.parent.pidl.get());
     selState.selectedHashes.clear();
 
-    dir.updatedChildren = false;
+    dir.ClearForNav();
 
     return true;
 }

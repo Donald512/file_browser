@@ -39,6 +39,24 @@ void IterateFolder(PCIDLIST_ABSOLUTE folder, DWORD shcontfFlags, Func&& callback
 }
 
 template <typename Func>
+void IterateFolder(IShellFolder* pFolder, DWORD shcontfFlags, Func&& callback) {
+    if (!pFolder) return;
+
+    ComPtr<IEnumIDList> enumerator;
+    if (FAILED(pFolder->EnumObjects(nullptr, shcontfFlags, &enumerator))) return;
+
+    PITEMID_CHILD childPidl = nullptr;
+    ULONG fetched = 0;
+
+    while (enumerator->Next(1, &childPidl, &fetched) == S_OK) {
+        callback(pFolder, childPidl);
+        
+        // if the lambda stole it, pChild will be null
+        if(childPidl)  CoTaskMemFree(childPidl);   
+    }
+}
+
+template <typename Func>
 void IterateFolder(IShellFolder* pFolder, DWORD shcontfFlags, Func&& callback, const std::atomic<bool>& cancelled) {
     if (!pFolder) return;
 
@@ -70,6 +88,7 @@ DirParent GetDirParent(PCIDLIST_ABSOLUTE folder);
 void UpdateParentShellFolder(DirParent& parent);
 
 std::vector<DirChild> GetDirChildren(IShellFolder* parentShellFolder, PCIDLIST_ABSOLUTE parentPidl);
+DirectoryBuildResult BuildDirectoryOffsite(IShellFolder* pTarget, PCIDLIST_ABSOLUTE parentPidl, const std::atomic<bool>& cancelled);
 
 DirChildren GetDirChildren2(IShellFolder* parentShellFolder, PCIDLIST_ABSOLUTE parentPidl, TypenameStore& typeStore);
 

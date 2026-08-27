@@ -23,7 +23,7 @@ class Directory{
     }
 
     void UpdateChildren(DirectoryManager& directory, TypenameStore& typeStore, SortMode sm, SortDirection sd, bool showHidden);
-
+    void ClearForNav();
     void RebuildNonHiddenIndices();
 
     const std::vector<u32>& VisibleIndices(bool showHidden) const {
@@ -42,7 +42,9 @@ inline void Directory::UpdateChildren(DirectoryManager& directory, TypenameStore
     if (updatedChildren) return;
 
     UpdateParentShellFolder(parent);
-    children = directory.GetOrRequest(parent.shellFolder.Get(), typeStore, parent.pidl.get(), parent.hash);
+    children = directory.GetOrRequest(parent.pidl.get(), parent.hash);
+
+    if (!children) return;
 
     size_t count = children->ItemCount();
     sortedIndices.resize(count);
@@ -58,6 +60,13 @@ inline void Directory::UpdateChildren(DirectoryManager& directory, TypenameStore
     }
     
     updatedChildren = true;
+}
+
+inline void Directory::ClearForNav(){
+    children = nullptr;
+    sortedIndices.clear();
+    nonHiddenIndices.clear();
+    updatedChildren = false;
 }
 
 inline void Directory::RebuildNonHiddenIndices(){
