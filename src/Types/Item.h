@@ -36,7 +36,7 @@ struct DirChild{
 struct DirItem{
     std::string name; // 24
     WShell::Pidl pidl;    // 8
-    u64 hash = 0;   // store Hash -  ID used to match item, shared_ptr/unique_ptr is slow (cache misses) and using ptr is risky because things can be ordered 
+    u64 hash = 0;  
     SFGAOF attributes = 0;  // 4
     FILETIME lastWriteTime{}; // 8
     u64 size = 0;
@@ -88,7 +88,29 @@ class DirChildren{
     }
     
     ItemView GetItem(size_t index, TypenameStore& typeStore) const;
+
+    void Clear(); 
+
+    ~DirChildren(){
+        Clear();
+    }
 };
+
+inline void DirChildren::Clear(){
+    std::vector<char>().swap(nameArena);
+    std::vector<u32>().swap(nameOffsets);
+    std::vector<u16>().swap(nameLengths);
+    std::vector<u8>().swap(pidlArena);
+    std::vector<u32>().swap(pidlOffsets);
+    std::vector<u16>().swap(pidlLengths);
+    std::vector<u64>().swap(hashes);
+    std::vector<SFGAOF>().swap(attributes);
+    std::vector<FILETIME>().swap(lastWriteTimes);
+    std::vector<u64>().swap(sizes);
+    std::vector<u16>().swap(typenameIndex);
+}
+
+
 
 inline ItemView DirChildren::GetItem(size_t index, TypenameStore& typeStore) const {
     return ItemView{

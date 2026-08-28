@@ -10,7 +10,7 @@
 #include <optional>
 #include "KnownSpecialFolders.h"
 #include "Breadcrumbs.h"
-
+#include "Watcher.h"
 
 
 template <typename T>
@@ -18,7 +18,7 @@ inline T ExploraClamp(T value, T minValue, T maxValue){
     if (value < minValue) return minValue;
     else if (value > maxValue) return maxValue;
     return value;
-}
+} 
 
 // maybe this for multiple different windows
 struct WindowManager{};
@@ -38,7 +38,7 @@ struct SelectionState {
 class Tab{
     public:
     
-    Tab(DirectoryManager& dirManager, PCIDLIST_ABSOLUTE startFolder) : dirManager(&dirManager){
+    Tab(DirectoryManager& dirManager, DirectoryWatcher& watcher, PCIDLIST_ABSOLUTE startFolder) : dirManager(&dirManager), watcher(&watcher){
         GoTo(startFolder);
     }
     bool GoTo(PCIDLIST_ABSOLUTE dest, Actions action = Actions::Normal);
@@ -76,7 +76,10 @@ class Tab{
     void ToggleShowHidden(){
         viewState.showHidden = !viewState.showHidden;
         if (viewState.showHidden == false){
-            dir.RebuildNonHiddenIndices();
+            const DirChildren* PChildren = dirManager->Get(dir.HChildren);
+            if (PChildren){
+                dir.RebuildNonHiddenIndices(*PChildren);
+            }
         }
     }
     
@@ -88,23 +91,27 @@ class Tab{
     SelectionState selState;
     private:
         DirectoryManager* dirManager;
+        DirectoryWatcher* watcher;
 };
 
 // Maybe Window manager handles multiple windows, or maybe its not neccessary
 struct Window{
     DirectoryManager& directory;
-    Window(DirectoryManager& dm) : directory(dm) {}
+    DirectoryWatcher& watcher;
+    Window(DirectoryManager& dm, DirectoryWatcher& dw) : directory(dm), watcher(dw){}
 
     std::vector<Tab> tabs{};
     size_t activeTabIndex = 0;  // or maybe vector for tile windows
     
     void NewTab(PCIDLIST_ABSOLUTE startFolder = SpecialFolders::defaultStartupFolder){
         if (!startFolder) startFolder = SpecialFolders::defaultStartupFolder;
-        tabs.emplace_back(directory, startFolder);
+        tabs.emplace_back(directory, watcher, startFolder);
         activeTabIndex = tabs.size() - 1;
     }
 
     void CloseTab(size_t tabIndex){
+        u64 hash = tabs[tabIndex].dir.parent.hash;
+        watcher.Stop(hash);
         tabs.erase(tabs.begin() + tabIndex);
         activeTabIndex = ExploraClamp(activeTabIndex, (size_t) 0, tabs.size() - 1);
     }
@@ -133,8 +140,10 @@ inline bool Tab::GoTo(PCIDLIST_ABSOLUTE dest, Actions action){
     selState.selectedHashes.clear();
 
     dir.ClearForNav();
-    // activeTab.dir.UpdateChildren(app.directory, app.typeStore, vs.sortMode, vs.sortDir, vs.showHidden);
     dir.UpdateChildren(*dirManager, viewState);
+     
+    watcher->Watch(dir.parent.pidl.get(), dir.parent.hash);
+
 
     return true;
 }
@@ -152,10 +161,11 @@ inline bool Tab::GoParent(){
 }
 
 inline void Tab::ReSort(){
-    dir.Sort(dirManager->GetTypeStore(), viewState.sortMode, viewState.sortDir);
-    if (!viewState.showHidden){
-        dir.RebuildNonHiddenIndices();
-    }
+    const DirChildren* PChildren = dirManager->Get(dir.HChildren);
+    if (!PChildren) return;
+    dir.Sort(*PChildren, dirManager->GetTypeStore(), viewState);
+
+    if (!viewState.showHidden) dir.RebuildNonHiddenIndices(*PChildren);
 }
 
 

@@ -12,6 +12,7 @@
 #include "TypenameManager.h"
 #include "Tab.h"
 #include "TaskSystem.h"
+#include "Watcher.h"
 
 using Microsoft::WRL::ComPtr;
 
@@ -75,7 +76,9 @@ struct App{
     TypenameStore typeStore;
     DirectoryManager directory{tasks, typeStore};
     
-    Window window{directory};
+    DirectoryWatcher watcher{tasks, directory};
+    
+    Window window{directory, watcher};
 
     SidebarManager sidebar;
 

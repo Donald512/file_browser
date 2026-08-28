@@ -88,7 +88,7 @@ DirParent GetDirParent(PCIDLIST_ABSOLUTE folder);
 void UpdateParentShellFolder(DirParent& parent);
 
 std::vector<DirChild> GetDirChildren(IShellFolder* parentShellFolder, PCIDLIST_ABSOLUTE parentPidl);
-DirectoryBuildResult BuildDirectoryOffsite(IShellFolder* pTarget, PCIDLIST_ABSOLUTE parentPidl, const std::atomic<bool>& cancelled);
+DirectoryBuildResult BuildDirectoryOffsite(IShellFolder* pTarget, PCIDLIST_ABSOLUTE parentPidl);
 
 DirChildren GetDirChildren2(IShellFolder* parentShellFolder, PCIDLIST_ABSOLUTE parentPidl, TypenameStore& typeStore);
 

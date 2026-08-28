@@ -36,7 +36,8 @@ class Directory{
     public:
     bool updatedChildren = false;
     DirParent parent;
-    std::shared_ptr<const DirChildren> children;
+    // std::shared_ptr<const DirChildren> children;    // delete
+    CachedDirHandle HChildren;  
 
     void UpdateParent(PCIDLIST_ABSOLUTE parentPidl){
         parent = GetDirParent(parentPidl);
@@ -44,13 +45,13 @@ class Directory{
 
     void UpdateChildren(DirectoryManager& directory, FileViewState vs);
     void ClearForNav();
-    void RebuildNonHiddenIndices();
-
+    
     const std::vector<u32>& VisibleIndices(bool showHidden) const {
         return showHidden ? sortedIndices : nonHiddenIndices;
     }
+    void RebuildNonHiddenIndices(const DirChildren& children);
 
-    void Sort(TypenameStore& typeStore, SortMode mode, SortDirection direction);
+    void Sort(const DirChildren& children, TypenameStore& typeStore, FileViewState vs);
 
     private:
         std::vector<u32> sortedIndices;
@@ -62,52 +63,49 @@ inline void Directory::UpdateChildren(DirectoryManager& dirManager, FileViewStat
     if (updatedChildren) return;
 
     UpdateParentShellFolder(parent);
-    children = dirManager.GetOrRequest(parent.pidl.get(), parent.hash);
+    HChildren = dirManager.GetOrRequest(parent.pidl.get(), parent.hash);
 
-    if (!children) return;
+    const DirChildren* PChildren = dirManager.Get(HChildren);
+    if (!PChildren) return;
 
-    size_t count = children->ItemCount();
+    size_t count = PChildren->ItemCount();
     sortedIndices.resize(count);
 
     for(u32 i = 0; i < count; i++){
         sortedIndices[i] = i;
     }
 
-    Sort(dirManager.GetTypeStore(), vs.sortMode, vs.sortDir);
+    Sort(*PChildren, dirManager.GetTypeStore(), vs);
 
-    if (!vs.showHidden){
-        RebuildNonHiddenIndices();
-    }
+    if (!vs.showHidden) RebuildNonHiddenIndices(*PChildren);
     
     updatedChildren = true;
 }
 
 inline void Directory::ClearForNav(){
-    children = nullptr;
+    // children = nullptr;  // not needed, i think
     sortedIndices.clear();
     nonHiddenIndices.clear();
     updatedChildren = false;
 }
 
-inline void Directory::RebuildNonHiddenIndices(){
+inline void Directory::RebuildNonHiddenIndices(const DirChildren& children){
     nonHiddenIndices.clear();
     nonHiddenIndices.reserve(sortedIndices.size());
 
     for (u32 index : sortedIndices) {
-        if (!(children->attributes[index] & SFGAO_HIDDEN))
-            nonHiddenIndices.push_back(index);
+        if (!(children.attributes[index] & SFGAO_HIDDEN)) nonHiddenIndices.push_back(index);
         // std::cout << children->GetChildName(index) << " attributes: " << children->attributes[index] << std::endl;
     }
 }
 
-inline void Directory::Sort(TypenameStore& typeStore, SortMode mode, SortDirection direction) {
-    if (!children || sortedIndices.empty()) return;
-
+inline void Directory::Sort(const DirChildren& children, TypenameStore& typeStore, FileViewState vs) {
+    if (sortedIndices.empty()) return;
     std::sort(sortedIndices.begin(), sortedIndices.end(), 
-        [this, mode, direction, &typeStore](u32 idxA, u32 idxB) {
+        [this, children, vs, &typeStore](u32 idxA, u32 idxB) {
             // Grab lightweight views for both items being compared
-            auto a = children->GetItem(idxA, typeStore);
-            auto b = children->GetItem(idxB, typeStore);
+            auto a = children.GetItem(idxA, typeStore);
+            auto b = children.GetItem(idxB, typeStore);
 
             // Folders always stay at the top
             if (a.IsFolder() != b.IsFolder()) {
@@ -116,7 +114,7 @@ inline void Directory::Sort(TypenameStore& typeStore, SortMode mode, SortDirecti
 
             // Primary sort criteria
             int cmp = 0;
-            switch (mode) {
+            switch (vs.sortMode) {
                 case SortMode::Name:
                     cmp = _stricmp(a.name, b.name);
                     break;
@@ -141,7 +139,7 @@ inline void Directory::Sort(TypenameStore& typeStore, SortMode mode, SortDirecti
             }
 
             // 4. Direction
-            if (direction == SortDirection::Descending) {
+            if (vs.sortDir == SortDirection::Descending) {
                 return cmp > 0;
             }
             return cmp < 0;

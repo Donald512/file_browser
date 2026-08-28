@@ -48,7 +48,7 @@ static void RenderGridView(f32 dpi, App& app){
 
     // Cells are itemWidth wide but stride by itemWidth + xGap, so there's a visible gap between them.
     ForEachGridCell(listing.refs.size(), itemWidth + layout.xGap, cellH + layout.yGap, [&](size_t i, ImVec2 cellPos){
-        auto child = listing.dir.children->GetItem(listing.refs[i], app.typeStore);
+        auto child = listing.PChildren->GetItem(listing.refs[i], app.typeStore);
         ImRect fullRect(cellPos, ImVec2(cellPos.x + itemWidth, cellPos.y + cellH));
 
         DrawItemChrome(dl, window, app, dpi, listing.dir.parent, child, (int)i, fullRect, 4.0f * dpi);
@@ -85,7 +85,7 @@ static void RenderSmallView(f32 dpi, App& app){
     }
 
     ForEachGridCell(listing.refs.size(), layout.cellWidth + layout.xGap, layout.cellWidth + layout.yGap, [&](size_t i, ImVec2 cellPos){
-        auto child = listing.dir.children->GetItem(listing.refs[i], app.typeStore);
+        auto child = listing.PChildren->GetItem(listing.refs[i], app.typeStore);
         ImRect fullRect(cellPos, ImVec2(cellPos.x + layout.cellWidth, cellPos.y + layout.cellWidth));
 
         DrawItemChrome(dl, window, app, dpi, listing.dir.parent, child, (int)i, fullRect, 4.0f * dpi);
@@ -158,7 +158,7 @@ static void RenderListViewContent(f32 dpi, App& app){
 
             int i = (c * rowsPerColumn) + r;
             if (i >= totalItems) break;
-            auto child = listing.dir.children->GetItem(listing.refs[i], app.typeStore);
+            auto child = listing.PChildren->GetItem(listing.refs[i], app.typeStore);
 
             ImGui::PushID(i);
             ImGui::SetCursorPos(ImVec2(currentColOffset, (f32)r * rowStride));
@@ -215,7 +215,7 @@ static void RenderDetailsView(f32 dpi, App& app){
         int focusRow = -1;
         if (activeTab.selState.justNavigated && activeTab.selState.focusHash.has_value()){
             for (int i = 0; i < (int)listing.refs.size(); i++){
-                auto c = listing.dir.children->GetItem(listing.refs[i], app.typeStore);
+                auto c = listing.PChildren->GetItem(listing.refs[i], app.typeStore);
                 if (c.hash == activeTab.selState.focusHash) { focusRow = i; break; }
             }
         }
@@ -239,7 +239,7 @@ static void RenderDetailsView(f32 dpi, App& app){
         
         while (clipper.Step()){
             for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++){
-                auto child = listing.dir.children->GetItem(listing.refs[row], app.typeStore);
+                auto child = listing.PChildren->GetItem(listing.refs[row], app.typeStore);
                 
                 bool isSelected = activeTab.isSelected(child.hash);
                 
@@ -347,7 +347,7 @@ static void RenderTilesView(f32 dpi, App& app){
     }
 
     ForEachGridCell(listing.refs.size(), layout.cellWidth + layout.xGap, layout.cellHeight + layout.yGap, [&](size_t i, ImVec2 cellPos){
-        auto child = listing.dir.children->GetItem(listing.refs[i], app.typeStore);
+        auto child = listing.PChildren->GetItem(listing.refs[i], app.typeStore);
         ImRect fullRect(cellPos, ImVec2(cellPos.x + layout.cellWidth, cellPos.y + layout.cellHeight));
 
         DrawItemChrome(dl, window, app, dpi, listing.dir.parent, child, (int)i, fullRect, 4.0f * dpi);
@@ -375,6 +375,9 @@ static void RenderTilesView(f32 dpi, App& app){
 
 void RenderFileGrid(f32 dpi, App& app){
     auto& activeTab = app.window.GetActiveTab();
+
+    DirListing listing = GetVisibleListing(app);
+    if (!listing.PChildren) return; // for now;
 
     FileViewState& vs = activeTab.viewState;
     // SelectionState& selState = activeTab.selState;
@@ -433,7 +436,7 @@ void RenderFileGrid(f32 dpi, App& app){
     
     if (g_openRightClickMenu){
         if (g_menuIsForChildren){
-            g_selectedPidls = GetSelectedItems(activeTab);
+            g_selectedPidls = GetSelectedItems(activeTab, *listing.PChildren);
             ctxMenuItems = GetContextMenu(ctxMenu, activeTab.dir.parent.pidl.get(), g_selectedPidls, app.gfx.hwnd, app.gfx.d3dDevice.Get());
         }
         // elsel, do nothing, alreay gotten by isRightClick

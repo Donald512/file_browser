@@ -192,7 +192,7 @@ DirChildren GetDirChildren2(IShellFolder* parentShellFolder, PCIDLIST_ABSOLUTE p
 }
 
 
-DirectoryBuildResult BuildDirectoryOffsite(IShellFolder* pTarget, PCIDLIST_ABSOLUTE parentPidl, const std::atomic<bool>& cancelled) {
+DirectoryBuildResult BuildDirectoryOffsite(IShellFolder* pTarget, PCIDLIST_ABSOLUTE parentPidl) {
     DirectoryBuildResult result;
     DirChildren& children = result.children;
     
@@ -273,7 +273,7 @@ DirectoryBuildResult BuildDirectoryOffsite(IShellFolder* pTarget, PCIDLIST_ABSOL
         pChild = nullptr;   // prevent double freeing
         
         index++;
-    }, cancelled);
+    });
 
     shrinkVec(children.hashes);
     shrinkVec(children.attributes);

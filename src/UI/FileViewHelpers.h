@@ -81,14 +81,16 @@ inline int ComputeListRowsPerColumn(f32 dpi){
 }
 struct DirListing {
     const Directory& dir;
+    const DirChildren* PChildren = nullptr;
     const std::vector<u32>& refs;
 };
 
 inline DirListing GetVisibleListing(App& app){
     auto& activeTab = app.window.GetActiveTab();
     const Directory& dir = activeTab.dir;
+    const DirChildren* PChildren = app.directory.Get(dir.HChildren);
     const std::vector<u32>& refs = dir.VisibleIndices(activeTab.viewState.showHidden);
-    return {dir, refs};
+    return {dir, PChildren, refs};
 }
 
 struct ItemInteraction {
@@ -97,16 +99,16 @@ struct ItemInteraction {
 };
 
 
-std::vector<PCITEMID_CHILD> GetSelectedItems( Tab& tab){
+std::vector<PCITEMID_CHILD> GetSelectedItems(Tab& tab, const DirChildren& children){
     std::vector<PCITEMID_CHILD> childPidls = {};
     auto& selSet = tab.selState.selectedHashes;
 
     for (auto index : tab.dir.VisibleIndices(tab.viewState.showHidden)){
         if (childPidls.size() > selSet.size()) break;   // no need to continue searching
 
-        u64 hash = tab.dir.children->hashes[index];
+        u64 hash = children.hashes[index];
         if (selSet.find(hash) != selSet.end()){
-            childPidls.push_back(tab.dir.children->GetChildPidl(index));
+            childPidls.push_back(children.GetChildPidl(index));
         }
     }   
     return childPidls;
@@ -149,7 +151,7 @@ inline ItemInteraction HandleItemInteraction(App& app, const DirParent& parent, 
 
             DirListing listing = GetVisibleListing(app);
             for (int i = start; i <= end; i++) {
-                auto c = listing.dir.children->GetItem(listing.refs[i], app.typeStore);
+                auto c = listing.PChildren->GetItem(listing.refs[i], app.typeStore);
                 selState.selectedHashes.insert(c.hash);
             }
 
@@ -306,7 +308,7 @@ int GetFocusedItemIndex(App& app){
 
     int focusedItemIndex = -1;
     for (size_t i = 0; i < listing.refs.size(); i++){
-        auto c = listing.dir.children->GetItem(listing.refs[i], app.typeStore);
+        auto c = listing.PChildren->GetItem(listing.refs[i], app.typeStore);
         if (c.hash == activeTab.selState.focusHash) {
             focusedItemIndex = (int)i; 
             break; 
@@ -324,7 +326,7 @@ inline std::vector<f32> CalculateColumnWidthsForListView(f32 basePadding, const 
         const int bottomOfColumn = (std::min)(topOfColumn + rowsPerColumn, totalItems);     // exclusive
 
         for (int itemIndex = topOfColumn; itemIndex < bottomOfColumn; itemIndex++) {
-            auto child = listing.dir.children->GetItem(listing.refs[itemIndex], app.typeStore);
+            auto child = listing.PChildren->GetItem(listing.refs[itemIndex], app.typeStore);
 
             const f32 textWidth = ImGui::CalcTextSize(child.name).x;
             const f32 requiredWidth = textWidth + basePadding;
@@ -360,7 +362,7 @@ inline void DEBUGPrintFocusedItems(App& app){
     int totalItems = (int)listing.refs.size();
     
     for (int i = 0; i < totalItems; i++){
-        auto c = listing.dir.children->GetItem(listing.refs[i], app.typeStore);
+        auto c = listing.PChildren->GetItem(listing.refs[i], app.typeStore);
         if (selState.focusHash == c.hash){
             std::cout << "Item name: " << c.name << " Item hash: " << c.hash << " Item visualIndex = " << i << std::endl;
         }
@@ -370,7 +372,7 @@ inline void DEBUGPrintFocusedItems(App& app){
 inline void KeepFocusedListColumnInView(f32 windowWidth, const std::vector<f32>& columnStarts, int rowsPerColumn, int totalItems, const DirListing& listing, App& app, const SelectionState& selState){
     f32 scrollX = ImGui::GetScrollX();
     for (int i = 0; i < totalItems; i++){
-        auto c = listing.dir.children->GetItem(listing.refs[i], app.typeStore);
+        auto c = listing.PChildren->GetItem(listing.refs[i], app.typeStore);
         if (c.hash == selState.focusHash){
             int focusCol = i / rowsPerColumn;
             f32 colLeft  = columnStarts[focusCol];
@@ -466,6 +468,7 @@ inline void KeyboardNavigationInteraction(f32 dpi, App& app){
     selState.justNavigated = false; 
 
     DirListing listing = GetVisibleListing(app);
+
     int totalItems = (int)listing.refs.size();
 
     // Early exit and clean reset if empty
@@ -574,14 +577,14 @@ inline void KeyboardNavigationInteraction(f32 dpi, App& app){
             selState.lastKeyboardNavTime = ImGui::GetTime();
 
             newFocusIdx = std::clamp(newFocusIdx, 0, totalItems - 1);
-            auto newChild = listing.dir.children->GetItem(listing.refs[newFocusIdx], app.typeStore);
+            auto newChild = listing.PChildren->GetItem(listing.refs[newFocusIdx], app.typeStore);
              
             if (shift) {
                 int start = (std::min)(selState.anchorVisualIndex, newFocusIdx);
                 int end = (std::max)(selState.anchorVisualIndex, newFocusIdx);
                 if (!ctrl) activeTab.DeselectAllItems();
                 for (int i = start; i <= end; i++) {
-                    auto c = listing.dir.children->GetItem(listing.refs[i], app.typeStore);
+                    auto c = listing.PChildren->GetItem(listing.refs[i], app.typeStore);
                     activeTab.AddItemToSelection(c.hash);
                 }
             }
@@ -598,7 +601,7 @@ inline void KeyboardNavigationInteraction(f32 dpi, App& app){
         // Spacebar: Toggle selection of focused item
         if (focusedItemIndex >= 0){
             if (ImGui::IsKeyPressed(ImGuiKey_Space)) {
-                auto focusChild = listing.dir.children->GetItem(listing.refs[focusedItemIndex], app.typeStore);
+                auto focusChild = listing.PChildren->GetItem(listing.refs[focusedItemIndex], app.typeStore);
                 if (activeTab.isSelected(focusChild.hash)){
                     activeTab.DeselectItem(focusChild.hash);
                 } else {
@@ -608,7 +611,7 @@ inline void KeyboardNavigationInteraction(f32 dpi, App& app){
             
             // Enter: Open / Navigate
             if (ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter)) {
-                auto focusChild = listing.dir.children->GetItem(listing.refs[focusedItemIndex], app.typeStore);
+                auto focusChild = listing.PChildren->GetItem(listing.refs[focusedItemIndex], app.typeStore);
                 PCIDLIST_ABSOLUTE newPidl = GetFullPidl(listing.dir.parent.pidl.get(), focusChild.pidl);
                 if (focusChild.IsFolder()){
                     app.QueueCommand(Cmd_GoTo{app.window.activeTabIndex, WShell::Pidl(newPidl)}); 
