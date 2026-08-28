@@ -13,6 +13,7 @@
 #include "Tab.h"
 #include "TaskSystem.h"
 #include "Watcher.h"
+#include "AppCommands.h"
 
 using Microsoft::WRL::ComPtr;
 
@@ -38,26 +39,6 @@ struct UIState{
 };
 
 
-
-struct Cmd_NewTab      { WShell::Pidl targetPidl; };
-struct Cmd_CloseTab    { size_t tabIndex; };
-struct Cmd_SwitchTab   { size_t tabIndex; };
-struct Cmd_GoTo        { size_t tabIndex; WShell::Pidl targetPidl; };
-struct Cmd_Rename      { std::wstring newName; };
-struct Cmd_Delete      { std::vector<PCITEMID_CHILD> items; bool permanent = false; };
-struct Cmd_Refresh     { size_t tabIndex;};
-struct Cmd_GoBack      { size_t tabIndex;};
-struct Cmd_GoForward   { size_t tabIndex;};
-struct Cmd_GoParent    { size_t tabIndex;};
-struct Cmd_OpenFile    { WShell::Pidl targetPidl; };
-struct Cmd_ReSort      { size_t tabIndex; };
-
-using AppCommand = std::variant<
-    Cmd_NewTab, Cmd_CloseTab, Cmd_SwitchTab, Cmd_GoTo,
-    Cmd_Rename, Cmd_Delete, Cmd_Refresh, Cmd_GoBack,
-    Cmd_GoForward, Cmd_GoParent, Cmd_OpenFile, Cmd_ReSort
->;
-
 template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
@@ -76,7 +57,7 @@ struct App{
     TypenameStore typeStore;
     DirectoryManager directory{tasks, typeStore};
     
-    DirectoryWatcher watcher{tasks, directory};
+    DirectoryWatcher watcher{tasks, directory, [this](AppCommand cmd) { QueueCommand(std::move(cmd)); }};
     
     Window window{directory, watcher};
 
@@ -108,6 +89,12 @@ inline void App::ProcessCommands() {
             [&](Cmd_GoParent& c)  { window.tabs[c.tabIndex].GoParent(); },
             [&](Cmd_OpenFile& c)  { WShell::ExecuteFile(c.targetPidl.get()); },
             [&](Cmd_ReSort& c)    { window.tabs[c.tabIndex].ReSort(); },
+            [&](Cmd_RefreshByHash& c){ 
+                u64 hashToInvalidate = c.hash;
+                for (auto& tab : window.tabs){
+                    if (tab.dir.parent.hash == hashToInvalidate){ tab.Refresh(); }
+                }
+            },
         }, cmd);
     }
     commandQueue.clear();
