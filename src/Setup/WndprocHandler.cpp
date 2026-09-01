@@ -72,11 +72,16 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam){
     case WM_NCCALCSIZE: {
         if (wParam == TRUE) {
             UINT dpi = ::GetDpiForWindow(hWnd);
-            int frameY = ::GetSystemMetricsForDpi(SM_CYFRAME, dpi) + ::GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
-
             NCCALCSIZE_PARAMS* pParams = reinterpret_cast<NCCALCSIZE_PARAMS*>(lParam);
+
             if (::IsZoomed(hWnd)) {
-                pParams->rgrc[0].top += frameY; // push the client rect down by exactly the inset Windows expects here
+                int frameX = ::GetSystemMetricsForDpi(SM_CXFRAME, dpi) + ::GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+                int frameY = ::GetSystemMetricsForDpi(SM_CYFRAME, dpi) + ::GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+
+                pParams->rgrc[0].top    += frameY;
+                pParams->rgrc[0].left   += frameX;
+                pParams->rgrc[0].right  -= frameX;
+                pParams->rgrc[0].bottom -= frameY;
             }
             return 0;
         }
