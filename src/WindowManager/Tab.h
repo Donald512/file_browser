@@ -12,6 +12,7 @@
 #include "Breadcrumbs.h"
 #include "Watcher.h"
 #include <algorithm>
+#include "CtxMenu.h"
 
 // maybe this for multiple different windows
 struct WindowManager{};
@@ -24,6 +25,15 @@ struct SelectionState {
     std::optional<u64> anchorHash = std::nullopt;
     int anchorVisualIndex = -1; // for Shift-Click range calculations
     bool isAnyItemHovered = false;
+};
+
+struct CtxMenuState{
+    bool openMenu = false;
+    bool forChildren = false;
+
+    std::vector<ContextMenuItem> ctxMenuItems;
+    ComPtr<IContextMenu> ctxMenuInterface;
+    std::vector<PCITEMID_CHILD> selectedPidls;  // empty if the menu is for background
 };
 
 
@@ -84,6 +94,8 @@ class Tab{
     
     FileViewState viewState;
     SelectionState selState;
+    CtxMenuState ctxState;
+    
     private:
         DirectoryManager* dirManager;
         DirectoryWatcher* watcher;

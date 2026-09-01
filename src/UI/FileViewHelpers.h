@@ -70,7 +70,6 @@ inline int ComputeGridColumns(f32 availW, f32 cellW){
     return (columns < 1) ? 1 : columns;
 }
 
-// Rows-per-column for List view. IMPORTANT: only call this while the "FileViewList" child window is current (i.e. after BeginChild succeeds). That's the only place the true available height, after the child's own padding and scrollbar reservation, is known. Calling it from the outer window  measures the wrong region and desyncs from what's actually drawn.
 inline int ComputeListRowsPerColumn(f32 dpi){
     GridViewParams p = GetGridParamsForMode(ViewMode::List);
     const f32 yGap = 4.0f * dpi;
@@ -129,6 +128,8 @@ inline ItemInteraction HandleItemInteraction(App& app, const DirParent& parent, 
     auto& activeTab = app.window.GetActiveTab();
 
     auto& selState = activeTab.selState; 
+    auto& ctxState = activeTab.ctxState;
+
     bool isCurrentlySelected = activeTab.isSelected(child.hash);
 
     // track hover state for dead space  clicking
@@ -206,8 +207,8 @@ inline ItemInteraction HandleItemInteraction(App& app, const DirParent& parent, 
             selState.anchorHash = child.hash;
             selState.anchorVisualIndex = visualIndex;
         }
-        g_openRightClickMenu = true;
-        g_menuIsForChildren = true;
+        ctxState.openMenu = true;
+        ctxState.forChildren = true;
     }
     return {ia.hovered || ia.pressed};
 }

@@ -16,9 +16,6 @@
 #include <functional>
 
 
-
-// todo get rid of these
-
 void PushMenuTheme(f32 dpi){
     ImGui::PushStyleColor(ImGuiCol_PopupBg,       Theme::Current.palette.Surface);
     ImGui::PushStyleColor(ImGuiCol_ChildBg,       Theme::Current.palette.Surface);
