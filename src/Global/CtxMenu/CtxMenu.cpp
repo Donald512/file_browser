@@ -70,6 +70,13 @@ void ExecuteContextMenuCommand(ComPtr<IContextMenu> menu, PCIDLIST_ABSOLUTE pare
             PerformClipboardOperation(parentPidl, childPidls, true);
             return; 
         }
+        // if (verb == "rename") {
+        //     if (childPidls.size() == 1) {
+        //         auto child = activeTab.dir.children->GetItemByPidl(childPidls[0], app.typeStore); // Or however you lookup
+        //         app.window.GetActiveTab().viewState.renamingItemId = child.hash;
+        //         strncpy(app.window.GetActiveTab().viewState.renameBuffer, child.name, 511);
+        //     }
+        // }
     }
 
     CMINVOKECOMMANDINFOEX info{};

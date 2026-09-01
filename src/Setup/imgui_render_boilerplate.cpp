@@ -107,12 +107,12 @@ void RenderFrame(App& app){
     ImGui::NewFrame();
     // ========
     // toggle with F1
-    static bool showMetrics = false;
-    static bool showIDStackTool = false;
-    if (ImGui::IsKeyPressed(ImGuiKey_F1)) showMetrics = !showMetrics;
-    if (ImGui::IsKeyPressed(ImGuiKey_F2)) showIDStackTool = !showIDStackTool;
-    if (showMetrics) ImGui::ShowMetricsWindow();
-    if (showIDStackTool) ImGui::ShowIDStackToolWindow();
+    // static bool showMetrics = false;
+    // static bool showIDStackTool = false;
+    // if (ImGui::IsKeyPressed(ImGuiKey_F1)) showMetrics = !showMetrics;
+    // if (ImGui::IsKeyPressed(ImGuiKey_F2)) showIDStackTool = !showIDStackTool;
+    // if (showMetrics) ImGui::ShowMetricsWindow();
+    // if (showIDStackTool) ImGui::ShowIDStackToolWindow();
     // ========
 
     // UI::Render(app);

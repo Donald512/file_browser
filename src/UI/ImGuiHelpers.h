@@ -557,3 +557,95 @@ inline void addSeparator(f32 padX, f32 width, f32 sepHeight){
     // Advance layout cursor so ImGui auto-resizes correctly
     ImGui::Dummy(ImVec2(width, sepHeight)); 
 }
+
+
+enum class GrowAxis { X, Y };
+enum class InputResult { Active, Committed, Cancelled };
+
+struct AutoInputColors {
+    ImVec4 bg          = ImVec4(0,0,0,0); // 0 alpha = use ImGui default
+    ImVec4 border      = ImVec4(0,0,0,0);
+    ImVec4 text        = ImVec4(0,0,0,0);
+    ImVec4 selectionBg = ImVec4(0,0,0,0); // The highlight color when text is selected!
+};
+
+inline InputResult RenderAutoResizingInputText(
+    const char* strId, ImVec2 pos, ImVec2 baseSize, ImVec2 maxSize, 
+    char* buffer, size_t bufferSize, GrowAxis axis, 
+    bool commitOnLostFocus,
+    const AutoInputColors* colors, bool forceFocus)
+{
+    ImGui::SetCursorScreenPos(pos);
+    ImGui::PushID(strId);
+
+    int colorPushCount = 0;
+    if (colors) {
+        if (colors->bg.w > 0)          { ImGui::PushStyleColor(ImGuiCol_FrameBg, colors->bg); colorPushCount++; }
+        if (colors->border.w > 0)      { ImGui::PushStyleColor(ImGuiCol_Border, colors->border); colorPushCount++; }
+        if (colors->text.w > 0)        { ImGui::PushStyleColor(ImGuiCol_Text, colors->text); colorPushCount++; }
+        if (colors->selectionBg.w > 0) { ImGui::PushStyleColor(ImGuiCol_TextSelectedBg, colors->selectionBg); colorPushCount++; }
+    }
+
+    // Calculate Box Size
+    ImVec2 boxSize;
+    if (axis == GrowAxis::Y){
+        f32 wrapWidth = ImMax(baseSize.x - ImGui::GetStyle().FramePadding.x * 2.0f, 1.0f);
+        ImVec2 textSize = ImGui::CalcTextSize(buffer, nullptr, false, wrapWidth);
+        f32 finalHeight = ImClamp(textSize.y + ImGui::GetStyle().FramePadding.y * 2.0f + 4.0f, baseSize.y, maxSize.y);
+        boxSize = { baseSize.x, finalHeight };
+    } else {
+        f32 textWidth = ImGui::CalcTextSize(buffer, nullptr, false, FLT_MAX).x;
+        f32 finalWidth = ImClamp(textWidth + ImGui::GetStyle().FramePadding.x * 2.0f + 8.0f, baseSize.x, maxSize.x);
+        boxSize = { finalWidth, baseSize.y };
+    }
+
+    // 3. The "Select All" Callback (Nuclear option for Multiline)
+    // We check if the widget is NOT currently active. If it's about to become active this frame,
+    // the callback will fire and force SelectAll(), then disable itself.
+    if (forceFocus) ImGui::SetKeyboardFocusHere();
+
+    ImGuiID myId = ImGui::GetID("##input");
+    struct CallbackData { bool justActivated; };
+    CallbackData cbData{ ImGui::GetActiveID() != myId }; 
+    
+    auto callback = [](ImGuiInputTextCallbackData* data) -> int {
+        if (data->EventFlag == ImGuiInputTextFlags_CallbackCharFilter) {
+            if (data->EventChar == '\n' || data->EventChar == '\r') return 1; // reject
+        }
+        if (data->EventFlag == ImGuiInputTextFlags_CallbackAlways) {
+            CallbackData* cd = (CallbackData*)data->UserData;
+            if (cd->justActivated) {
+                data->SelectAll();
+                cd->justActivated = false; 
+            }
+        }
+        return 0;
+    };
+
+    ImGui::SetNextItemWidth(boxSize.x);
+    ImGuiInputTextFlags flags = ImGuiInputTextFlags_CallbackAlways | ImGuiInputTextFlags_CallbackCharFilter ;
+    
+    ImGui::InputTextMultiline("##input", buffer, bufferSize, boxSize, flags, callback, &cbData);
+
+    bool isActive      = ImGui::IsItemActive();
+    bool lostFocus     = ImGui::IsItemDeactivated();
+
+    InputResult result = InputResult::Active;
+
+    if (isActive){
+        if (ImGui::IsKeyPressed(ImGuiKey_Enter, false) && !ImGui::GetIO().KeyShift) {
+            result = InputResult::Committed;
+        } 
+        else if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+            result = InputResult::Cancelled;
+        }
+    } 
+    else if (lostFocus) {
+        result = commitOnLostFocus ? InputResult::Committed : InputResult::Cancelled;
+    }
+
+    if (colorPushCount > 0) ImGui::PopStyleColor(colorPushCount);
+    ImGui::PopID();
+
+    return result;
+}

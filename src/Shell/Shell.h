@@ -2,8 +2,8 @@
 
 #include <ShlObj.h>
 #include <ShlObj_core.h>
-#include "Pidl.h"
 #include <string>
+#include "Pidl.h"
 
 namespace WShell{
 
@@ -38,4 +38,51 @@ namespace WShell{
 
     bool ExecuteFile(PCIDLIST_ABSOLUTE file);
 
+    
+    struct RenameChild{
+        PCITEMID_CHILD pidl;
+        const char* name;
+    };
+
+    void CommitRename(HWND hwnd, PCIDLIST_ABSOLUTE parentPidl, RenameChild child, const char* newName);
+
 }
+
+class RenameProgressSink : public IFileOperationProgressSink {
+public:
+    HRESULT result = S_OK;
+    std::wstring failedName;
+
+    IFACEMETHODIMP PostRenameItem(DWORD, IShellItem*, LPCWSTR pszNewName, HRESULT hrRename, IShellItem*) override {
+        if (FAILED(hrRename)){
+            result = hrRename;
+            if (pszNewName) failedName = pszNewName;
+        }
+        return S_OK;
+    }
+
+    // Boilerplate no-ops for the rest of the interface
+    IFACEMETHODIMP StartOperations() override { return S_OK; }
+    IFACEMETHODIMP FinishOperations(HRESULT) override { return S_OK; }
+    IFACEMETHODIMP PreRenameItem(DWORD, IShellItem*, LPCWSTR) override { return S_OK; }
+    IFACEMETHODIMP PreMoveItem(DWORD, IShellItem*, IShellItem*, LPCWSTR) override { return S_OK; }
+    IFACEMETHODIMP PostMoveItem(DWORD, IShellItem*, IShellItem*, LPCWSTR, HRESULT, IShellItem*) override { return S_OK; }
+    IFACEMETHODIMP PreCopyItem(DWORD, IShellItem*, IShellItem*, LPCWSTR) override { return S_OK; }
+    IFACEMETHODIMP PostCopyItem(DWORD, IShellItem*, IShellItem*, LPCWSTR, HRESULT, IShellItem*) override { return S_OK; }
+    IFACEMETHODIMP PreDeleteItem(DWORD, IShellItem*) override { return S_OK; }
+    IFACEMETHODIMP PostDeleteItem(DWORD, IShellItem*, HRESULT, IShellItem*) override { return S_OK; }
+    IFACEMETHODIMP PreNewItem(DWORD, IShellItem*, LPCWSTR) override { return S_OK; }
+    IFACEMETHODIMP PostNewItem(DWORD, IShellItem*, LPCWSTR, LPCWSTR, DWORD, HRESULT, IShellItem*) override { return S_OK; }
+    IFACEMETHODIMP UpdateProgress(UINT, UINT) override { return S_OK; }
+    IFACEMETHODIMP ResetTimer() override { return S_OK; }
+    IFACEMETHODIMP PauseTimer() override { return S_OK; }
+    IFACEMETHODIMP ResumeTimer() override { return S_OK; }
+
+    // IUnknown - trivial since this lives on the stack for one call
+    IFACEMETHODIMP QueryInterface(REFIID riid, void** ppv) override {
+        if (riid == IID_IUnknown || riid == IID_IFileOperationProgressSink){ *ppv = this; return S_OK; }
+        *ppv = nullptr; return E_NOINTERFACE;
+    }
+    IFACEMETHODIMP_(ULONG) AddRef() override { return 1; }
+    IFACEMETHODIMP_(ULONG) Release() override { return 1; }
+};

@@ -27,6 +27,8 @@ struct FileViewState {
     // UI Directives (The "Magic" variables)
     std::optional<u64> scrollToItemId = std::nullopt;
     std::optional<u64> renamingItemId = std::nullopt;
+    u64 renameFocusHandledFor = 0;   // which item's initial focus we've already applied
+    char renameBuffer[512] = {0};
     float scrollY = 0.0f;
     
     f32 gridIconSize = 64.0f; 
@@ -87,6 +89,8 @@ inline void Directory::ClearForNav(){
     sortedIndices.clear();
     nonHiddenIndices.clear();
     updatedChildren = false;
+
+    
 }
 
 inline void Directory::RebuildNonHiddenIndices(const DirChildren& children){

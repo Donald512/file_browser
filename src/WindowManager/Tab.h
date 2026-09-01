@@ -11,14 +11,7 @@
 #include "KnownSpecialFolders.h"
 #include "Breadcrumbs.h"
 #include "Watcher.h"
-
-
-template <typename T>
-inline T ExploraClamp(T value, T minValue, T maxValue){
-    if (value < minValue) return minValue;
-    else if (value > maxValue) return maxValue;
-    return value;
-} 
+#include <algorithm>
 
 // maybe this for multiple different windows
 struct WindowManager{};
@@ -31,7 +24,6 @@ struct SelectionState {
     std::optional<u64> anchorHash = std::nullopt;
     int anchorVisualIndex = -1; // for Shift-Click range calculations
     bool isAnyItemHovered = false;
-    double lastKeyboardNavTime = 0.0;
 };
 
 
@@ -82,6 +74,9 @@ class Tab{
             }
         }
     }
+
+    void ClearSelState();
+    void ClearViewState();
     
     Breadcrumbs breadcrumbs{};
     History history{};
@@ -113,7 +108,7 @@ struct Window{
         u64 hash = tabs[tabIndex].dir.parent.hash;
         watcher.Stop(hash);
         tabs.erase(tabs.begin() + tabIndex);
-        activeTabIndex = ExploraClamp(activeTabIndex, (size_t) 0, tabs.size() - 1);
+        activeTabIndex = std::clamp(activeTabIndex, (size_t) 0, tabs.size() - 1);
     }
 
     Tab& GetActiveTab(){ return tabs[activeTabIndex];}
@@ -140,8 +135,10 @@ inline bool Tab::GoTo(PCIDLIST_ABSOLUTE dest, Actions action){
     selState.selectedHashes.clear();
 
     dir.ClearForNav();
+    ClearSelState();
+    ClearViewState();
+
     dir.UpdateChildren(*dirManager, viewState);
-     
     watcher->Watch(dir.parent.pidl.get(), dir.parent.hash);
 
 
@@ -177,3 +174,17 @@ inline void Tab::DeselectAllItemsAndSelect(u64 i){
 inline void Tab::AddItemToSelection(u64 i){    selState.selectedHashes.insert(i);}
 inline void Tab::DeselectItem(u64 i){    selState.selectedHashes.erase(i);}
 inline void Tab::DeselectAllItems(){    selState.selectedHashes.clear();}
+
+inline void Tab::ClearSelState(){
+    selState.justNavigated = false;
+    selState.selectedHashes.clear();
+    selState.focusHash = std::nullopt;
+    selState.anchorHash = std::nullopt;
+    selState.anchorVisualIndex = -1;
+}
+
+inline void Tab::ClearViewState(){
+    viewState.renamingItemId = std::nullopt;
+    viewState.renameBuffer[0] = 0;
+    viewState.renameFocusHandledFor = 0;
+}

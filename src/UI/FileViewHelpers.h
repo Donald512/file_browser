@@ -9,6 +9,8 @@
 #include "App.h"
 #include "Types\global.h"
 #include <unordered_set>
+#include "ImGuiHelpers.h"
+#include <algorithm>
 
 bool g_openRightClickMenu = false;
 bool g_menuIsForChildren = false;
@@ -498,12 +500,8 @@ inline void KeyboardNavigationInteraction(f32 dpi, App& app){
     int rowsPerColumn = 1;
     f32 availW = ImGui::GetContentRegionAvail().x;
 
-    if (mode == ViewMode::List) {
-        rowsPerColumn = ComputeListRowsPerColumn(dpi);
-    }
-    else if (mode == ViewMode::Details) {
-        columns = 1;
-    } 
+    if (mode == ViewMode::List) rowsPerColumn = ComputeListRowsPerColumn(dpi);
+    else if (mode == ViewMode::Details) columns = 1;
     else {
         f32 itemStride = GetGridItemStride(mode, dpi, vs.iconSize);
         if (itemStride > 0.0f) {
@@ -511,6 +509,19 @@ inline void KeyboardNavigationInteraction(f32 dpi, App& app){
             if (columns < 1) columns = 1;
         }
     }
+    if (vs.renamingItemId.has_value()) return; 
+
+    if (ImGui::IsKeyPressed(ImGuiKey_F2)){
+        if (focusedItemIndex >= 0 && selState.selectedHashes.size() == 1){
+            auto actualItemIndex = listing.refs[focusedItemIndex];
+            vs.renamingItemId = listing.PChildren->hashes[actualItemIndex];
+            strncpy(vs.renameBuffer, listing.PChildren->GetChildName(actualItemIndex), sizeof(vs.renameBuffer) - 1);
+            vs.renameBuffer[sizeof(vs.renameBuffer) - 1] = '\0';  
+
+            return;
+        }
+    }
+
     ImGuiKey keyPressed = ImGuiKey_None;
 
     // Handle Input (Only if window is hovered, including child windows)
@@ -574,7 +585,6 @@ inline void KeyboardNavigationInteraction(f32 dpi, App& app){
 
         if (navOccurred){
             selState.justNavigated = true;
-            selState.lastKeyboardNavTime = ImGui::GetTime();
 
             newFocusIdx = std::clamp(newFocusIdx, 0, totalItems - 1);
             auto newChild = listing.PChildren->GetItem(listing.refs[newFocusIdx], app.typeStore);
@@ -620,5 +630,26 @@ inline void KeyboardNavigationInteraction(f32 dpi, App& app){
                 }
             }
         }
+    }
+}
+
+inline void RenderRenameWidget(const char* strId, ImVec2 pos, ImVec2 baseSize, ImVec2 maxSize, GrowAxis axis, HWND hwnd, FileViewState& vs, PCIDLIST_ABSOLUTE parentPidl, PCIDLIST_ABSOLUTE childPidl, const char* childName, ImU32 bgCol){
+    AutoInputColors cols;
+    cols.bg = ImGui::ColorConvertU32ToFloat4(bgCol);
+    cols.border = {};
+    cols.selectionBg = {};
+    cols.text = ImGui::ColorConvertU32ToFloat4(Theme::Current.palette.Text);
+
+    bool justOpened = (vs.renameFocusHandledFor != vs.renamingItemId.value());
+    if (justOpened) vs.renameFocusHandledFor = vs.renamingItemId.value();
+
+    InputResult res = RenderAutoResizingInputText(strId, pos, baseSize, maxSize, vs.renameBuffer, sizeof(vs.renameBuffer), axis, false, &cols, justOpened);
+    
+    if (res == InputResult::Committed){
+        WShell::CommitRename(hwnd, parentPidl, {childPidl, childName}, vs.renameBuffer);
+        vs.renamingItemId = std::nullopt;
+    }
+    else if (res == InputResult::Cancelled){
+        vs.renamingItemId = std::nullopt;
     }
 }

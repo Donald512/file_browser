@@ -1,7 +1,6 @@
 #pragma once
 
 
-#include "Shell.h"
 
 #include "Str.h"
 #include <Shlwapi.h>
@@ -10,11 +9,13 @@
 #include "KnownSpecialFolders.h"
 #include <propsys.h>
 #include <propkey.h>
+#include "Shell.h"
 #include <propvarutil.h>
 
 
 #include <wrl/client.h>
 using Microsoft::WRL::ComPtr;
+
 namespace WShell{
 
     // Extracts a child's display name cleanly.
@@ -269,7 +270,6 @@ namespace WShell{
         return lastWriteTime;
     }
 
-
     bool ExecuteFile(PCIDLIST_ABSOLUTE file){
         if (!file) return false;
 
@@ -288,5 +288,56 @@ namespace WShell{
         return true;
     }
 
+    void ShowRenameError(HWND hwnd, HRESULT hr){
+        LPWSTR msgBuf = nullptr;
+        DWORD dwFlags = FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS;
+        DWORD len = FormatMessageW(dwFlags, nullptr, hr, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPWSTR)&msgBuf, 0, nullptr);
 
+        wchar_t fullMsg[1024] = {};
+        if (len && msgBuf){
+            swprintf_s(fullMsg, L"Failed to rename file. \n\nError 0x%08X: %s", (unsigned) hr, msgBuf);
+            LocalFree(msgBuf);
+        }   else swprintf_s(fullMsg, L"Failed to rename file. \n\nError 0x%08X: (no description available)", (unsigned) hr);
+
+        MessageBoxW(hwnd, fullMsg, L"Error", MB_OK | MB_ICONERROR);
+    }
+
+    void CommitRename(HWND hwnd, PCIDLIST_ABSOLUTE parentPidl, RenameChild child, const char* newName){
+        if (strcmp(child.name, newName) == 0) return; // Names are identical, no need to rename
+        std::wstring wNewName = Str::Utf8ToWide(newName, 0, nullptr);
+
+        ComPtr<IFileOperation> fileOp;
+        HRESULT hr = CoCreateInstance(CLSID_FileOperation, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&fileOp));
+        if (FAILED(hr)) {ShowRenameError(hwnd, hr); return;}
+
+        // No progress dialog, no confirmation UI, no "flying files" animation - keep it silent
+        fileOp->SetOperationFlags(FOF_NO_UI | FOFX_SHOWELEVATIONPROMPT | FOFX_EARLYFAILURE | FOF_ALLOWUNDO);
+        
+        PIDLIST_ABSOLUTE fullPidl = ILCombine(parentPidl, child.pidl);
+        if (!fullPidl) {ShowRenameError(hwnd, E_FAIL); return;}
+
+        ComPtr<IShellItem> item;
+        hr = SHCreateItemFromIDList(fullPidl, IID_PPV_ARGS(&item));
+        ILFree(fullPidl);
+        if (FAILED(hr)) {ShowRenameError(hwnd, hr); return;}
+
+        hr = fileOp->RenameItem(item.Get(), wNewName.c_str(), nullptr);
+        if (FAILED(hr)) {ShowRenameError(hwnd, hr); return;}
+
+        RenameProgressSink sink;
+        DWORD cookie = 0;
+        fileOp->Advise(&sink, &cookie);
+
+        hr = fileOp->PerformOperations();
+        fileOp->Unadvise(cookie);
+
+        BOOL aborted = FALSE;
+        fileOp->GetAnyOperationsAborted(&aborted);
+
+        if (FAILED(hr) || aborted || FAILED(sink.result)){
+            HRESULT realErr = FAILED(sink.result) ? sink.result : hr;
+            ShowRenameError(hwnd, realErr);
+        }
+    }
 }
+
