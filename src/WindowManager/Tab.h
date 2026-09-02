@@ -18,24 +18,6 @@
 struct WindowManager{};
 
 enum class Actions {Normal, Back, Forward, Refresh};
-struct SelectionState {
-    bool justNavigated = false;
-    std::unordered_set<u64> selectedHashes;
-    std::optional<u64> focusHash = std::nullopt;
-    std::optional<u64> anchorHash = std::nullopt;
-    int anchorVisualIndex = -1; // for Shift-Click range calculations
-    bool isAnyItemHovered = false;
-};
-
-struct CtxMenuState{
-    bool openMenu = false;
-    bool forChildren = false;
-
-    std::vector<ContextMenuItem> ctxMenuItems;
-    ComPtr<IContextMenu> ctxMenuInterface;
-    std::vector<PCITEMID_CHILD> selectedPidls;  // empty if the menu is for background
-};
-
 
 class Tab{
     public:
@@ -199,5 +181,5 @@ inline void Tab::ClearSelState(){
 inline void Tab::ClearRenameState(){
     renameState.renamingItemId = std::nullopt;
     renameState.renameBuffer[0] = 0;
-    renameState.renameFocusHandledFor = 0;
+    renameState.renameFocusHandledFor = std::nullopt;
 }

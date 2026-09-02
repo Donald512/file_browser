@@ -629,8 +629,10 @@ inline void RenderRenameWidget(const char* strId, ImVec2 pos, ImVec2 baseSize, I
     if (res == InputResult::Committed){
         WShell::CommitRename(hwnd, parentPidl, {childPidl, childName}, renameState.renameBuffer);
         renameState.renamingItemId = std::nullopt;
+        renameState.renameFocusHandledFor = std::nullopt;
     }
     else if (res == InputResult::Cancelled){
         renameState.renamingItemId = std::nullopt;
+        renameState.renameFocusHandledFor = std::nullopt;
     }
 }

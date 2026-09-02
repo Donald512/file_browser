@@ -9,33 +9,7 @@
 
 #include <algorithm>
 #include <cstring>
-
-enum class SortMode { Name, DateModified, Type, Size};
-enum class SortDirection {Ascending, Descending };
-enum class ViewMode { Icons, Small, List, Details, Tiles}; // feel like this belongs to  UI
-
-
-struct FileViewState {
-    // Change to user's last choice, or a setttings
-    ViewMode viewMode = ViewMode::Details;
-    f32 iconSize = 104.0f;
-    SortMode sortMode = SortMode::Name;
-    SortDirection sortDir = SortDirection::Ascending;
-    bool showHidden = false;
-    f32 gridIconSize = 64.0f; 
-
-    
-    // UI Directives
-    std::optional<u64> scrollToItemId = std::nullopt;
-    float scrollY = 0.0f;
-    
-};
-
-struct RenameState{
-    std::optional<u64> renamingItemId = std::nullopt;
-    u64 renameFocusHandledFor = 0;   // which item's initial focus we've already applied
-    char renameBuffer[512] = {0};
-};
+#include "TabStates.h"
 
 
 class Directory{
