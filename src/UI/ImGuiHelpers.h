@@ -569,14 +569,19 @@ struct AutoInputColors {
     ImVec4 selectionBg = ImVec4(0,0,0,0); // The highlight color when text is selected!
 };
 
-inline InputResult RenderAutoResizingInputText(
-    const char* strId, ImVec2 pos, ImVec2 baseSize, ImVec2 maxSize, 
-    char* buffer, size_t bufferSize, GrowAxis axis, 
-    bool commitOnLostFocus,
-    const AutoInputColors* colors, bool forceFocus)
-{
+inline InputResult RenderAutoResizingInputText(const char* strId, ImVec2 pos, ImVec2 baseSize, ImVec2 maxSize, char* buffer, size_t bufferSize, GrowAxis axis, bool commitOnLostFocus, const AutoInputColors* colors, bool forceFocus){
     ImGui::SetCursorScreenPos(pos);
     ImGui::PushID(strId);
+
+    // Compute vertical padding so that the internal text lands centered in baseSize.y to match DrawTextEllipsisSingleLine
+    f32 lineH = ImGui::GetTextLineHeight();
+    f32 hPad = 0;
+    f32 vPad = ImMax(0.0f, (baseSize.y - lineH) * 0.5f);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(hPad, vPad));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+
 
     int colorPushCount = 0;
     if (colors) {
@@ -589,13 +594,13 @@ inline InputResult RenderAutoResizingInputText(
     // Calculate Box Size
     ImVec2 boxSize;
     if (axis == GrowAxis::Y){
-        f32 wrapWidth = ImMax(baseSize.x - ImGui::GetStyle().FramePadding.x * 2.0f, 1.0f);
+        f32 wrapWidth = ImMax(baseSize.x - hPad * 2.0f, 1.0f);
         ImVec2 textSize = ImGui::CalcTextSize(buffer, nullptr, false, wrapWidth);
-        f32 finalHeight = ImClamp(textSize.y + ImGui::GetStyle().FramePadding.y * 2.0f + 4.0f, baseSize.y, maxSize.y);
+        f32 finalHeight = ImClamp(textSize.y + vPad * 2.0f + 4.0f, baseSize.y, maxSize.y);
         boxSize = { baseSize.x, finalHeight };
     } else {
         f32 textWidth = ImGui::CalcTextSize(buffer, nullptr, false, FLT_MAX).x;
-        f32 finalWidth = ImClamp(textWidth + ImGui::GetStyle().FramePadding.x * 2.0f + 8.0f, baseSize.x, maxSize.x);
+        f32 finalWidth = ImClamp(textWidth + hPad * 2.0f + 8.0f, baseSize.x, maxSize.x);
         boxSize = { finalWidth, baseSize.y };
     }
 
@@ -626,6 +631,7 @@ inline InputResult RenderAutoResizingInputText(
     ImGuiInputTextFlags flags = ImGuiInputTextFlags_CallbackAlways | ImGuiInputTextFlags_CallbackCharFilter ;
     
     ImGui::InputTextMultiline("##input", buffer, bufferSize, boxSize, flags, callback, &cbData);
+    ImVec2 reportedSize = ImGui::GetItemRectSize();
 
     bool isActive      = ImGui::IsItemActive();
     bool lostFocus     = ImGui::IsItemDeactivated();
@@ -645,6 +651,8 @@ inline InputResult RenderAutoResizingInputText(
     }
 
     if (colorPushCount > 0) ImGui::PopStyleColor(colorPushCount);
+    ImGui::PopStyleVar(3);
+    
     ImGui::PopID();
 
     return result;

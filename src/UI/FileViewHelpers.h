@@ -134,6 +134,7 @@ inline ItemInteraction HandleItemInteraction(App& app, const DirParent& parent, 
         activeTab.selState.isAnyItemHovered = true;
     }
 
+    auto& renameState = activeTab.renameState;
     // ============================
     // LEFT CLICK
     // ============================
@@ -172,16 +173,32 @@ inline ItemInteraction HandleItemInteraction(App& app, const DirParent& parent, 
             selState.anchorVisualIndex = visualIndex;
         }
         else{
-            activeTab.DeselectAllItemsAndSelect(child.hash);
-            selState.focusHash = child.hash;
-            selState.anchorHash = child.hash;
-            selState.anchorVisualIndex = visualIndex;
+            if (isCurrentlySelected && activeTab.selState.selectedHashes.size() == 1){ // its the only one selected
+                // enter rename mode
+                renameState.pendingHash = child.hash;
+                renameState.singleClickedAtTime = ImGui::GetTime();
+                
+                strncpy(renameState.renameBuffer, child.name, sizeof(renameState.renameBuffer) - 1);
+                renameState.renameBuffer[sizeof(renameState.renameBuffer) - 1] = '\0';
+
+                selState.focusHash = child.hash;
+                selState.anchorHash = child.hash;
+                selState.anchorVisualIndex = visualIndex;
+            }
+            else{
+                activeTab.DeselectAllItemsAndSelect(child.hash);
+                selState.focusHash = child.hash;
+                selState.anchorHash = child.hash;
+                selState.anchorVisualIndex = visualIndex;
+                renameState.pendingHash = std::nullopt;
+            }
         }
     } 
     // ============================
     // DOUBLE CLICK
     // ============================
     if (doubleClicked) {
+        renameState.pendingHash = std::nullopt; // cancel - this was a double click, not a rename trigger
         PCIDLIST_ABSOLUTE newPidl = GetFullPidl(parent.pidl.get(), child.pidl);
         // WShell::Pidl steals ownership
         if (child.IsFolder()) app.QueueCommand(Cmd_GoTo{app.window.activeTabIndex, WShell::Pidl(newPidl) });
@@ -207,6 +224,16 @@ inline ItemInteraction HandleItemInteraction(App& app, const DirParent& parent, 
         ctxState.openMenu = true;
         ctxState.forChildren = true;
     }
+
+    // check if renameMode is active
+    if (renameState.pendingHash.has_value()){
+        double elapsed = ImGui::GetTime() - renameState.singleClickedAtTime;
+        if (elapsed > ImGui::GetIO().MouseDoubleClickTime){
+            renameState.renamingItemId = renameState.pendingHash;
+            renameState.pendingHash = std::nullopt;
+        }
+    }
+
     return {ia.hovered || ia.pressed};
 }
 

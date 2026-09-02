@@ -225,6 +225,8 @@ static void RenderDetailsView(f32 dpi, App& app){
         int focusRow = -1;
 
         f32 headerHeight = ImGui::GetFrameHeight() + ImGui::GetStyle().CellPadding.y * 2.0f;
+        f32 headerBottomY = window->DC.CursorStartPos.y + headerHeight;
+
         f32 actualViewH = ImGui::GetWindowHeight() - headerHeight;
 
         if (activeTab.selState.justNavigated && activeTab.selState.focusHash.has_value()) {
@@ -265,10 +267,19 @@ static void RenderDetailsView(f32 dpi, App& app){
                 );
                 
                 // Expanded so ButtonBehavior sees the whole row
-                ImGui::PushClipRect(rowRect.Min, ImVec2(tableMaxX, ImMin(rowRect.Max.y, actualViewH + window->Pos.y)), false);
+                ImGui::PushClipRect(
+                    ImVec2(rowRect.Min.x, ImMax(rowRect.Min.y, headerBottomY)), 
+                    ImVec2(tableMaxX, ImMin(rowRect.Max.y, actualViewH + window->Pos.y)), false);
                 ImU32 bgCol = 0;
                 ImGuiID id = currentWindow->GetID((void*)(intptr_t)child.hash);
                 ItemInteraction ia = HandleItemInteraction(app, listing.dir.parent, child, row, id, rowRect);
+                
+                bool isFocused = activeTab.selState.focusHash == child.hash;
+                if (isFocused){
+                    ImVec2 minP = ImVec2(rowRect.Min.x + 1.0f, rowRect.Min.y + 1.0f);
+                    ImVec2 maxP = ImVec2(rowRect.Max.x - 1.0f, rowRect.Max.y - 1.0f);
+                    dl->AddRect(minP, maxP, Theme::Current.palette.SurfaceActive, 4.0f * dpi, 0, 2.0f * dpi);
+                }
                 ImGui::PopClipRect();
                 if (isSelected)      bgCol = Theme::Current.palette.SurfaceActive;
                 else if (ia.hovered) bgCol = Theme::Current.palette.SurfaceHover;
@@ -284,12 +295,12 @@ static void RenderDetailsView(f32 dpi, App& app){
                 f32 textX = cellPos.x + 4.0f * dpi + layout.iconSize + 6.0f * dpi;
                 f32 maxTextWidth = ImGui::GetContentRegionAvail().x - (textX - cellPos.x);
                 if (renameState.renamingItemId == child.hash){
-                    ImVec2 baseSize(maxTextWidth, layout.cellHeight);
-                    ImVec2 maxSize(ImGui::GetContentRegionMax().x - textX, layout.cellHeight); // grow into the row, not downward
-                    RenderRenameWidget("detailsRename", ImVec2(textX, cellPos.y), baseSize, maxSize, GrowAxis::X, app.gfx.hwnd, renameState, listing.dir.parent.pidl.get(), child.pidl, child.name, bgCol);
+                    ImVec2 baseSize(maxTextWidth, rowRect.GetHeight());
+                    ImVec2 maxSize(ImGui::GetContentRegionMax().x - textX, rowRect.GetHeight()); // grow into the row, not downward
+                    RenderRenameWidget("detailsRename", ImVec2(textX, rowRect.Min.y), baseSize, maxSize, GrowAxis::X, app.gfx.hwnd, renameState, listing.dir.parent.pidl.get(), child.pidl, child.name, bgCol);
                 }
                 else{
-                    ImRect textRect(ImVec2(textX, cellPos.y), ImVec2(textX + maxTextWidth, cellPos.y + layout.cellHeight));   
+                    ImRect textRect(ImVec2(textX, rowRect.Min.y), ImVec2(textX + maxTextWidth, rowRect.Max.y));   
                     DrawTextEllipsisSingleLine(dl, textRect, child.name, textCol);
                 }
 
@@ -302,8 +313,8 @@ static void RenderDetailsView(f32 dpi, App& app){
                 f32 dateLiveWidth = ImGui::GetContentRegionAvail().x;
                 const char* dateText = (child.lastWriteTime.dwLowDateTime != 0 || child.lastWriteTime.dwHighDateTime != 0) ? FormatFileTime(child.lastWriteTime) : "--";
                 ImRect dateRect(
-                    ImVec2(datePos.x, datePos.y), 
-                    ImVec2(datePos.x + dateLiveWidth, datePos.y + layout.cellHeight)
+                    ImVec2(datePos.x, rowRect.Min.y), 
+                    ImVec2(datePos.x + dateLiveWidth, rowRect.Max.y)
                 );
                 DrawTextEllipsisSingleLine(dl, dateRect, dateText, mutedCol);
                 
@@ -314,8 +325,8 @@ static void RenderDetailsView(f32 dpi, App& app){
                 f32 typeLiveWidth = ImGui::GetContentRegionAvail().x;
                 const char* typeName = child.typeName[0] ? child.typeName : "--"; 
                 ImRect typeRect(
-                    ImVec2(typePos.x, typePos.y), 
-                    ImVec2(typePos.x + typeLiveWidth, typePos.y + layout.cellHeight)
+                    ImVec2(typePos.x, rowRect.Min.y), 
+                    ImVec2(typePos.x + typeLiveWidth, rowRect.Max.y)
                 );
                 DrawTextEllipsisSingleLine(dl, typeRect, typeName, mutedCol);
 
@@ -327,7 +338,7 @@ static void RenderDetailsView(f32 dpi, App& app){
                 f32 liveSizeColWidth = ImGui::GetContentRegionAvail().x - layout.xGap;
                 const char* sizeText = (child.size != 0) ? FormatFileSize(child.size) : "--";
                 ImGui::PushStyleColor(ImGuiCol_Text, mutedCol);
-                ImGui::RenderTextClipped(sizePos, ImVec2(sizePos.x + liveSizeColWidth, sizePos.y + layout.cellHeight), sizeText, nullptr, nullptr, ImVec2(1.0f, 0.5f), nullptr);
+                ImGui::RenderTextClipped(sizePos, ImVec2(sizePos.x + liveSizeColWidth, rowRect.Max.y), sizeText, nullptr, nullptr, ImVec2(1.0f, 0.5f), nullptr);
                 ImGui::PopStyleColor();
 
                 ImGui::PopID();
@@ -431,7 +442,7 @@ void RenderFileGrid(f32 dpi, App& app){
     // Left Click on Empty Space
     if (isWindowHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)){
         if (!activeTab.selState.isAnyItemHovered) {
-            activeTab.ClearSelState();
+            activeTab.selState.selectedHashes.clear();
             activeTab.ClearRenameState();
         }
     }
