@@ -41,9 +41,10 @@ To steal the icon:
 #include <iostream>
 #include "ClipboardManager.h"
 #include "Str.h"
+#include "Item.h"
+#include "App.h"
 
-
-void ExecuteContextMenuCommand(ComPtr<IContextMenu> menu, PCIDLIST_ABSOLUTE parentPidl, std::vector<PCITEMID_CHILD>& childPidls, UINT idOffset, HWND ownerHwnd){
+void ExecuteContextMenuCommand(App& app, ComPtr<IContextMenu> menu, PCIDLIST_ABSOLUTE parentPidl, std::vector<PCITEMID_CHILD>& childPidls, UINT idOffset, HWND ownerHwnd){
     if (!menu) return;
 
     // Ask the shell what verb this ID represents (e.g., "copy", "cut", "open")
@@ -70,13 +71,29 @@ void ExecuteContextMenuCommand(ComPtr<IContextMenu> menu, PCIDLIST_ABSOLUTE pare
             PerformClipboardOperation(parentPidl, childPidls, true);
             return; 
         }
-        // if (verb == "rename") {
-        //     if (childPidls.size() == 1) {
-        //         auto child = activeTab.dir.children->GetItemByPidl(childPidls[0], app.typeStore); // Or however you lookup
-        //         app.window.GetActiveTab().viewState.renamingItemId = child.hash;
-        //         strncpy(app.window.GetActiveTab().viewState.renameBuffer, child.name, 511);
-        //     }
-        // }
+        if (verb == "rename") {
+            if (childPidls.size() == 1) {
+                Tab& activeTab = app.window.GetActiveTab();
+
+                auto& renameState = activeTab.renameState;
+                auto& selState = activeTab.selState;
+
+                if (!selState.focusHash.has_value()) return;
+                renameState.renamingItemId = selState.focusHash;
+
+                const DirChildren* PChildren = app.directory.Get(activeTab.dir.HChildren);
+                if (!PChildren) return;
+    
+                for (u32 i = 0; i < PChildren->ItemCount(); i++){
+                    if (PChildren->hashes[i] == selState.focusHash.value()){
+                        strncpy(renameState.renameBuffer, PChildren->GetChildName(i), sizeof(renameState.renameBuffer) - 1);
+                        renameState.renameBuffer[sizeof(renameState.renameBuffer) - 1] = '\0';
+                        break;
+                    }
+                }
+            }
+            return;
+        }
     }
 
     CMINVOKECOMMANDINFOEX info{};
@@ -184,9 +201,7 @@ void WalkMenu(IContextMenu* pcm, HMENU hMenu, UINT idCmdFirst, UINT idCmdLast, s
         if (tabPos != std::wstring::npos) {
             item.text = Str::WideToString(Str::CleanAmpersands(rawText.substr(0, tabPos).c_str()));
             item.shortcut = Str::WideToString(rawText.substr(tabPos + 1).c_str());
-        } else {
-            item.text = Str::WideToString(Str::CleanAmpersands(rawText.c_str()));
-        }
+        } else item.text = Str::WideToString(Str::CleanAmpersands(rawText.c_str()));
         
         item.id = mii.wID - idCmdFirst;
         item.enabled = !(mii.fState & MFS_DISABLED);
@@ -259,7 +274,6 @@ void WalkMenu(IContextMenu* pcm, HMENU hMenu, UINT idCmdFirst, UINT idCmdLast, s
         if (hasText || hasSubItems) {
             out.push_back(item);
         }
-        // todo, check why WINRAR is empty
     }
 }
 

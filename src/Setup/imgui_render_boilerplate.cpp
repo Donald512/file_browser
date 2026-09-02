@@ -11,7 +11,7 @@ void InitializeImGui(HWND hwnd, ID3D11Device* pD3dDevice, ID3D11DeviceContext* p
     
     ImGuiIO& io = ImGui::GetIO();
     // io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_DockingEnable;     // Enable Keyboard Controls
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+    // io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
 
     ApplyWindows11DarkTheme();
     // Setup scaling based on primary window position

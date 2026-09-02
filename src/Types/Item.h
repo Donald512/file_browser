@@ -87,6 +87,7 @@ class DirChildren{
         return reinterpret_cast<PCITEMID_CHILD>(&pidlArena[pidlOffsets[index]]);
     }
     
+    ItemView GetItem(size_t index) const;
     ItemView GetItem(size_t index, TypenameStore& typeStore) const;
 
     void Clear(); 
@@ -116,6 +117,17 @@ inline ItemView DirChildren::GetItem(size_t index, TypenameStore& typeStore) con
     return ItemView{
         GetChildName(index),
         typeStore.GetTypename(typenameIndex[index]),
+        GetChildPidl(index),
+        hashes[index],
+        attributes[index],
+        lastWriteTimes[index],
+        sizes[index]
+    };
+}
+inline ItemView DirChildren::GetItem(size_t index) const {
+    return ItemView{
+        GetChildName(index),
+        "",
         GetChildPidl(index),
         hashes[index],
         attributes[index],

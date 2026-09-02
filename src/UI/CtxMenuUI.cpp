@@ -11,6 +11,7 @@
 #include "App.h"
 #include <cfloat>
 #include <cstring>
+#include "TabStates.h"
 #include <unordered_set>
 
 #include <functional>
@@ -31,7 +32,7 @@ void PushMenuTheme(f32 dpi){
 }
 void PopMenuTheme(){ ImGui::PopStyleVar(5); ImGui::PopStyleColor(6); }
 
-void RenderContextMenuStructure(ComPtr<IContextMenu> ctxMenu, std::vector<ContextMenuItem>& items, PCIDLIST_ABSOLUTE parentPidl,  std::vector<PCITEMID_CHILD>& childPidls, HWND hwnd,f32 dpi){
+void RenderContextMenuStructure(App& app, ComPtr<IContextMenu> ctxMenu, std::vector<ContextMenuItem>& items, PCIDLIST_ABSOLUTE parentPidl,  std::vector<PCITEMID_CHILD>& childPidls, HWND hwnd, f32 dpi){
     if (items.empty())  return;
     const f32 iconSize = 16.0f * dpi;
     const f32 gutter   = iconSize + 12.0f * dpi;
@@ -110,11 +111,11 @@ void RenderContextMenuStructure(ComPtr<IContextMenu> ctxMenu, std::vector<Contex
         } 
 
         if (open){ 
-            RenderContextMenuStructure(ctxMenu, item.subItems, parentPidl, childPidls, hwnd, dpi); 
+            RenderContextMenuStructure(app, ctxMenu, item.subItems, parentPidl, childPidls, hwnd, dpi); 
             ImGui::EndMenu(); 
         }
         else if (clicked){ 
-            ExecuteContextMenuCommand(ctxMenu, parentPidl, childPidls, item.id, hwnd); 
+            ExecuteContextMenuCommand(app, ctxMenu, parentPidl, childPidls, item.id, hwnd); 
         }
     }
 }

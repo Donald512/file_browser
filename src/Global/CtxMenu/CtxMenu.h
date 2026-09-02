@@ -8,6 +8,8 @@
 #include <d3d11.h>
 
 
+struct App;
+
 using Microsoft::WRL::ComPtr;
 
 struct ContextMenuItem {
@@ -29,7 +31,8 @@ struct ContextMenuItem {
 };
 
 
-void ExecuteContextMenuCommand(ComPtr<IContextMenu> menu, PCIDLIST_ABSOLUTE parentPidl, std::vector<PCITEMID_CHILD>& childPidls, UINT idOffset, HWND ownerHwnd);
+void ExecuteContextMenuCommand(App& app, ComPtr<IContextMenu> menu, PCIDLIST_ABSOLUTE parentPidl, std::vector<PCITEMID_CHILD>& childPidls, UINT idOffset, HWND ownerHwnd);
+
 
 
 std::vector<ContextMenuItem> GetBackgroundContextMenu(ComPtr<IContextMenu>& outMenu, PCIDLIST_ABSOLUTE folderPidl, ID3D11Device* dev);

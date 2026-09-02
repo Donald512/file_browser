@@ -383,20 +383,13 @@ inline f32 RenderResizeHorizontalHandle(const char* idStr, ImVec2 topLeftPos, f3
 
     ImU32 color = 0; // Transparent by default
     
-    if (held) {
-        color = activeCol;
-    }    
-    else if (hovered) {
-        color = hoverCol;
-    }    
+    if (held)
+        color = activeCol; 
+    else if (hovered) color = hoverCol;
 
-    if (color != 0) {
-        dl->AddRectFilled(min, max, color);
-    }    
+    if (color != 0) dl->AddRectFilled(min, max, color);    
 
-    if (held) {
-        return ImGui::GetIO().MouseDelta.x;
-    }    
+    if (held) return ImGui::GetIO().MouseDelta.x;
 
     return 0.0f;
 }    
@@ -423,19 +416,12 @@ inline f32 RenderResizeVerticalHandle(const char* idStr, ImVec2 topLeftPos, f32 
     }    
 
     ImU32 color = 0; // Transparent by default
-    if (held) {
-        color = activeCol;
-    } else if (hovered) {
-        color = hoverCol;
-    }    
+    if (held)           color = activeCol;
+    else if (hovered)   color = hoverCol;
+    
+    if (color != 0)     window->DrawList->AddRectFilled(min, max, color);
 
-    if (color != 0) {
-        window->DrawList->AddRectFilled(min, max, color);
-    }    
-
-    if (held) {
-        return ImGui::GetIO().MouseDelta.y; // Track vertical mouse movement
-    }    
+    if (held) return ImGui::GetIO().MouseDelta.y; // Track vertical mouse movement
 
     return 0.0f;
 }    
@@ -596,7 +582,7 @@ inline InputResult RenderAutoResizingInputText(const char* strId, ImVec2 pos, Im
     if (axis == GrowAxis::Y){
         f32 wrapWidth = ImMax(baseSize.x - hPad * 2.0f, 1.0f);
         ImVec2 textSize = ImGui::CalcTextSize(buffer, nullptr, false, wrapWidth);
-        f32 finalHeight = ImClamp(textSize.y + vPad * 2.0f + 4.0f, baseSize.y, maxSize.y);
+        f32 finalHeight = ImClamp(textSize.y + vPad * 2.0f, baseSize.y, maxSize.y);
         boxSize = { baseSize.x, finalHeight };
     } else {
         f32 textWidth = ImGui::CalcTextSize(buffer, nullptr, false, FLT_MAX).x;
@@ -627,10 +613,15 @@ inline InputResult RenderAutoResizingInputText(const char* strId, ImVec2 pos, Im
         return 0;
     };
 
+    ImVec2 cursorBefore = ImGui::GetCursorScreenPos();
+
     ImGui::SetNextItemWidth(boxSize.x);
     ImGuiInputTextFlags flags = ImGuiInputTextFlags_CallbackAlways | ImGuiInputTextFlags_CallbackCharFilter ;
     
     ImGui::InputTextMultiline("##input", buffer, bufferSize, boxSize, flags, callback, &cbData);
+
+    ImGui::SetCursorScreenPos(cursorBefore);
+    
     ImVec2 reportedSize = ImGui::GetItemRectSize();
 
     bool isActive      = ImGui::IsItemActive();

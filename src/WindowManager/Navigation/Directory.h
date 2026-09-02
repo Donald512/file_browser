@@ -26,6 +26,9 @@ class Directory{
     void UpdateChildren(DirectoryManager& directory, FileViewState vs);
     void ClearForNav();
     
+    ItemView GetChildFromHash(const DirChildren& children, TypenameStore& typeStore, u64 hash);
+    ItemView GetChildFromHash(const DirChildren& children, u64 hash);
+
     const std::vector<u32>& VisibleIndices(bool showHidden) const {
         return showHidden ? sortedIndices : nonHiddenIndices;
     }
@@ -46,6 +49,7 @@ inline void Directory::UpdateChildren(DirectoryManager& dirManager, FileViewStat
     HChildren = dirManager.GetOrRequest(parent.pidl.get(), parent.hash);
 
     const DirChildren* PChildren = dirManager.Get(HChildren);
+    
     if (!PChildren) return;
 
     size_t count = PChildren->ItemCount();
@@ -60,6 +64,26 @@ inline void Directory::UpdateChildren(DirectoryManager& dirManager, FileViewStat
     if (!vs.showHidden) RebuildNonHiddenIndices(*PChildren);
     
     updatedChildren = true;
+}
+
+inline ItemView Directory::GetChildFromHash(const DirChildren& children, TypenameStore& typeStore, u64 hash){
+    size_t count = children.ItemCount();
+
+    for (size_t i = 0; i < count; i++){
+        if (children.hashes[count] == hash){
+            return children.GetItem(i, typeStore);
+        }
+    }
+}
+
+inline ItemView Directory::GetChildFromHash(const DirChildren& children, u64 hash){
+    size_t count = children.ItemCount();
+
+    for (size_t i = 0; i < count; i++){
+        if (children.hashes[count] == hash){
+            return children.GetItem(i);
+        }
+    }
 }
 
 inline void Directory::ClearForNav(){
