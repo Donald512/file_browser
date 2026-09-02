@@ -83,17 +83,17 @@ static void RenderSmallView(f32 dpi, App& app){
         focusedItemIndex = GetFocusedItemIndex(app);
     }
 
-    ForEachGridCell(listing.refs.size(), layout.cellWidth + layout.xGap, layout.cellWidth + layout.yGap, [&](size_t i, ImVec2 cellPos){
+    ForEachGridCell(listing.refs.size(), layout.cellWidth + layout.xGap, layout.cellHeight + layout.yGap, [&](size_t i, ImVec2 cellPos){
         auto child = listing.PChildren->GetItem(listing.refs[i], app.typeStore);
-        ImRect fullRect(cellPos, ImVec2(cellPos.x + layout.cellWidth, cellPos.y + layout.cellWidth));
+        ImRect fullRect(cellPos, ImVec2(cellPos.x + layout.cellWidth, cellPos.y + layout.cellHeight));
 
         DrawItemChrome(dl, window, app, dpi, listing.dir.parent, child, (int)i, fullRect, 4.0f * dpi);
 
         f32 iconX = cellPos.x + iconPad;
-        f32 iconY = cellPos.y + (layout.cellWidth - layout.iconSize) * 0.5f;
+        f32 iconY = cellPos.y + (layout.cellHeight - layout.iconSize) * 0.5f;
         DrawItemIcon(dl, app, listing.dir.parent, child, ImVec2(iconX, iconY), layout.iconSize, SHIL_SMALL);
 
-        ImRect textRect(ImVec2(iconX + layout.iconSize + textGap, cellPos.y), ImVec2(cellPos.x + layout.cellWidth - 8.0f * dpi, cellPos.y + layout.cellWidth));
+        ImRect textRect(ImVec2(iconX + layout.iconSize + textGap, cellPos.y), ImVec2(cellPos.x + layout.cellWidth - 8.0f * dpi, cellPos.y + layout.cellHeight));
         DrawTextEllipsisSingleLine(dl, textRect, child.name, textCol);
     }, focusedItemIndex);
 }

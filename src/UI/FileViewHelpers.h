@@ -487,10 +487,7 @@ inline void KeyboardNavigationInteraction(f32 dpi, App& app){
     else if (mode == ViewMode::Details) columns = 1;
     else {
         f32 itemStride = GetGridItemStride(mode, dpi, vs.iconSize);
-        if (itemStride > 0.0f) {
-            columns = (int)(availW / itemStride);
-            if (columns < 1) columns = 1;
-        }
+        if (itemStride > 0.0f) columns = ComputeGridColumns(availW, itemStride);
     }
     if (vs.renamingItemId.has_value()) return; 
 
