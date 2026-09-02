@@ -143,10 +143,20 @@ static void RenderListViewContent(f32 dpi, App& app){
 
     f32 windowWidth = ImGui::GetWindowWidth();
     
-    if (selState.justNavigated && activeTab.selState.focusHash.has_value()){
-        KeepFocusedListColumnInView( windowWidth, columnStarts, rowsPerColumn, totalItems, listing, app, selState);
-    }
     f32 scrollX = ImGui::GetScrollX();
+    if (selState.justNavigated && activeTab.selState.focusHash.has_value()){
+
+        int focusedItemIndex = GetFocusedItemIndex(app);
+        
+        int focusCol = focusedItemIndex / rowsPerColumn;
+        f32 colLeft  = columnStarts[focusCol];
+        f32 colRight = columnStarts[focusCol + 1];
+        f32 colWidth = colRight - colLeft;
+
+        f32 newScrollX = KeepRectVisible(colLeft, colWidth, scrollX, windowWidth);
+        if (newScrollX != scrollX) ImGui::SetScrollX(newScrollX);
+
+    }
 
     const auto visibleColumns = GetVisibleListColumns(scrollX, windowWidth, columnStarts, totalColumns);
 
@@ -213,25 +223,19 @@ static void RenderDetailsView(f32 dpi, App& app){
         auto& activeTab = app.window.GetActiveTab();
 
         int focusRow = -1;
-        if (activeTab.selState.justNavigated && activeTab.selState.focusHash.has_value()){
-            for (int i = 0; i < (int)listing.refs.size(); i++){
-                auto c = listing.PChildren->GetItem(listing.refs[i], app.typeStore);
-                if (c.hash == activeTab.selState.focusHash) { focusRow = i; break; }
-            }
-        }
 
-        f32 viewH = ImGui::GetWindowHeight(); 
-        if (focusRow >= 0) {
-            f32 rowStride = layout.cellHeight + layout.yGap;
-            f32 itemY = focusRow * rowStride;
-            f32 scrollY = ImGui::GetScrollY();
-            // Subtract roughly the header height so it doesn't hide under the frozen header
+        f32 headerHeight = ImGui::GetFrameHeight() + ImGui::GetStyle().CellPadding.y * 2.0f;
+        f32 actualViewH = ImGui::GetWindowHeight() - headerHeight;
+
+        if (activeTab.selState.justNavigated && activeTab.selState.focusHash.has_value()) {
+            focusRow = GetFocusedItemIndex(app);    // in details view, focused item is same as focused row
             
-            if (itemY < scrollY) {
-                ImGui::SetScrollY(itemY);
-            } else if (itemY + layout.cellHeight > scrollY + viewH) {
-                ImGui::SetScrollY(itemY + layout.cellHeight * 2 - viewH);   // doesnt bring the item into view, so im multiplying by 2, or maybe add GetFrameHeight?
-            }
+            f32 rowStride = layout.cellHeight + layout.yGap;
+            f32 itemMinY = focusRow * rowStride;
+            f32 scrollY = ImGui::GetScrollY();
+
+            f32 newScrollY = KeepRectVisible(itemMinY, rowStride, scrollY, actualViewH);
+            if (newScrollY != scrollY) ImGui::SetScrollY(newScrollY);
         }
 
         ImGuiListClipper clipper;
@@ -261,7 +265,7 @@ static void RenderDetailsView(f32 dpi, App& app){
                 );
                 
                 // Expanded so ButtonBehavior sees the whole row
-                ImGui::PushClipRect(rowRect.Min, ImVec2(tableMaxX, ImMin(rowRect.Max.y, viewH + window->Pos.y)), false);
+                ImGui::PushClipRect(rowRect.Min, ImVec2(tableMaxX, ImMin(rowRect.Max.y, actualViewH + window->Pos.y)), false);
                 ImU32 bgCol = 0;
                 ImGuiID id = currentWindow->GetID((void*)(intptr_t)child.hash);
                 ItemInteraction ia = HandleItemInteraction(app, listing.dir.parent, child, row, id, rowRect);

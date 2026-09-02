@@ -12,9 +12,6 @@
 #include "ImGuiHelpers.h"
 #include <algorithm>
 
-bool g_openRightClickMenu = false;
-bool g_menuIsForChildren = false;
-
 inline bool isFileCutOnClipBoard(std::unordered_set<u64>& clipboardCutItems, u64 hashedPidl){
     return clipboardCutItems.find(hashedPidl) != clipboardCutItems.end();
 }
@@ -257,6 +254,14 @@ inline void DrawItemIcon(ImDrawList* dl, App& app, const DirParent& parent, cons
 }
 
 
+// itemExtent is the dimension of the item along that axis, eg height on Y, width on X
+// ViewExtent is the height or the width of the viewport
+f32 KeepRectVisible(f32 itemMin, f32 itemExtent, f32 scroll, f32 viewExtent){
+    if (itemMin < scroll) return itemMin;
+    else if (itemMin + itemExtent > scroll + viewExtent) return itemMin + itemExtent - viewExtent;
+    else return scroll; // already in view
+}
+
 // Iterates a clipped, wrapping grid of fixed-stride cells: handles column count, ImGuiListClipper, and per-row cursor advancement. `cellW` is the horizontal stride between cells (it can be bigger than what is actually drawn, for the purpose of a gap.
 // `drawCell(index, cellScreenPos)` only needs to draw what's inside one cell;
 template <typename Fn>
@@ -273,16 +278,14 @@ inline void ForEachGridCell(size_t itemCount, f32 cellW, f32 cellH, Fn&& drawCel
     int focusedAbsoluteRow = -1;
     if (focusedDisplayIndex >= 0 && focusedDisplayIndex < (int)itemCount) {
         focusedAbsoluteRow = focusedDisplayIndex / columns;
+
         f32 itemMinY = focusedAbsoluteRow * cellH;
         f32 scrollY = ImGui::GetScrollY();  // current vertical offset in the ImGui window
         f32 viewHeight = ImGui::GetWindowHeight();
 
-        if (itemMinY < scrollY) {   // if the item is at the top of the screeen, clipped by the top, scroll down to bring it into view
-            ImGui::SetScrollY(itemMinY);
-        } 
-        else if (itemMinY + cellH > scrollY + viewHeight) {       // if the bottom of item is below the screen, scroll up to bring bottom into view
-            ImGui::SetScrollY(itemMinY + cellH - viewHeight);
-        }
+        f32 newScrollY = KeepRectVisible(itemMinY, cellH, scrollY, viewHeight);
+        if (newScrollY != scrollY) ImGui::SetScrollY(newScrollY);
+
     }
 
     ImGuiListClipper clipper;
@@ -372,27 +375,6 @@ inline void DEBUGPrintFocusedItems(App& app){
     }
 }
 
-inline void KeepFocusedListColumnInView(f32 windowWidth, const std::vector<f32>& columnStarts, int rowsPerColumn, int totalItems, const DirListing& listing, App& app, const SelectionState& selState){
-    f32 scrollX = ImGui::GetScrollX();
-    for (int i = 0; i < totalItems; i++){
-        auto c = listing.PChildren->GetItem(listing.refs[i], app.typeStore);
-        if (c.hash == selState.focusHash){
-            int focusCol = i / rowsPerColumn;
-            f32 colLeft  = columnStarts[focusCol];
-            f32 colRight = columnStarts[focusCol + 1];
-
-            if (colLeft < scrollX){ 
-                scrollX = colLeft;            
-                ImGui::SetScrollX(scrollX); 
-            }
-            else if (colRight > scrollX + windowWidth){ 
-                scrollX = colRight - windowWidth; 
-                ImGui::SetScrollX(scrollX); 
-            }
-            break;
-        }
-    }
-}
 
 // for list clipper
 struct VisibleColumnRange {

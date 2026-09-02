@@ -187,3 +187,16 @@ inline void DirectoryManager::InvalidateSlot(u32 slotIdx) {
     slot.folderHash = 0;
     freeSlots.push_back(slotIdx);
 }
+
+/*
+during loading mode, i give the pointer to my fileview mode, so it sees results as its entering, and since my UI wont crash with a nullptr, that should be doable. maybe make the BuildDirectoryOffsite use an arena or a large buffer that wont move and collapse at once when its done, change the UI to point to the real cache
+Use virtualAlloc to allocate 2GB (unneccesary), and commit as we go
+
+struct DirChildrenArena {
+    fixed backing storage, reserved big enough upfront (or grown by
+    allocating a NEW block and never freeing the old one — never realloc-in-place)
+    std::atomic<u32> visibleCount{0}; // UI reads up to this
+    actual item data (SoA arrays) — appended sequentially by background thread
+};
+UI just needs to know "am i reading the pending live buffer, or the finished one"
+*/
