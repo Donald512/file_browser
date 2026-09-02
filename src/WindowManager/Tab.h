@@ -86,7 +86,7 @@ class Tab{
     }
 
     void ClearSelState();
-    void ClearViewState();
+    void ClearRenameState();
     
     Breadcrumbs breadcrumbs{};
     History history{};
@@ -95,6 +95,7 @@ class Tab{
     FileViewState viewState;
     SelectionState selState;
     CtxMenuState ctxState;
+    RenameState renameState;
     
     private:
         DirectoryManager* dirManager;
@@ -148,7 +149,7 @@ inline bool Tab::GoTo(PCIDLIST_ABSOLUTE dest, Actions action){
 
     dir.ClearForNav();
     ClearSelState();
-    ClearViewState();
+    ClearRenameState();
 
     dir.UpdateChildren(*dirManager, viewState);
     watcher->Watch(dir.parent.pidl.get(), dir.parent.hash);
@@ -195,8 +196,8 @@ inline void Tab::ClearSelState(){
     selState.anchorVisualIndex = -1;
 }
 
-inline void Tab::ClearViewState(){
-    viewState.renamingItemId = std::nullopt;
-    viewState.renameBuffer[0] = 0;
-    viewState.renameFocusHandledFor = 0;
+inline void Tab::ClearRenameState(){
+    renameState.renamingItemId = std::nullopt;
+    renameState.renameBuffer[0] = 0;
+    renameState.renameFocusHandledFor = 0;
 }

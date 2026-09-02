@@ -194,7 +194,8 @@ static void RenderDetailsView(f32 dpi, App& app){
     if (!window || window->SkipItems) return;
 
     const auto layout = GetFileviewLayoutForMode(ViewMode::Details, dpi);
-    auto& vs = app.window.GetActiveTab().viewState;
+    auto& activeTab = app.window.GetActiveTab();
+    auto& renameState = activeTab.renameState;
 
     const ImU32 textCol = Theme::Current.palette.Text;
     const ImU32 mutedCol = Theme::Current.palette.TextMuted;
@@ -220,7 +221,6 @@ static void RenderDetailsView(f32 dpi, App& app){
         ImGui::TableHeadersRow();
 
         DirListing listing = GetVisibleListing(app);
-        auto& activeTab = app.window.GetActiveTab();
 
         int focusRow = -1;
 
@@ -283,10 +283,10 @@ static void RenderDetailsView(f32 dpi, App& app){
                 
                 f32 textX = cellPos.x + 4.0f * dpi + layout.iconSize + 6.0f * dpi;
                 f32 maxTextWidth = ImGui::GetContentRegionAvail().x - (textX - cellPos.x);
-                if (vs.renamingItemId == child.hash){
+                if (renameState.renamingItemId == child.hash){
                     ImVec2 baseSize(maxTextWidth, layout.cellHeight);
                     ImVec2 maxSize(ImGui::GetContentRegionMax().x - textX, layout.cellHeight); // grow into the row, not downward
-                    RenderRenameWidget("detailsRename", ImVec2(textX, cellPos.y), baseSize, maxSize, GrowAxis::X, app.gfx.hwnd, vs, listing.dir.parent.pidl.get(), child.pidl, child.name, bgCol);
+                    RenderRenameWidget("detailsRename", ImVec2(textX, cellPos.y), baseSize, maxSize, GrowAxis::X, app.gfx.hwnd, renameState, listing.dir.parent.pidl.get(), child.pidl, child.name, bgCol);
                 }
                 else{
                     ImRect textRect(ImVec2(textX, cellPos.y), ImVec2(textX + maxTextWidth, cellPos.y + layout.cellHeight));   
@@ -432,7 +432,7 @@ void RenderFileGrid(f32 dpi, App& app){
     if (isWindowHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)){
         if (!activeTab.selState.isAnyItemHovered) {
             activeTab.ClearSelState();
-            activeTab.ClearViewState();
+            activeTab.ClearRenameState();
         }
     }
 

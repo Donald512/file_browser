@@ -22,17 +22,21 @@ struct FileViewState {
     SortMode sortMode = SortMode::Name;
     SortDirection sortDir = SortDirection::Ascending;
     bool showHidden = false;
+    f32 gridIconSize = 64.0f; 
 
     
-    // UI Directives (The "Magic" variables)
+    // UI Directives
     std::optional<u64> scrollToItemId = std::nullopt;
+    float scrollY = 0.0f;
+    
+};
+
+struct RenameState{
     std::optional<u64> renamingItemId = std::nullopt;
     u64 renameFocusHandledFor = 0;   // which item's initial focus we've already applied
     char renameBuffer[512] = {0};
-    float scrollY = 0.0f;
-    
-    f32 gridIconSize = 64.0f; 
 };
+
 
 class Directory{
     public:

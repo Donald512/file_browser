@@ -447,6 +447,7 @@ void ClearFocusState(SelectionState& selState){
 inline void KeyboardNavigationInteraction(f32 dpi, App& app){
     auto& activeTab = app.window.GetActiveTab();
     FileViewState& vs = activeTab.viewState;
+    auto& renameState = activeTab.renameState;
     ViewMode mode = vs.viewMode;
     SelectionState& selState = activeTab.selState;
 
@@ -489,14 +490,14 @@ inline void KeyboardNavigationInteraction(f32 dpi, App& app){
         f32 itemStride = GetGridItemStride(mode, dpi, vs.iconSize);
         if (itemStride > 0.0f) columns = ComputeGridColumns(availW, itemStride);
     }
-    if (vs.renamingItemId.has_value()) return; 
+    if (renameState.renamingItemId.has_value()) return; 
 
     if (ImGui::IsKeyPressed(ImGuiKey_F2)){
         if (focusedItemIndex >= 0 && selState.selectedHashes.size() == 1){
             auto actualItemIndex = listing.refs[focusedItemIndex];
-            vs.renamingItemId = listing.PChildren->hashes[actualItemIndex];
-            strncpy(vs.renameBuffer, listing.PChildren->GetChildName(actualItemIndex), sizeof(vs.renameBuffer) - 1);
-            vs.renameBuffer[sizeof(vs.renameBuffer) - 1] = '\0';  
+            renameState.renamingItemId = listing.PChildren->hashes[actualItemIndex];
+            strncpy(renameState.renameBuffer, listing.PChildren->GetChildName(actualItemIndex), sizeof(renameState.renameBuffer) - 1);
+            renameState.renameBuffer[sizeof(renameState.renameBuffer) - 1] = '\0';  
 
             return;
         }
@@ -613,23 +614,23 @@ inline void KeyboardNavigationInteraction(f32 dpi, App& app){
     }
 }
 
-inline void RenderRenameWidget(const char* strId, ImVec2 pos, ImVec2 baseSize, ImVec2 maxSize, GrowAxis axis, HWND hwnd, FileViewState& vs, PCIDLIST_ABSOLUTE parentPidl, PCIDLIST_ABSOLUTE childPidl, const char* childName, ImU32 bgCol){
+inline void RenderRenameWidget(const char* strId, ImVec2 pos, ImVec2 baseSize, ImVec2 maxSize, GrowAxis axis, HWND hwnd, RenameState& renameState, PCIDLIST_ABSOLUTE parentPidl, PCIDLIST_ABSOLUTE childPidl, const char* childName, ImU32 bgCol){
     AutoInputColors cols;
     cols.bg = ImGui::ColorConvertU32ToFloat4(bgCol);
     cols.border = {};
     cols.selectionBg = {};
     cols.text = ImGui::ColorConvertU32ToFloat4(Theme::Current.palette.Text);
 
-    bool justOpened = (vs.renameFocusHandledFor != vs.renamingItemId.value());
-    if (justOpened) vs.renameFocusHandledFor = vs.renamingItemId.value();
+    bool justOpened = (renameState.renameFocusHandledFor != renameState.renamingItemId.value());
+    if (justOpened) renameState.renameFocusHandledFor = renameState.renamingItemId.value();
 
-    InputResult res = RenderAutoResizingInputText(strId, pos, baseSize, maxSize, vs.renameBuffer, sizeof(vs.renameBuffer), axis, false, &cols, justOpened);
+    InputResult res = RenderAutoResizingInputText(strId, pos, baseSize, maxSize, renameState.renameBuffer, sizeof(renameState.renameBuffer), axis, false, &cols, justOpened);
     
     if (res == InputResult::Committed){
-        WShell::CommitRename(hwnd, parentPidl, {childPidl, childName}, vs.renameBuffer);
-        vs.renamingItemId = std::nullopt;
+        WShell::CommitRename(hwnd, parentPidl, {childPidl, childName}, renameState.renameBuffer);
+        renameState.renamingItemId = std::nullopt;
     }
     else if (res == InputResult::Cancelled){
-        vs.renamingItemId = std::nullopt;
+        renameState.renamingItemId = std::nullopt;
     }
 }
