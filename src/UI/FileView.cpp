@@ -115,6 +115,7 @@ static void RenderListViewContent(f32 dpi, App& app){
     DirListing listing = GetVisibleListing(app);
     auto& activeTab = app.window.GetActiveTab(); 
     auto& selState = activeTab.selState; 
+    auto& renameState = activeTab.renameState;
     const auto layout = GetFileviewLayoutForMode(ViewMode::List, dpi);
 
 
@@ -182,7 +183,16 @@ static void RenderListViewContent(f32 dpi, App& app){
             f32 maxTextWidth = currentColWidth - (layout.xGap * 3.0f) - layout.iconSize;
             if (maxTextWidth > 0.0f){
                 ImRect textRect(ImVec2(textStartX, cellScreenPos.y), ImVec2(textStartX + maxTextWidth, cellScreenPos.y + layout.cellHeight));
-                DrawTextEllipsisSingleLine(dl, textRect, child.name, textCol);
+                if (renameState.renamingItemId == child.hash){
+                    bool isSelected = activeTab.isSelected(child.hash);
+                    ImU32 bgCol = isSelected ? Theme::Current.palette.SurfaceActive : Theme::Current.palette.Surface;
+
+                    ImVec2 baseSize = textRect.GetSize();
+                    ImVec2 maxSize = ImVec2(maxTextWidth, baseSize.y);
+
+                    RenderRenameWidget("listRename", textRect.Min, baseSize, maxSize, GrowAxis::X, app.gfx.hwnd, renameState, listing.dir.parent.pidl.get(), child.pidl, child.name, bgCol);
+                }
+                else DrawTextEllipsisSingleLine(dl, textRect, child.name, textCol);
             }
             ImGui::PopID();
         }
@@ -393,7 +403,7 @@ static void RenderTilesView(f32 dpi, App& app){
                 ImVec2 baseSize = nameRect.GetSize();
                 ImVec2 maxSize = ImVec2(textMaxWidth, baseSize.y);  // Grow horizontally
 
-                RenderRenameWidget("listRename", nameRect.Min, baseSize, maxSize, GrowAxis::X, app.gfx.hwnd, renameState, listing.dir.parent.pidl.get(), child.pidl, child.name, bgCol );
+                RenderRenameWidget("tilesRename", nameRect.Min, baseSize, maxSize, GrowAxis::X, app.gfx.hwnd, renameState, listing.dir.parent.pidl.get(), child.pidl, child.name, bgCol );
             }
             else DrawTextEllipsisSingleLine(dl, nameRect, child.name, textCol);
             
