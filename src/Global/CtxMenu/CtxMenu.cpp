@@ -67,11 +67,11 @@ void ExecuteContextMenuCommand(App& app, ComPtr<IContextMenu> menu, PCIDLIST_ABS
             PerformClipboardOperation(parentPidl, childPidls, false);
             return; 
         }
-        if (verb == "cut") {
+        else if (verb == "cut") {
             PerformClipboardOperation(parentPidl, childPidls, true);
             return; 
         }
-        if (verb == "rename") {
+        else if (verb == "rename") {
             if (childPidls.size() == 1) {
                 Tab& activeTab = app.window.GetActiveTab();
 
@@ -92,6 +92,38 @@ void ExecuteContextMenuCommand(App& app, ComPtr<IContextMenu> menu, PCIDLIST_ABS
                     }
                 }
             }
+            return;
+        }
+        else if (verb == "newfolder"){
+            ComPtr<IShellItem> psiParent;
+            if (FAILED(SHCreateItemFromIDList(parentPidl, IID_PPV_ARGS(&psiParent)))) return;
+            ComPtr<IFileOperation> pfo;
+            if (FAILED(CoCreateInstance(CLSID_FileOperation, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&pfo)))) return;
+
+            // FOF_SILENT = no "Creating..." progress UI. 
+            // FOF_NOCONFIRMATION = no "Are you sure?" dialogs.
+            // FOFX_SHOWELEVATIONPROMPT = pops up UAC if creating in C:\Program Files
+            // FOF_RENAMEONCOLLISION lets Windows automatically append " (2)", " (3)", etc.
+            pfo->SetOperationFlags(FOF_SILENT | FOF_NOCONFIRMATION | FOFX_SHOWELEVATIONPROMPT | FOF_RENAMEONCOLLISION | FOF_ALLOWUNDO);
+
+            // Make the name unique
+            std::wstring baseName = L"New folder";
+            RenameProgressSink sink;
+            DWORD dwCookie = 0;
+            pfo->Advise(&sink, &dwCookie);  //Attach sink to listen for creation events
+
+            if (SUCCEEDED(pfo->NewItem(psiParent.Get(), FILE_ATTRIBUTE_DIRECTORY, baseName.c_str(), nullptr, nullptr))){
+                if (SUCCEEDED(pfo->PerformOperations()) && SUCCEEDED(sink.result)){
+
+                    u64 createdHash = HashIdentityString(sink.createdFullPath);
+                    auto& activeTab = app.window.GetActiveTab();
+
+                    activeTab.newState.expectingNewItem = true;
+                    activeTab.newState.itemHash = createdHash;
+                    activeTab.newState.itemName = Str::WideToString(sink.createdName);
+                }
+            }
+            pfo->Unadvise(dwCookie);
             return;
         }
     }

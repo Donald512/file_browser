@@ -350,6 +350,17 @@ int GetFocusedItemIndex(App& app){
     return focusedItemIndex;
 }
 
+int GetScrollToItemIndex(DirListing& listing, u64 id){
+    int itemIndex = -1;
+    for (size_t i = 0; i < listing.refs.size(); i++){
+        auto hash = listing.PChildren->hashes[listing.refs[i]];
+        if (hash == id) {
+            itemIndex = (int)i; 
+            break; 
+        }
+    }
+    return itemIndex;
+}
 
 inline std::vector<f32> CalculateColumnWidthsForListView(f32 basePadding, const int totalColumns, const f32 minColumnWidth, const f32 maxColumnWidth, const int rowsPerColumn, const int totalItems, const DirListing& listing, App& app){
     std::vector<f32> columnWidths(totalColumns, minColumnWidth);    // fill with minimum
@@ -478,8 +489,6 @@ inline void KeyboardNavigationInteraction(f32 dpi, App& app){
     ViewMode mode = vs.viewMode;
     SelectionState& selState = activeTab.selState;
 
-    selState.justNavigated = false; 
-
     DirListing listing = GetVisibleListing(app);
 
     int totalItems = (int)listing.refs.size();
@@ -592,7 +601,6 @@ inline void KeyboardNavigationInteraction(f32 dpi, App& app){
         if (ImGui::IsKeyPressed(ImGuiKey_PageUp))     { newFocusIdx -= (mode == ViewMode::List ? rowsPerColumn : columns) * 10; navOccurred = true; }
 
         if (navOccurred){
-            selState.justNavigated = true;
 
             newFocusIdx = std::clamp(newFocusIdx, 0, totalItems - 1);
             auto newChild = listing.PChildren->GetItem(listing.refs[newFocusIdx], app.typeStore);
@@ -614,6 +622,7 @@ inline void KeyboardNavigationInteraction(f32 dpi, App& app){
             
             // Update focus hash ONLY on explicit navigation
             selState.focusHash = newChild.hash;
+            vs.scrollToItemId = newChild.hash;
         }
 
         // Spacebar: Toggle selection of focused item
@@ -663,3 +672,4 @@ inline void RenderRenameWidget(const char* strId, ImVec2 pos, ImVec2 baseSize, I
         renameState.renameFocusHandledFor = std::nullopt;
     }
 }
+

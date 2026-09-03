@@ -41,10 +41,10 @@ static void RenderGridView(f32 dpi, App& app){
 
     DirListing listing = GetVisibleListing(app);
 
-
     int focusedItemIndex = -1;
-    if (activeTab.selState.justNavigated && activeTab.selState.focusHash.has_value()){
-        focusedItemIndex = GetFocusedItemIndex(app);
+    if (vs.scrollToItemId.has_value()){
+        focusedItemIndex = GetScrollToItemIndex(listing, vs.scrollToItemId.value());
+        vs.scrollToItemId = std::nullopt;
     }
 
     // Cells are itemWidth wide but stride by itemWidth + xGap, so there's a visible gap between them.
@@ -89,10 +89,12 @@ static void RenderSmallView(f32 dpi, App& app){
     DirListing listing = GetVisibleListing(app);
     auto& activeTab = app.window.GetActiveTab();
     auto& renameState = activeTab.renameState;
-
+    
     int focusedItemIndex = -1;
-    if (activeTab.selState.justNavigated && activeTab.selState.focusHash.has_value()){
-        focusedItemIndex = GetFocusedItemIndex(app);
+    auto& vs = activeTab.viewState;
+    if (vs.scrollToItemId.has_value()){
+        focusedItemIndex = GetScrollToItemIndex(listing, vs.scrollToItemId.value());
+        vs.scrollToItemId = std::nullopt;
     }
 
     ForEachGridCell(listing.refs.size(), layout.cellWidth + layout.xGap, layout.cellHeight + layout.yGap, [&](size_t i, ImVec2 cellPos){
@@ -167,18 +169,19 @@ static void RenderListViewContent(f32 dpi, App& app){
     f32 windowWidth = ImGui::GetWindowWidth();
     
     f32 scrollX = ImGui::GetScrollX();
-    if (selState.justNavigated && activeTab.selState.focusHash.has_value()){
+    auto& vs = activeTab.viewState;
+    if (vs.scrollToItemId.has_value()){
+        int focusedItemIndex = GetScrollToItemIndex(listing, vs.scrollToItemId.value());
+        if (focusedItemIndex >= 0){
+            int focusCol = focusedItemIndex / rowsPerColumn;
+            f32 colLeft  = columnStarts[focusCol];
+            f32 colRight = columnStarts[focusCol + 1];
+            f32 colWidth = colRight - colLeft;
 
-        int focusedItemIndex = GetFocusedItemIndex(app);
-        
-        int focusCol = focusedItemIndex / rowsPerColumn;
-        f32 colLeft  = columnStarts[focusCol];
-        f32 colRight = columnStarts[focusCol + 1];
-        f32 colWidth = colRight - colLeft;
-
-        f32 newScrollX = KeepRectVisible(colLeft, colWidth, scrollX, windowWidth);
-        if (newScrollX != scrollX) ImGui::SetScrollX(newScrollX);
-
+            f32 newScrollX = KeepRectVisible(colLeft, colWidth, scrollX, windowWidth);
+            if (newScrollX != scrollX) ImGui::SetScrollX(newScrollX);
+        }
+        vs.scrollToItemId = std::nullopt;
     }
 
     const auto visibleColumns = GetVisibleListColumns(scrollX, windowWidth, columnStarts, totalColumns);
@@ -261,15 +264,18 @@ static void RenderDetailsView(f32 dpi, App& app){
 
         f32 actualViewH = ImGui::GetWindowHeight() - headerHeight;
 
-        if (activeTab.selState.justNavigated && activeTab.selState.focusHash.has_value()) {
-            focusRow = GetFocusedItemIndex(app);    // in details view, focused item is same as focused row
-            
-            f32 rowStride = layout.cellHeight + layout.yGap;
-            f32 itemMinY = focusRow * rowStride;
-            f32 scrollY = ImGui::GetScrollY();
-
-            f32 newScrollY = KeepRectVisible(itemMinY, rowStride, scrollY, actualViewH);
-            if (newScrollY != scrollY) ImGui::SetScrollY(newScrollY);
+        auto& vs = activeTab.viewState;
+        if (vs.scrollToItemId.has_value()){
+            focusRow = GetScrollToItemIndex(listing, vs.scrollToItemId.value()); // in details view, focused item is same as focused row
+            if (focusRow >= 0){
+                f32 rowStride = layout.cellHeight + layout.yGap;
+                f32 itemMinY = focusRow * rowStride;
+                f32 scrollY = ImGui::GetScrollY();
+                
+                f32 newScrollY = KeepRectVisible(itemMinY, rowStride, scrollY, actualViewH);
+                if (newScrollY != scrollY) ImGui::SetScrollY(newScrollY);
+            }
+            vs.scrollToItemId = std::nullopt;
         }
 
         ImGuiListClipper clipper;
@@ -399,8 +405,9 @@ static void RenderTilesView(f32 dpi, App& app){
     auto& renameState = activeTab.renameState;
 
     int focusedItemIndex = -1;
-    if (activeTab.selState.justNavigated && activeTab.selState.focusHash.has_value()){
-        focusedItemIndex = GetFocusedItemIndex(app);
+    if (activeTab.viewState.scrollToItemId){
+        focusedItemIndex = GetScrollToItemIndex(listing, activeTab.viewState.scrollToItemId.value());
+        activeTab.viewState.scrollToItemId = std::nullopt;
     }
 
     ForEachGridCell(listing.refs.size(), layout.cellWidth + layout.xGap, layout.cellHeight + layout.yGap, [&](size_t i, ImVec2 cellPos){
@@ -450,7 +457,9 @@ void RenderFileGrid(f32 dpi, App& app){
 
     FileViewState& vs = activeTab.viewState;
     auto& ctxState = activeTab.ctxState;
-    // SelectionState& selState = activeTab.selState;
+    auto& newState = activeTab.newState;
+    auto& renameState = activeTab.renameState;
+    SelectionState& selState = activeTab.selState;
     ViewMode mode = vs.viewMode;
 
     // Reset hover state at the beginning of the frame
@@ -461,8 +470,17 @@ void RenderFileGrid(f32 dpi, App& app){
     
     activeTab.dir.UpdateChildren(app.directory, vs);    // needs to be polled every frame, in case data is ready 
 
+    if (newState.expectingNewItem){
+        vs.scrollToItemId = newState.itemHash;
+        selState.focusHash = newState.itemHash;
+        
+        renameState.renamingItemId = newState.itemHash;
+        strncpy(activeTab.renameState.renameBuffer, newState.itemName.c_str(), sizeof(activeTab.renameState.renameBuffer) - 1);
+
+        newState.expectingNewItem = false;
+    }
+
     if (mode == ViewMode::List){
-        // List view lives inside its own scrolling child, and only there is the real available height (after child padding + scrollbar reservation) known. Keyboard nav has to run INSIDE that same child so its row math can never drift from what's actually drawn - that drift was the source of the diagonal-jump.
         ImGuiChildFlags childFlags = ImGuiChildFlags_NavFlattened;
         ImGuiWindowFlags windowFlags = ImGuiWindowFlags_HorizontalScrollbar;
         if (ImGui::BeginChild("FileViewList", ImVec2(0, 0), childFlags, windowFlags)){

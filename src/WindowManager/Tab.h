@@ -78,6 +78,7 @@ class Tab{
     SelectionState selState;
     CtxMenuState ctxState;
     RenameState renameState;
+    NewState newState;
     
     private:
         DirectoryManager* dirManager;
@@ -171,7 +172,7 @@ inline void Tab::DeselectItem(u64 i){    selState.selectedHashes.erase(i);}
 inline void Tab::DeselectAllItems(){    selState.selectedHashes.clear();}
 
 inline void Tab::ClearSelState(){
-    selState.justNavigated = false;
+    // selState.justNavigated = false;
     selState.selectedHashes.clear();
     selState.focusHash = std::nullopt;
     selState.anchorHash = std::nullopt;

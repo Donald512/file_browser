@@ -9,7 +9,7 @@
 
 
 struct SelectionState {
-    bool justNavigated = false;
+    // bool justNavigated = false;
     std::unordered_set<u64> selectedHashes;
     std::optional<u64> focusHash = std::nullopt;
     std::optional<u64> anchorHash = std::nullopt;
@@ -55,4 +55,11 @@ struct RenameState{
 
     std::optional<u64> pendingHash = std::nullopt;
     double singleClickedAtTime = 0.0f;
+};
+
+struct NewState{
+    bool expectingNewItem = false;
+    std::optional<u64> itemHash = std::nullopt;
+    bool hasScrolledToNewItem = false;
+    std::string itemName;
 };

@@ -52,6 +52,8 @@ class RenameProgressSink : public IFileOperationProgressSink {
 public:
     HRESULT result = S_OK;
     std::wstring failedName;
+    std::wstring createdName; // <-- Stores the final uniquely collided name
+    std::wstring createdFullPath;
 
     IFACEMETHODIMP PostRenameItem(DWORD, IShellItem*, LPCWSTR pszNewName, HRESULT hrRename, IShellItem*) override {
         if (FAILED(hrRename)){
@@ -60,6 +62,27 @@ public:
         }
         return S_OK;
     }
+
+    IFACEMETHODIMP PostNewItem(DWORD, IShellItem*, LPCWSTR, LPCWSTR, DWORD, HRESULT hrNew, IShellItem* psiNewItem) override {
+        if (SUCCEEDED(hrNew) && psiNewItem) {
+            PWSTR pszFullPath = nullptr;
+            // Get the display name of the newly created item
+            if (SUCCEEDED(psiNewItem->GetDisplayName(SIGDN_FILESYSPATH, &pszFullPath))) {
+                createdFullPath = pszFullPath; // Captures "New folder (2)", etc.
+                CoTaskMemFree(pszFullPath);
+            }
+
+            PWSTR pszLeafName = nullptr;
+            if (SUCCEEDED(psiNewItem->GetDisplayName(SIGDN_NORMALDISPLAY, &pszLeafName))){
+                createdName = pszLeafName;
+                CoTaskMemFree(pszLeafName);
+            }
+        } 
+
+        else if (FAILED(hrNew)) result = hrNew;
+        return S_OK;
+    }
+
 
     // Boilerplate no-ops for the rest of the interface
     IFACEMETHODIMP StartOperations() override { return S_OK; }
@@ -72,7 +95,6 @@ public:
     IFACEMETHODIMP PreDeleteItem(DWORD, IShellItem*) override { return S_OK; }
     IFACEMETHODIMP PostDeleteItem(DWORD, IShellItem*, HRESULT, IShellItem*) override { return S_OK; }
     IFACEMETHODIMP PreNewItem(DWORD, IShellItem*, LPCWSTR) override { return S_OK; }
-    IFACEMETHODIMP PostNewItem(DWORD, IShellItem*, LPCWSTR, LPCWSTR, DWORD, HRESULT, IShellItem*) override { return S_OK; }
     IFACEMETHODIMP UpdateProgress(UINT, UINT) override { return S_OK; }
     IFACEMETHODIMP ResetTimer() override { return S_OK; }
     IFACEMETHODIMP PauseTimer() override { return S_OK; }
