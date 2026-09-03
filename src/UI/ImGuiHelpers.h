@@ -556,9 +556,10 @@ struct AutoInputColors {
 };
 
 inline InputResult RenderAutoResizingInputText(const char* strId, ImVec2 pos, ImVec2 baseSize, ImVec2 maxSize, char* buffer, size_t bufferSize, GrowAxis axis, bool commitOnLostFocus, const AutoInputColors* colors, bool forceFocus){
+    ImVec2 cursorBefore = ImGui::GetCursorScreenPos();
+    
     ImGui::SetCursorScreenPos(pos);
     ImGui::PushID(strId);
-
     // Compute vertical padding so that the internal text lands centered in baseSize.y to match DrawTextEllipsisSingleLine
     f32 lineH = ImGui::GetTextLineHeight();
     f32 hPad = 0;
@@ -613,15 +614,14 @@ inline InputResult RenderAutoResizingInputText(const char* strId, ImVec2 pos, Im
         return 0;
     };
 
-    ImVec2 cursorBefore = ImGui::GetCursorScreenPos();
-
+    
     ImGui::SetNextItemWidth(boxSize.x);
     ImGuiInputTextFlags flags = ImGuiInputTextFlags_CallbackAlways | ImGuiInputTextFlags_CallbackCharFilter ;
     
     ImGui::InputTextMultiline("##input", buffer, bufferSize, boxSize, flags, callback, &cbData);
 
     ImGui::SetCursorScreenPos(cursorBefore);
-    
+
     ImVec2 reportedSize = ImGui::GetItemRectSize();
 
     bool isActive      = ImGui::IsItemActive();

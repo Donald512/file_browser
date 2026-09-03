@@ -27,7 +27,10 @@ static void RenderGridView(f32 dpi, App& app){
 
     const auto layout = GetFileviewLayoutForMode(ViewMode::Icons, dpi);
 
-    auto& vs = app.window.GetActiveTab().viewState;
+    auto& activeTab = app.window.GetActiveTab();
+    auto& vs = activeTab.viewState;
+    auto& renameState = activeTab.renameState;
+
     const int shilSize = ShiLSizeForIconSize(vs.iconSize);
     const f32 imageSize = vs.iconSize * dpi;
     const f32 yTextPadding = 4.0f * dpi;
@@ -36,7 +39,6 @@ static void RenderGridView(f32 dpi, App& app){
     const f32 itemWidth = imageSize * kIconsWidthMultiplier;
     const f32 cellH = imageSize + yTextPadding + (maxLines * lineHeight) + yTextPadding;
 
-    auto& activeTab = app.window.GetActiveTab();
     DirListing listing = GetVisibleListing(app);
 
 
@@ -55,11 +57,20 @@ static void RenderGridView(f32 dpi, App& app){
         f32 iconX = cellPos.x + (itemWidth - imageSize) * 0.5f;
         DrawItemIcon(dl, app, listing.dir.parent, child, ImVec2(iconX, cellPos.y), imageSize, shilSize);
 
+        f32 textX = cellPos.x + 4.0f * dpi;
         f32 textY = cellPos.y + imageSize + yTextPadding;
-        RenderTextWrappedCenteredEllipsis(dl,
-            ImVec2(cellPos.x + 4.0f * dpi, textY),
-            ImVec2(itemWidth - 8.0f * dpi, maxLines * lineHeight),
-            child.name, nullptr, maxLines
+        f32 textMaxWidth = itemWidth - 8.0f * dpi;
+        ImRect textRect(ImVec2(textX, textY), ImVec2(itemWidth - 8.0f * dpi, maxLines * lineHeight));
+
+        if (renameState.renamingItemId == child.hash){
+            bool isSelected = activeTab.isSelected(child.hash);
+            ImU32 bgCol = isSelected ? Theme::Current.palette.SurfaceActive : Theme::Current.palette.Surface;
+
+            ImVec2 baseSize = ImVec2(textMaxWidth, ImGui::GetTextLineHeight());
+            RenderRenameWidget("iconsRename", textRect.Min, baseSize, baseSize, GrowAxis::X, app.gfx.hwnd, renameState, listing.dir.parent.pidl.get(), child.pidl, child.name, bgCol);
+        }
+        else RenderTextWrappedCenteredEllipsis(dl,
+            textRect.Min, textRect.Max, child.name, nullptr, maxLines
         );
     }, focusedItemIndex);
 }
