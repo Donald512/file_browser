@@ -77,6 +77,7 @@ static void RenderSmallView(f32 dpi, App& app){
 
     DirListing listing = GetVisibleListing(app);
     auto& activeTab = app.window.GetActiveTab();
+    auto& renameState = activeTab.renameState;
 
     int focusedItemIndex = -1;
     if (activeTab.selState.justNavigated && activeTab.selState.focusHash.has_value()){
@@ -94,7 +95,17 @@ static void RenderSmallView(f32 dpi, App& app){
         DrawItemIcon(dl, app, listing.dir.parent, child, ImVec2(iconX, iconY), layout.iconSize, SHIL_SMALL);
 
         ImRect textRect(ImVec2(iconX + layout.iconSize + textGap, cellPos.y), ImVec2(cellPos.x + layout.cellWidth - 8.0f * dpi, cellPos.y + layout.cellHeight));
-        DrawTextEllipsisSingleLine(dl, textRect, child.name, textCol);
+        
+        if (renameState.renamingItemId == child.hash){
+            bool isSelected = activeTab.isSelected(child.hash);
+            ImU32 bgCol = isSelected ? Theme::Current.palette.SurfaceActive : Theme::Current.palette.Surface;
+
+            ImVec2 baseSize = textRect.GetSize();
+            
+            RenderRenameWidget("smallRename", textRect.Min, baseSize, baseSize, GrowAxis::X, app.gfx.hwnd, renameState, listing.dir.parent.pidl.get(), child.pidl, child.name, bgCol);
+
+        }
+        else DrawTextEllipsisSingleLine(dl, textRect, child.name, textCol);
     }, focusedItemIndex);
 }
 
