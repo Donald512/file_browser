@@ -39,12 +39,15 @@ struct FileViewState {
     SortMode sortMode = SortMode::Name;
     SortDirection sortDir = SortDirection::Ascending;
     bool showHidden = false;
+
     f32 gridIconSize = 64.0f; 
-    
     
     // UI Directives
     std::optional<u64> scrollToItemId = std::nullopt;
     float scrollY = 0.0f;
+
+    std::vector<f32> columnStarts;  // for List mode, to prevent allocing and freeing at 144Hz
+    std::vector<f32> columnWidths;
     
 };
 

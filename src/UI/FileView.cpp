@@ -156,6 +156,7 @@ static void RenderListViewContent(f32 dpi, App& app, DirListing& listing){
     HandleHorizontalMouseWheelScroll(dpi);
 
     auto& activeTab = app.window.GetActiveTab(); 
+    auto& vs = activeTab.viewState;
     const auto layout = GetFileviewLayoutForMode(ViewMode::List, dpi);
 
     const f32 rowStride = layout.cellHeight + layout.yGap;
@@ -170,24 +171,23 @@ static void RenderListViewContent(f32 dpi, App& app, DirListing& listing){
     const int totalColumns = ExploraCeil(totalItems, rowsPerColumn);
 
     const f32 basePadding = layout.iconSize + (layout.xGap * 3.0f);
-    std::vector<f32> columnWidths = CalculateColumnWidthsForListView(basePadding, totalColumns, minColWidth, maxColWidth, rowsPerColumn, totalItems, listing, app);
+    CalculateColumnWidthsForListView(basePadding, totalColumns, minColWidth, maxColWidth, rowsPerColumn, totalItems, listing, app, vs.columnWidths);
     
-    std::vector<f32> columnStarts = CalculateColumnStartsForListView(totalColumns, columnWidths);
+    CalculateColumnStartsForListView(totalColumns, vs.columnWidths, vs.columnStarts);
     
     f32 windowWidth = ImGui::GetWindowWidth();
     
-    const f32 totalContentWidth = columnStarts[totalColumns];
+    const f32 totalContentWidth = vs.columnStarts[totalColumns];
     const f32 totalContentHeight = rowsPerColumn * rowStride;  
     ImGui::Dummy(ImVec2(totalContentWidth, totalContentHeight));
 
-    auto& vs = activeTab.viewState;
     const int focusedItemIndex = ResolvePendingScrollItemIndex(vs, listing);
     
     if (focusedItemIndex >= 0){ 
         int focusCol = focusedItemIndex / rowsPerColumn;    // vertical
         if (focusCol < totalColumns){
-            f32 colLeft  = columnStarts[focusCol];
-            f32 colRight = columnStarts[focusCol + 1];
+            f32 colLeft  = vs.columnStarts[focusCol];
+            f32 colRight = vs.columnStarts[focusCol + 1];
             f32 colWidth = colRight - colLeft;  // includes padding
             
             ScrollToFocusedColListMode(colLeft, colWidth);
@@ -195,11 +195,11 @@ static void RenderListViewContent(f32 dpi, App& app, DirListing& listing){
     }
 
     const f32 scrollX = ImGui::GetScrollX();
-    const auto visibleColumns = GetVisibleListColumns(scrollX, windowWidth, columnStarts, totalColumns);
+    const auto visibleColumns = GetVisibleListColumns(scrollX, windowWidth, vs.columnStarts, totalColumns);
 
     for (int column = visibleColumns.first; column < visibleColumns.last; column++){
-        const f32 currentColWidth = columnWidths[column];
-        const f32 currentColOffset = columnStarts[column];
+        const f32 currentColWidth = vs.columnWidths[column];
+        const f32 currentColOffset = vs.columnStarts[column];
         int columnStartIndex = column * rowsPerColumn;
         for (int row = 0; row < rowsPerColumn; row++){
 

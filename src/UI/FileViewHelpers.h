@@ -440,9 +440,12 @@ int ResolvePendingScrollItemIndex(FileViewState& vs, DirListing& listing){
 
 
 
-inline std::vector<f32> CalculateColumnWidthsForListView(f32 basePadding, const int totalColumns, const f32 minColumnWidth, const f32 maxColumnWidth, const int rowsPerColumn, const int totalItems, const DirListing& listing, App& app){
-    std::vector<f32> columnWidths(totalColumns, minColumnWidth);    // fill with minimum
+inline void CalculateColumnWidthsForListView(f32 basePadding, const int totalColumns, const f32 minColumnWidth, const f32 maxColumnWidth, const int rowsPerColumn, const int totalItems, const DirListing& listing, App& app, std::vector<f32>& result){
     
+    if (totalColumns <= 0) {result.clear(); return;}
+
+    result.assign(totalColumns, minColumnWidth);
+
     for (int column = 0; column < totalColumns; column++) {
         const int topOfColumn = column * rowsPerColumn;    // item at the very top of the column visually, 
         const int bottomOfColumn = ExploraMin(topOfColumn + rowsPerColumn, totalItems);     // exclusive
@@ -454,24 +457,29 @@ inline std::vector<f32> CalculateColumnWidthsForListView(f32 basePadding, const 
             const f32 requiredWidth = textWidth + basePadding;
 
             if (requiredWidth >= maxColumnWidth) {
-                columnWidths[column] = maxColumnWidth;
+                result[column] = maxColumnWidth;
                 break; // Stop checking this column immediately! Column already at max width
             }
 
-            if (requiredWidth > columnWidths[column]) {
-                columnWidths[column] = requiredWidth;
+            if (requiredWidth > result[column]) {
+                result[column] = requiredWidth;
             }
         }
     }
-    return columnWidths;
+    return;
 }
 
-inline std::vector<f32> CalculateColumnStartsForListView(const int totalColumns, const std::vector<f32>& columnWidths){
-    std::vector<f32> columnStarts(totalColumns + 1, 0.0f);
+inline void CalculateColumnStartsForListView(const int totalColumns, const std::vector<f32>& columnWidths, std::vector<f32>& result){
+    // Ensure columnWidths has enough elements to read from
+    // Ensure result has enough capacity for totalColumns + 1 (starts + total width right edge)
+    
+    assert((int)columnWidths.size() >= totalColumns && "columnWidths size smaller than totalColumns");
+
+    result.assign(totalColumns + 1, 0.0f);   // important to set it to 0, or the garbage values will cascade
     for (int column = 0; column < totalColumns; column++) {
-        columnStarts[column + 1] = columnStarts[column] + columnWidths[column];
+        result[column + 1] = result[column] + columnWidths[column];
     }
-    return columnStarts;
+    return;
 }
 
 inline void DEBUGPrintFocusedItems(App& app){
