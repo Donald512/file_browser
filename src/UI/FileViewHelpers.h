@@ -48,12 +48,12 @@ inline int ComputeGridColumns(f32 availW, f32 cellW){
     return ExploraMax(1, columns);
 }
 
-inline GridVisibleRows LayoutGrid(size_t itemCount, f32 cellW, f32 cellH){
+inline GridVisibleRows LayoutGrid(size_t itemCount, f32 availWidth, f32 cellW, f32 cellH){
     GridVisibleRows g{};
     if (itemCount == 0 || cellW <= 0.0f) return g;
-    cellH = (std::max)(cellH, 1.0f);
+    cellH = ExploraMax(cellH, 1.0f);
     
-    f32 availWidth = ImGui::GetContentRegionAvail().x;
+
     g.numColumns = ComputeGridColumns(availWidth, cellW);
     g.totalRows = ExploraCeil(itemCount, g.numColumns);
     
@@ -136,11 +136,12 @@ inline f32 GetGridItemStride(ViewMode mode, f32 dpi, f32 userIconSize){
     }
 }
 
-inline int ComputeListRowsPerColumn(f32 dpi, f32 yGap){
+inline int ComputeListRowsPerColumn(f32 dpi, f32 yGap, f32 availY){
     GridViewParams p = GetGridParamsForMode(ViewMode::List);
     const f32 rowStride = (p.height * dpi) + yGap;
     const ImGuiStyle& style = ImGui::GetStyle();
-    const f32 availY = ImGui::GetWindowSize().y - (style.WindowPadding.y * 2.0f) - style.ScrollbarSize;
+    // const f32 availY = ImGui::GetWindowSize().y - (style.WindowPadding.y * 2.0f) - style.ScrollbarSize;  // wrong, ugly
+    // const f32 availY = ImGui::GetContentRegionAvail().y; // correct
  
     int rows = (int)(availY / rowStride);
     return ExploraMax(1, rows);
@@ -212,8 +213,8 @@ inline ItemInteraction HandleItemInteraction(App& app, const DirParent& parent, 
         if (isShift && selState.anchorVisualIndex != -1){
 
             // determine index boundaries regardless of click direction, (up or down)
-            int start = (std::min)(selState.anchorVisualIndex, visualIndex);
-            int end   = (std::max)(selState.anchorVisualIndex, visualIndex);
+            int start = ExploraMin(selState.anchorVisualIndex, visualIndex);
+            int end   = ExploraMax(selState.anchorVisualIndex, visualIndex);
 
             if (!isCtrl){   // if ctrl isnt held, wipe the current selection first, ctrl + shift allows expanding an existing selection
                 selState.selectedHashes.clear(); // Clear unless Ctrl+Shift
@@ -553,7 +554,7 @@ FileviewLayout GetFileviewLayoutForMode(ViewMode mode, f32 dpi) {
             break;
         }
         case ViewMode::Tiles: {
-            layout.xGap = 8.0f * dpi; layout.yGap = 4.0f * dpi; layout.padX = 16.0f * dpi; layout.cellWidth = 250.0f * dpi; layout.cellHeight = 52.0f * dpi; layout.iconSize = layout.cellHeight * 0.7f;
+            layout.xGap = 8.0f * dpi; layout.yGap = 4.0f * dpi; layout.padX = 16.0f * dpi; layout.padY = 12.0f * dpi; layout.cellWidth = 250.0f * dpi; layout.cellHeight = 52.0f * dpi; layout.iconSize = layout.cellHeight * 0.7f;
             break;
         }
         default:
@@ -610,7 +611,8 @@ inline void KeyboardNavigationInteraction(f32 dpi, App& app){
 
     if (mode == ViewMode::List){
         FileviewLayout layout = GetFileviewLayoutForMode(ViewMode::List, dpi);
-        rowsPerColumn = ComputeListRowsPerColumn(dpi, layout.yGap);
+        f32 availHeight = ImGui::GetContentRegionAvail().y - layout.padY * 2;
+        rowsPerColumn = ComputeListRowsPerColumn(dpi, layout.yGap, availHeight);
 
     } 
     else if (mode == ViewMode::Details) columns = 1;
@@ -623,7 +625,10 @@ inline void KeyboardNavigationInteraction(f32 dpi, App& app){
     if (ImGui::IsKeyPressed(ImGuiKey_F2)){
         if (focusedItemIndex >= 0 && selState.selectedHashes.size() == 1){
             auto actualItemIndex = listing.refs[focusedItemIndex];
+
             renameState.renamingItemId = listing.PChildren->hashes[actualItemIndex];
+            vs.scrollToItemId = listing.PChildren->hashes[actualItemIndex];
+
             strncpy(renameState.renameBuffer, listing.PChildren->GetChildName(actualItemIndex), sizeof(renameState.renameBuffer) - 1);
             renameState.renameBuffer[sizeof(renameState.renameBuffer) - 1] = '\0';  
 

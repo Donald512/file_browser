@@ -68,6 +68,7 @@ class Tab{
         }
     }
 
+    void ClearViewState();
     void ClearSelState();
     void ClearRenameState();
     
@@ -80,6 +81,7 @@ class Tab{
     CtxMenuState ctxState;
     RenameState renameState;
     NewState newState;
+
     
     private:
         DirectoryManager* dirManager;
@@ -132,6 +134,7 @@ inline bool Tab::GoTo(PCIDLIST_ABSOLUTE dest, Actions action){
     selState.selectedHashes.clear();
 
     dir.ClearForNav();
+    ClearViewState();
     ClearSelState();
     ClearRenameState();
 
@@ -171,6 +174,13 @@ inline void Tab::DeselectAllItemsAndSelect(u64 i){
 inline void Tab::AddItemToSelection(u64 i){    selState.selectedHashes.insert(i);}
 inline void Tab::DeselectItem(u64 i){    selState.selectedHashes.erase(i);}
 inline void Tab::DeselectAllItems(){    selState.selectedHashes.clear();}
+
+inline void Tab::ClearViewState(){
+    viewState.columnStarts.clear();
+    viewState.columnWidths.clear();
+    viewState.scrollToItemId = std::nullopt;
+    viewState.scrollY = 0;
+}
 
 inline void Tab::ClearSelState(){
     // selState.justNavigated = false;

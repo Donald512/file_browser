@@ -50,17 +50,24 @@ static void RenderGridView(f32 dpi, App& app, DirListing& listing){
     const f32 framePadY = framePadX;
     const f32 totalFramePadX = framePadX * 2;
     const f32 cellH = imageSize + yTextPadding + (maxLines * lineHeight) + yTextPadding + 2 * framePadY;
-
+    
     const f32 cellStrideX = itemWidth + layout.xGap;
     const f32 cellStrideY = cellH + layout.yGap;
     
+    ImVec2 windowPadding(layout.padX, layout.padY);    
+    // ImVec2 windowPadding(16, layout.padY);    
 
-    int focusedItemIndex = ResolvePendingScrollItemIndex(vs, listing);
+    f32 availWidth = ImGui::GetContentRegionAvail().x - windowPadding.x * 2.0f;
+    availWidth = ExploraMax(availWidth, cellStrideX);
+    
+    ImGui::SetCursorPos(ImGui::GetCursorPos() + windowPadding);
 
-    GridVisibleRows grid = LayoutGrid(listing.refs.size(), cellStrideX, cellStrideY);   // Also gets and Saves screen start Pos before dummy 
+    const int focusedItemIndex = ResolvePendingScrollItemIndex(vs, listing);
+    GridVisibleRows grid = LayoutGrid(listing.refs.size(), availWidth, cellStrideX, cellStrideY);   // Also gets and Saves screen start Pos before dummy 
     ScrollToFocusedRow(focusedItemIndex, listing.refs.size(), grid.numColumns, cellStrideY, 0);
-    const ImVec2 fullVirtualContentSize (ImGui::GetContentRegionAvail().x, grid.totalRows * cellStrideY);
-    ImGui::Dummy(ImVec2(fullVirtualContentSize));   // this reserves a non interactive region to keep ImGui's cursor in sync
+    const ImVec2 constraintVirtualContentSize (availWidth, grid.totalRows * cellStrideY);
+    
+    ImGui::Dummy(constraintVirtualContentSize);   // this reserves a non interactive region to keep ImGui's cursor in sync
     
     ImGui::SetCursorScreenPos(grid.screenStartPos);    // Go back to start
 
@@ -91,7 +98,6 @@ static void RenderGridView(f32 dpi, App& app, DirListing& listing){
                 ImVec2(textX, textY), 
                 ImVec2(textX, textY) + ImVec2(textMaxWidth, totalTextHeight)
             );
-            // const ImRect textRect(ImVec2(textX, textY), ImVec2(textX + itemWidth - framePadX, textY + totalTextHeight));
             DrawItemText(app.gfx.hwnd, dl, activeTab, listing.dir.parent, child, textRect, TextRenderMode::WrappedCentered, maxLines);
         }
     }
@@ -115,11 +121,19 @@ static void RenderSmallView(f32 dpi, App& app, DirListing& listing){
     const f32 cellStrideX = layout.cellWidth + layout.xGap; 
     const f32 cellStrideY = layout.cellHeight + layout.yGap;
     
+    ImVec2 windowPadding(layout.padX, layout.padY);    
+
+    f32 availWidth = ImGui::GetContentRegionAvail().x - windowPadding.x * 2.0f;
+    availWidth = ExploraMax(availWidth, cellStrideX);
+
+    ImGui::SetCursorPos(ImGui::GetCursorPos() + windowPadding);
 
     const int focusedItemIndex = ResolvePendingScrollItemIndex(vs, listing);
-    GridVisibleRows grid = LayoutGrid(listing.refs.size(), cellStrideX, cellStrideY);
+    GridVisibleRows grid = LayoutGrid(listing.refs.size(), ImGui::GetContentRegionAvail().x, cellStrideX, cellStrideY);
     ScrollToFocusedRow(focusedItemIndex, listing.refs.size(), grid.numColumns, cellStrideY, 0);
     const ImVec2 fullVirtualContentSize (ImGui::GetContentRegionAvail().x, grid.totalRows * cellStrideY);
+    const ImVec2 constraintVirtualContentSize (availWidth, grid.totalRows * cellStrideY);
+
     ImGui::Dummy(ImVec2(fullVirtualContentSize));
 
     ImGui::SetCursorPos(grid.screenStartPos);
@@ -149,7 +163,7 @@ static void RenderSmallView(f32 dpi, App& app, DirListing& listing){
     }
 }
 
-static void RenderListViewContent(f32 dpi, App& app, DirListing& listing){
+static void RenderListView(f32 dpi, App& app, DirListing& listing){
     ImGuiWindow* window = ImGui::GetCurrentWindow();
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
@@ -160,16 +174,23 @@ static void RenderListViewContent(f32 dpi, App& app, DirListing& listing){
     const auto layout = GetFileviewLayoutForMode(ViewMode::List, dpi);
 
     const f32 rowStride = layout.cellHeight + layout.yGap;
-
+    
     const f32 minColWidth = 120.0f * dpi;
     const f32 maxColWidth = layout.cellWidth;
 
-    const int rowsPerColumn = ComputeListRowsPerColumn(dpi, layout.yGap);
+    ImVec2 windowPadding(layout.padX, layout.padY);    
+
+    f32 availHeight = ImGui::GetContentRegionAvail().y - windowPadding.y * 2.0f;
+    availHeight = ExploraMax(availHeight, rowStride);
+
+    ImGui::SetCursorPos(ImGui::GetCursorPos() + windowPadding);
+    
+    const int rowsPerColumn = ComputeListRowsPerColumn(dpi, layout.yGap, availHeight);
     const int totalItems = (int)listing.refs.size();
     if (totalItems == 0) return;
-
+    
     const int totalColumns = ExploraCeil(totalItems, rowsPerColumn);
-
+    
     const f32 basePadding = layout.iconSize + (layout.xGap * 3.0f);
     CalculateColumnWidthsForListView(basePadding, totalColumns, minColWidth, maxColWidth, rowsPerColumn, totalItems, listing, app, vs.columnWidths);
     
@@ -208,7 +229,7 @@ static void RenderListViewContent(f32 dpi, App& app, DirListing& listing){
             auto child = listing.PChildren->GetItem(listing.refs[currentIndex], app.typeStore);
 
             ImGui::PushID(currentIndex);
-            ImGui::SetCursorPos(ImVec2(currentColOffset, (f32)row * rowStride));
+            ImGui::SetCursorPos(ImVec2(currentColOffset, (f32)row * rowStride) + windowPadding);
             const ImVec2 cellScreenPos = ImGui::GetCursorScreenPos();
 
             const ImRect fullRect(cellScreenPos, cellScreenPos + ImVec2(currentColWidth - layout.xGap, layout.cellHeight));
@@ -240,7 +261,11 @@ static void RenderDetailsView(f32 dpi, App& app, DirListing& listing){
 
     ImGuiTableFlags flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | ImGuiTableFlags_PadOuterX | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_NoBordersInBody | ImGuiTableFlags_ScrollY;
  
-    ImVec2 tableSize(0.0f, ImGui::GetContentRegionAvail().y);
+    ImVec2 windowPadding(layout.padX, layout.padY);
+    ImGui::SetCursorPos(ImGui::GetCursorPos() + windowPadding);
+
+    ImVec2 tableSize(ImGui::GetContentRegionAvail() - windowPadding);
+    tableSize.x = ImMax(tableSize.x, 1.0f);     tableSize.y = ImMax(tableSize.y, 1.0f);
         
     ImGui::PushStyleColor(ImGuiCol_TableHeaderBg, IM_COL32(0, 0, 0, 0));
     ImGui::PushStyleColor(ImGuiCol_TableBorderLight,  IM_COL32(0, 0, 0, 0));
@@ -371,6 +396,11 @@ static void RenderTilesView(f32 dpi, App& app, DirListing& listing){
 
     const auto layout = GetFileviewLayoutForMode(ViewMode::Tiles, dpi);
 
+    auto& activeTab = app.window.GetActiveTab();
+    auto& renameState = activeTab.renameState;
+
+    FileViewState& vs = activeTab.viewState;
+
     const f32 lineHeight = ImGui::GetTextLineHeight();
     const ImU32 textCol = Theme::Current.palette.Text;
     const ImU32 mutedCol = Theme::Current.palette.TextMuted;
@@ -378,18 +408,18 @@ static void RenderTilesView(f32 dpi, App& app, DirListing& listing){
     const f32 cellStrideX = layout.cellWidth + layout.xGap;
     const f32 cellStrideY = layout.cellHeight + layout.yGap;
 
-    auto& activeTab = app.window.GetActiveTab();
-    auto& renameState = activeTab.renameState;
+    ImVec2 windowPadding(layout.padX, layout.padY);    
+    f32 availWidth = ImGui::GetContentRegionAvail().x - windowPadding.x * 2.0f;
+    availWidth = ExploraMax(availWidth, cellStrideX);
+    
+    ImGui::SetCursorPos(ImGui::GetCursorPos() + windowPadding);
 
-    FileViewState& vs = activeTab.viewState;
     int focusedItemIndex = ResolvePendingScrollItemIndex(vs, listing);
-
-
-    GridVisibleRows grid = LayoutGrid(listing.refs.size(), cellStrideX, cellStrideY); 
+    GridVisibleRows grid = LayoutGrid(listing.refs.size(),  ImGui::GetContentRegionAvail().x, cellStrideX, cellStrideY); 
     ScrollToFocusedRow(focusedItemIndex, listing.refs.size(), grid.numColumns, cellStrideY, 0);
 
-    const ImVec2 fullVirtualContentSize (ImGui::GetContentRegionAvail().x, grid.totalRows * cellStrideY);
-    ImGui::Dummy(ImVec2(fullVirtualContentSize));
+    const ImVec2 constraintVirtualContentSize (availWidth, grid.totalRows * cellStrideY);
+    ImGui::Dummy(constraintVirtualContentSize);  
 
     ImGui::SetCursorScreenPos(grid.screenStartPos);
 
@@ -468,7 +498,7 @@ void RenderFileGrid(f32 dpi, App& app){
         ImGuiWindowFlags windowFlags = ImGuiWindowFlags_HorizontalScrollbar;
         if (ImGui::BeginChild("FileViewList", ImVec2(0, 0), childFlags, windowFlags)){
             KeyboardNavigationInteraction(dpi, app);
-            RenderListViewContent(dpi, app, listing);
+            RenderListView(dpi, app, listing);
         }
         ImGui::EndChild();
     } else {
