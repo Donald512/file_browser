@@ -9,10 +9,10 @@
 #include <vector>
 
 #include "WinFramework.h"
-#include "ImGuiHelpers.h"
-#include "UIglobals.h"
+#include "ImGuiHelpers.h" 
+#include "UIglobals.h" 
 #include "theme.h"
-// #include "iconRegular.h"
+// #include "iconRegular.h" 
 #include "TypenameManager.h"
 #include "CtxMenu.h"
 #include "CtxMenuUI.h"
@@ -529,42 +529,3 @@ void RenderFileGrid(f32 dpi, App& app){
     }
     PopMenuTheme();
 }
-
-// 2.25 active yeast
-// 2 tbsp warm water
-// wait 10 mins
-
-// 3.5 cups 
-// 0.25 brown sugar
-
-// 1 tsp salt
-
-// add yeast mixture
-
-// Stir
-
-// 1 tsp vanilla
-
-// 1 egg dont got egg
-
-// dont got any juice
-
-// mix and knead until smooth and non sticky
-
-// 0.25 unsalted butter
-
-// take floured surface
-
-// knead into ball
-
-// put in bowl, with some oil on it and seal it for 1 - 2 hours
-
-// deflate, cut into shares
-
-// i cant do the pinch and fold method, so i will roll it into a smooth ball, should prolly leave to rise tho, since im rolling 
-
-// leave for 30 - 60 mins 
-
-// 350 degrees for 20 - 25 mins
-
-// put on rack and let sit for 15 mins

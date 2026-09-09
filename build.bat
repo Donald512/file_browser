@@ -3,3 +3,4 @@
 
 set NINJA_STATUS=[%%e s] 
 cmake --build build
+@REM cmake --build build > build.log 2>&1
