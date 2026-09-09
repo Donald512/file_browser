@@ -4,6 +4,7 @@
 #include "App.h"
 #include "deviceCreation.h"
 #include "imgui_render_boilerplate.h"
+#include "Enum.h"
 
 #include "MainApp.h"
 
@@ -49,6 +50,9 @@ int main (void){
 
 
     app.gfx.hwnd = CreateMyOSWindow(wc, &app);
+    
+    app.newEntries = BuildShellNewEntries();
+    
     if (!InitializeGraphicsAPI(app.gfx.hwnd, wc, app.gfx.d3dDevice.GetAddressOf(),app.gfx.d3dContext.GetAddressOf(),app.gfx.swapChain.GetAddressOf(), app.gfx.renderTargetView.GetAddressOf())) return 1;
 
     app.textures.Init(app.gfx.d3dDevice.Get(), app.gfx.d3dContext.Get());

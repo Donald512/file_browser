@@ -11,6 +11,7 @@
 #include <propkey.h>
 #include "Shell.h"
 #include <propvarutil.h>
+#include "App.h"
 
 
 #include <wrl/client.h>
@@ -339,5 +340,149 @@ namespace WShell{
             ShowRenameError(hwnd, realErr);
         }
     }
+
+    // Resolves template path relative to ShellNew or Templates directory
+    static std::wstring ResolveTemplatePath(const std::wstring& fn, const std::wstring& winShellNew) {
+        if (fn.empty()) return L"";
+        if (fn.size() > 2 && (fn[1] == L':' || (fn[0] == L'\\' && fn[1] == L'\\'))) {
+            return fn; // Absolute path
+        }
+
+        // 1. Check %windir%\ShellNew
+        std::wstring path = winShellNew + L"\\" + fn;
+        if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES) return path;
+
+        // 2. Check %APPDATA%\Microsoft\Windows\Templates
+        wchar_t appData[MAX_PATH];
+        if (GetEnvironmentVariableW(L"APPDATA", appData, MAX_PATH) > 0) {
+            path = std::wstring(appData) + L"\\Microsoft\\Windows\\Templates\\" + fn;
+            if (GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES) return path;
+        }
+
+        return winShellNew + L"\\" + fn;
+    }
+
+    // Retrieves friendly display name
+    static std::wstring GetShellNewDisplayName(HKEY hNew, const std::wstring& ext) {
+        wchar_t buf[512] = { 0 };
+        DWORD bufSize = sizeof(buf);
+
+        // 1. Try reading indirect resource string from ItemName or MenuText
+        if (RegQueryValueExW(hNew, L"ItemName", nullptr, nullptr, (LPBYTE)buf, &bufSize) == ERROR_SUCCESS ||
+            RegQueryValueExW(hNew, L"MenuText", nullptr, nullptr, (LPBYTE)buf, &bufSize) == ERROR_SUCCESS) {
+            wchar_t resolved[256] = { 0 };
+            if (SHLoadIndirectString(buf, resolved, ARRAYSIZE(resolved), nullptr) == S_OK && resolved[0] != L'\0') return resolved;
+        }
+
+        // 2. AssocQueryString for ASSOCSTR_FRIENDLYDOCNAME
+        DWORD cch = ARRAYSIZE(buf);
+        if (AssocQueryStringW(ASSOCF_NONE, ASSOCSTR_FRIENDLYDOCNAME, ext.c_str(), nullptr, buf, &cch) == S_OK && buf[0] != L'\0') return buf;
+
+        // 3. Fallback
+        return ext.empty() ? L"File" : ext;
+    }
+    
+    // Extracts template/data from an opened ShellNew key
+    bool ProcessShellNewKey(HKEY hNew, const std::wstring& ext, const std::wstring& shellNewDir, ShellNewEntry& entry) {
+        bool hasFile = (RegQueryValueExW(hNew, L"FileName", nullptr, nullptr, nullptr, nullptr) == ERROR_SUCCESS);
+        bool hasData = (RegQueryValueExW(hNew, L"Data", nullptr, nullptr, nullptr, nullptr) == ERROR_SUCCESS);
+        bool hasNull = (RegQueryValueExW(hNew, L"NullFile", nullptr, nullptr, nullptr, nullptr) == ERROR_SUCCESS);
+        bool hasCmd  = (RegQueryValueExW(hNew, L"Command", nullptr, nullptr, nullptr, nullptr) == ERROR_SUCCESS);
+
+        // If it has no creation method, it's not a valid ShellNew item
+        if (!hasFile && !hasData && !hasNull && !hasCmd) return false;
+
+        // Skip Command entries (installer launchers), except .lnk shortcuts
+        if (hasCmd && ext != L".lnk") return false;
+
+        entry.ext = ext;
+        entry.baseName = GetShellNewDisplayName(hNew, ext);
+
+        if (hasFile) {
+            DWORD sz = 0;
+            if (RegQueryValueExW(hNew, L"FileName", nullptr, nullptr, nullptr, &sz) == ERROR_SUCCESS && sz > 0) {
+                std::wstring fn(sz / sizeof(wchar_t), L'\0');
+                RegQueryValueExW(hNew, L"FileName", nullptr, nullptr, (LPBYTE)fn.data(), &sz);
+                while (!fn.empty() && fn.back() == L'\0') fn.pop_back();
+                entry.templatePath = ResolveTemplatePath(fn, shellNewDir);
+            }
+        }
+
+        if (hasData) {
+            DWORD sz = 0;
+            if (RegQueryValueExW(hNew, L"Data", nullptr, nullptr, nullptr, &sz) == ERROR_SUCCESS && sz > 0) {
+                entry.data.resize(sz);
+                RegQueryValueExW(hNew, L"Data", nullptr, nullptr, entry.data.data(), &sz);
+            }
+        }
+
+        return true;
+    }
+
+    void CreateShellNewItem(App& app, PCIDLIST_ABSOLUTE parentPidl, const ShellNewEntry& e) {
+        // Special case: Shortcut (.lnk) launches the native Windows wizard
+        if (e.ext == L".lnk") {
+            wchar_t folderPath[MAX_PATH];
+            if (SHGetPathFromIDListW(parentPidl, folderPath)) {
+                std::wstring cmd = L"rundll32.exe appwiz.cpl,NewLinkHere " + std::wstring(folderPath);
+                STARTUPINFOW si{ sizeof(si) };
+                PROCESS_INFORMATION pi{};
+                if (CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+                    CloseHandle(pi.hThread);
+                    CloseHandle(pi.hProcess);
+                }
+            }
+            return;
+        }
+
+        ComPtr<IShellItem> psiParent;   
+        if (FAILED(SHCreateItemFromIDList(parentPidl, IID_PPV_ARGS(&psiParent)))) return;
+        
+        ComPtr<IFileOperation> pfo;     
+        if (FAILED(CoCreateInstance(CLSID_FileOperation, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&pfo)))) return;
+        pfo->SetOperationFlags(FOF_SILENT | FOF_NOCONFIRMATION | FOFX_SHOWELEVATIONPROMPT | FOF_RENAMEONCOLLISION | FOF_ALLOWUNDO);
+
+        RenameProgressSink sink; 
+        DWORD cookie = 0; 
+        pfo->Advise(&sink, &cookie);
+
+        // Format the Explorer-style default name:
+        // e.g. "New folder", "New Text Document.txt", "New Microsoft Word Document.docx"
+        std::wstring fullName;
+        if (e.isFolder) {
+            fullName = L"New folder";
+        } else if (e.baseName.rfind(L"New ", 0) == 0) {
+            fullName = e.baseName + e.ext;
+        } else {
+            fullName = L"New " + e.baseName + e.ext;
+        }
+
+        HRESULT hr;
+        if (e.isFolder) {
+            hr = pfo->NewItem(psiParent.Get(), FILE_ATTRIBUTE_DIRECTORY, fullName.c_str(), nullptr, nullptr);
+        } else {
+            const wchar_t* templatePathPtr = e.templatePath.empty() ? nullptr : e.templatePath.c_str();
+            hr = pfo->NewItem(psiParent.Get(), FILE_ATTRIBUTE_NORMAL, fullName.c_str(), templatePathPtr, nullptr);
+        }
+        
+        if (SUCCEEDED(hr) && SUCCEEDED(pfo->PerformOperations()) && SUCCEEDED(sink.result)) {
+            if (!e.data.empty()) { // Write binary blob if needed
+                HANDLE h = CreateFileW(sink.createdFullPath.c_str(), GENERIC_WRITE, 0, nullptr, TRUNCATE_EXISTING, 0, nullptr);
+                if (h != INVALID_HANDLE_VALUE) { 
+                    DWORD w; 
+                    WriteFile(h, e.data.data(), (DWORD)e.data.size(), &w, nullptr); 
+                    CloseHandle(h); 
+                }
+            }
+
+            // Trigger inline rename on the newly created item
+            auto& tab = app.window.GetActiveTab();
+            tab.newState.expectingNewItem = true;
+            tab.newState.itemHash = HashIdentityString(sink.createdFullPath);
+            tab.newState.itemName = Str::WideToString(sink.createdName); 
+        }
+        pfo->Unadvise(cookie);
+    }
+
 }
 

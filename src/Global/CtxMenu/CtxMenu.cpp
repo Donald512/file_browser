@@ -44,18 +44,23 @@ To steal the icon:
 #include "Item.h"
 #include "App.h"
 
-void ExecuteContextMenuCommand(App& app, ComPtr<IContextMenu> menu, PCIDLIST_ABSOLUTE parentPidl, std::vector<PCITEMID_CHILD>& childPidls, UINT idOffset, HWND ownerHwnd){
+static bool MatchesNewEntry(const ShellNewEntry& e, const std::string& itemText, const std::string& verb);
+static 
+void CreateShellNewItem(App& app, PCIDLIST_ABSOLUTE parentPidl, const ShellNewEntry& e);
+
+
+void ExecuteContextMenuCommand(App& app, ComPtr<IContextMenu> menu, PCIDLIST_ABSOLUTE parentPidl, std::vector<PCITEMID_CHILD>& childPidls, UINT idOffset, HWND ownerHwnd, const std::string& itemText){
     if (!menu) return;
 
     // Ask the shell what verb this ID represents (e.g., "copy", "cut", "open")
     char verbBuf[256] = {};
     bool gotVerb = SUCCEEDED(menu->GetCommandString(idOffset, GCS_VERBA, nullptr, verbBuf, sizeof(verbBuf)));
+    std::string verb = gotVerb ? verbBuf : "";
+    std::transform(verb.begin(), verb.end(), verb.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+    });
 
     if (gotVerb) {
-        std::string verb(verbBuf);
-        std::transform(verb.begin(), verb.end(), verb.begin(), [](unsigned char c) {
-            return static_cast<char>(std::tolower(c));
-        });
         std::cout << verb << std::endl;
         for (auto pidl : childPidls){
             PIDLIST_ABSOLUTE fullPidl = GetFullPidl(parentPidl, pidl);
@@ -94,37 +99,13 @@ void ExecuteContextMenuCommand(App& app, ComPtr<IContextMenu> menu, PCIDLIST_ABS
             }
             return;
         }
-        else if (verb == "newfolder"){
-            ComPtr<IShellItem> psiParent;
-            if (FAILED(SHCreateItemFromIDList(parentPidl, IID_PPV_ARGS(&psiParent)))) return;
-            ComPtr<IFileOperation> pfo;
-            if (FAILED(CoCreateInstance(CLSID_FileOperation, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&pfo)))) return;
+    }
 
-            // FOF_SILENT = no "Creating..." progress UI. 
-            // FOF_NOCONFIRMATION = no "Are you sure?" dialogs.
-            // FOFX_SHOWELEVATIONPROMPT = pops up UAC if creating in C:\Program Files
-            // FOF_RENAMEONCOLLISION lets Windows automatically append " (2)", " (3)", etc.
-            pfo->SetOperationFlags(FOF_SILENT | FOF_NOCONFIRMATION | FOFX_SHOWELEVATIONPROMPT | FOF_RENAMEONCOLLISION | FOF_ALLOWUNDO);
-
-            // Make the name unique
-            std::wstring baseName = L"New folder";
-            RenameProgressSink sink;
-            DWORD dwCookie = 0;
-            pfo->Advise(&sink, &dwCookie);  //Attach sink to listen for creation events
-
-            if (SUCCEEDED(pfo->NewItem(psiParent.Get(), FILE_ATTRIBUTE_DIRECTORY, baseName.c_str(), nullptr, nullptr))){
-                if (SUCCEEDED(pfo->PerformOperations()) && SUCCEEDED(sink.result)){
-
-                    u64 createdHash = HashIdentityString(sink.createdFullPath);
-                    auto& activeTab = app.window.GetActiveTab();
-
-                    activeTab.newState.expectingNewItem = true;
-                    activeTab.newState.itemHash = createdHash;
-                    activeTab.newState.itemName = Str::WideToString(sink.createdName);
-                }
-            }
-            pfo->Unadvise(dwCookie);
-            return;
+    // CHECK "NEW" ITEMS (Matches by verb or menu text)
+    for (const auto& entry : app.newEntries) {
+        if (MatchesNewEntry(entry, itemText, verb)) {
+            CreateShellNewItem(app, parentPidl, entry);
+            return; // Done! Handled via IFileOperation with Undo, UAC, and Renaming
         }
     }
 
@@ -139,7 +120,88 @@ void ExecuteContextMenuCommand(App& app, ComPtr<IContextMenu> menu, PCIDLIST_ABS
     (void)res;
 }
 
+void CreateShellNewItem(App& app, PCIDLIST_ABSOLUTE parentPidl, const ShellNewEntry& e) {
+    // Special case: Shortcut (.lnk) launches the native Windows wizard
+    if (e.ext == L".lnk") {
+        wchar_t folderPath[MAX_PATH];
+        if (SHGetPathFromIDListW(parentPidl, folderPath)) {
+            std::wstring cmd = L"rundll32.exe appwiz.cpl,NewLinkHere " + std::wstring(folderPath);
+            STARTUPINFOW si{ sizeof(si) };
+            PROCESS_INFORMATION pi{};
+            if (CreateProcessW(nullptr, cmd.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+                CloseHandle(pi.hThread);
+                CloseHandle(pi.hProcess);
+            }
+        }
+        return;
+    }
+
+    ComPtr<IShellItem> psiParent;   
+    if (FAILED(SHCreateItemFromIDList(parentPidl, IID_PPV_ARGS(&psiParent)))) return;
     
+    ComPtr<IFileOperation> pfo;     
+    if (FAILED(CoCreateInstance(CLSID_FileOperation, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&pfo)))) return;
+    pfo->SetOperationFlags(FOF_SILENT | FOF_NOCONFIRMATION | FOFX_SHOWELEVATIONPROMPT | FOF_RENAMEONCOLLISION | FOF_ALLOWUNDO);
+
+    RenameProgressSink sink; 
+    DWORD cookie = 0; 
+    pfo->Advise(&sink, &cookie);
+
+    // Format the Explorer-style default name:
+    // e.g. "New folder", "New Text Document.txt", "New Microsoft Word Document.docx"
+    std::wstring fullName;
+    if (e.isFolder) fullName = L"New folder";
+    else if (e.baseName.rfind(L"New ", 0) == 0) fullName = e.baseName + e.ext;
+    else fullName = L"New " + e.baseName + e.ext;
+
+    HRESULT hr;
+    if (e.isFolder) hr = pfo->NewItem(psiParent.Get(), FILE_ATTRIBUTE_DIRECTORY, fullName.c_str(), nullptr, nullptr);
+    else {
+        const wchar_t* templatePathPtr = e.templatePath.empty() ? nullptr : e.templatePath.c_str();
+        hr = pfo->NewItem(psiParent.Get(), FILE_ATTRIBUTE_NORMAL, fullName.c_str(), templatePathPtr, nullptr);
+    }
+    
+    if (SUCCEEDED(hr) && SUCCEEDED(pfo->PerformOperations()) && SUCCEEDED(sink.result)) {
+        if (!e.data.empty()) { // Write binary blob if needed
+            HANDLE h = CreateFileW(sink.createdFullPath.c_str(), GENERIC_WRITE, 0, nullptr, TRUNCATE_EXISTING, 0, nullptr);
+            if (h != INVALID_HANDLE_VALUE) { 
+                DWORD w; 
+                WriteFile(h, e.data.data(), (DWORD)e.data.size(), &w, nullptr); 
+                CloseHandle(h); 
+            }
+        }
+
+        // Trigger inline rename on the newly created item
+        auto& tab = app.window.GetActiveTab();
+        tab.newState.expectingNewItem = true;
+        tab.newState.itemHash = HashIdentityString(sink.createdFullPath);
+        tab.newState.itemName = Str::WideToString(sink.createdName); 
+    }
+    pfo->Unadvise(cookie);
+}
+
+// Helper function to match the clicked menu item to a ShellNewEntry
+static bool MatchesNewEntry(const ShellNewEntry& e, const std::string& itemText, const std::string& verb) {
+    if (e.isFolder && (verb == "newfolder" || _stricmp(itemText.c_str(), "Folder") == 0 || _stricmp(itemText.c_str(), "New folder") == 0)) {
+        return true;
+    }
+    if (e.ext == L".lnk" && (verb == "newlink" || _stricmp(itemText.c_str(), "Shortcut") == 0 || _stricmp(itemText.c_str(), "New shortcut") == 0)) {
+        return true;
+    }
+
+    std::string baseNameA = Str::WideToString(e.baseName);
+    if (_stricmp(itemText.c_str(), baseNameA.c_str()) == 0) {
+        return true;
+    }
+
+    // Fallback for ZIP archives (sometimes labeled "WinRAR ZIP archive" vs "Compressed (zipped) Folder")
+    if (e.ext == L".zip" && (itemText.find("ZIP") != std::string::npos || itemText.find("zip") != std::string::npos)) {
+        return true;
+    }
+
+    return false;
+}
+
 // Helper function: Creates an invisible canvas, tricking IContextMenu2/3
 // into drawing its owner-drawn icon into it, then converts it to HBITMAP.
 // This function sends the fake WM_MEASUREITEM and WM_DRAWITEM messages to trick the shll extension to draw directly into our RAM instead of the screen

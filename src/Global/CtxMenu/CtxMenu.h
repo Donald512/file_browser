@@ -83,3 +83,5 @@ void ExecuteContextMenuCommand(App& app, ComPtr<IContextMenu> menu, PCIDLIST_ABS
 std::vector<ContextMenuItem> GetBackgroundContextMenu(ComPtr<IContextMenu>& outMenu, PCIDLIST_ABSOLUTE folderPidl, ID3D11Device* dev);
 
 std::vector<ContextMenuItem> GetContextMenu(ComPtr<IContextMenu>& outActiveMenu, PCIDLIST_ABSOLUTE parentPidl, std::vector<PCITEMID_CHILD>& childPidls, HWND hwnd, ID3D11Device* pDevice);
+
+void ExecuteContextMenuCommand(App& app, ComPtr<IContextMenu> menu, PCIDLIST_ABSOLUTE parentPidl, std::vector<PCITEMID_CHILD>& childPidls, UINT idOffset, HWND ownerHwnd, const std::string& itemText);

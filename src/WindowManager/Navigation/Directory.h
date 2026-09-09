@@ -128,7 +128,7 @@ inline void Directory::Sort(const DirChildren& children, TypenameStore& typeStor
                 case SortMode::DateModified:
                     cmp = ::CompareFileTime(&a.lastWriteTime, &b.lastWriteTime);
                     break;
-
+                    
                 case SortMode::Type:
                     cmp = _stricmp(a.typeName, b.typeName); 
                     break;

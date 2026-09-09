@@ -9,7 +9,7 @@ void InitializeImGui(HWND hwnd, ID3D11Device* pD3dDevice, ID3D11DeviceContext* p
     ImGui::CreateContext();
 
     
-    ImGuiIO& io = ImGui::GetIO();
+    // ImGuiIO& io = ImGui::GetIO();
     // io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_DockingEnable;     // Enable Keyboard Controls
     // io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
 
@@ -105,13 +105,14 @@ void RenderFrame(App& app){
     app.textures.NextFrame(); 
     ImGui_Backend_NewFrame();
     ImGui::NewFrame();
+
     // ========
     // toggle with F1
-    // static bool showMetrics = false;
-    // static bool showIDStackTool = false;
-    // if (ImGui::IsKeyPressed(ImGuiKey_F1)) showMetrics = !showMetrics;
+    static bool showMetrics = false;
+    static bool showIDStackTool = false;
+    if (ImGui::IsKeyPressed(ImGuiKey_F1)) showMetrics = !showMetrics;
     // if (ImGui::IsKeyPressed(ImGuiKey_F2)) showIDStackTool = !showIDStackTool;
-    // if (showMetrics) ImGui::ShowMetricsWindow();
+    if (showMetrics) ImGui::ShowMetricsWindow();
     // if (showIDStackTool) ImGui::ShowIDStackToolWindow();
     // ========
 

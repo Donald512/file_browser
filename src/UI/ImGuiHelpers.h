@@ -471,7 +471,8 @@ inline void RenderVerticalScrollbar(const char* idStr, ImRect trackRect, ImRect 
 }
 
 
-inline int RenderTextWrappedCenteredEllipsis(ImDrawList* drawList, ImVec2 pos, ImVec2 size, const char* text, const char* textEnd = nullptr, int maxLines = 0) {
+inline int RenderTextWrappedCenteredEllipsis(ImDrawList* drawList, ImRect textRect, const char* text, const char* textEnd = nullptr, int maxLines = 0) {
+    ImVec2 size = textRect.GetSize();
     if (!text || !*text) return 0;
     if (!textEnd) textEnd = text + strlen(text);
 
@@ -499,8 +500,8 @@ inline int RenderTextWrappedCenteredEllipsis(ImDrawList* drawList, ImVec2 pos, I
         // If this is the last line but there's still remaining text, draw with Ellipsis
         if (isLastLine && lineEnd < textEnd) {
             // Calculate starting X to center the line rect
-            ImVec2 linePos(pos.x, pos.y + (lineCount * lineHeight));
-            ImVec2 lineMax(pos.x + size.x, linePos.y + lineHeight);
+            ImVec2 linePos(textRect.Min.x, textRect.Min.y + (lineCount * lineHeight));
+            ImVec2 lineMax(textRect.Max.x, linePos.y + lineHeight);
 
             // Render line with trailing ellipsis (...)
             // void ImGui::RenderTextEllipsis(ImDrawList* draw_list, const ImVec2& pos_min, const ImVec2& pos_max, f32 ellipsis_max_x, const char* text, const char* text_end_full, const ImVec2* text_size_if_known)
@@ -516,10 +517,10 @@ inline int RenderTextWrappedCenteredEllipsis(ImDrawList* drawList, ImVec2 pos, I
 
             // Calculate actual text width of this line to center it
             f32 line_width = font->CalcTextSizeA(fontSize, FLT_MAX, size.x, s, trimEnd).x;
-            f32 centerX = pos.x + (size.x - line_width) * 0.5f;
+            f32 centerX = textRect.Min.x + (size.x - line_width) * 0.5f;
 
             // Draw line
-            drawList->AddText(font, fontSize, ImVec2(centerX, pos.y + (lineCount * lineHeight)), Theme::Current.palette.Text, s, trimEnd);
+            drawList->AddText(font, fontSize, ImVec2(centerX, textRect.Min.y + (lineCount * lineHeight)), Theme::Current.palette.Text, s, trimEnd);
 
             s = lineEnd;
             // Advance past standard line breaks
@@ -591,7 +592,7 @@ inline InputResult RenderAutoResizingInputText(const char* strId, ImVec2 pos, Im
         boxSize = { finalWidth, baseSize.y };
     }
 
-    // 3. The "Select All" Callback (Nuclear option for Multiline)
+    // The "Select All Callback (Nuclear option for Multiline)
     // We check if the widget is NOT currently active. If it's about to become active this frame,
     // the callback will fire and force SelectAll(), then disable itself.
     if (forceFocus) ImGui::SetKeyboardFocusHere();
@@ -637,6 +638,7 @@ inline InputResult RenderAutoResizingInputText(const char* strId, ImVec2 pos, Im
             result = InputResult::Cancelled;
         }
     } 
+
     else if (lostFocus) {
         result = commitOnLostFocus ? InputResult::Committed : InputResult::Cancelled;
     }
@@ -647,4 +649,11 @@ inline InputResult RenderAutoResizingInputText(const char* strId, ImVec2 pos, Im
     ImGui::PopID();
 
     return result;
+}
+
+inline void HandleHorizontalMouseWheelScroll(f32 dpi){
+    if (ImGui::IsWindowHovered() && ImGui::GetIO().MouseWheel != 0.0f){
+        f32 scrollAmount = ImGui::GetIO().MouseWheel * (60.0f * dpi);
+        ImGui::SetScrollX(ImGui::GetScrollX() - scrollAmount);
+    }
 }

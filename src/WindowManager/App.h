@@ -66,6 +66,8 @@ struct App{
     std::vector<AppCommand> commandQueue;
     std::unordered_set<u64> clipBoardCutItems{};
 
+    std::vector<ShellNewEntry> newEntries;
+
 
     void QueueCommand(AppCommand cmd){
         commandQueue.push_back(std::move(cmd));

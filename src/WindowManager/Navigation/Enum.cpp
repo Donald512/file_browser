@@ -10,6 +10,9 @@
 #include <iostream>
 #include <propkey.h>
 #include <propvarutil.h>
+#include <shlwapi.h>
+#include "WinFramework.h"
+#include "Shlwapi.h"
 
 std::vector<DirItem> EnumFolder(PCIDLIST_ABSOLUTE folder, DirItem* parentItem){
     std::vector<DirItem> items;
@@ -325,4 +328,86 @@ std::vector<DirItem> GetOneDriveAccounts(){
 
     RegCloseKey(hKeyRoot);
     return accounts;
+}
+
+std::vector<ShellNewEntry> BuildShellNewEntries() {
+    std::vector<ShellNewEntry> out;
+    out.push_back({ L"", L"Folder", L"", {}, true });
+
+    wchar_t winDir[MAX_PATH];
+    GetWindowsDirectoryW(winDir, MAX_PATH);
+    std::wstring shellNewDir = std::wstring(winDir) + L"\\ShellNew";
+
+    std::unordered_set<std::wstring> seenExts;
+
+    HKEY hcr;
+    if (RegOpenKeyExW(HKEY_CLASSES_ROOT, L"", 0, KEY_READ, &hcr) != ERROR_SUCCESS) {
+        return out;
+    }
+
+    for (DWORD i = 0;; i++) {
+        wchar_t extName[128];
+        DWORD extLen = ARRAYSIZE(extName);
+        if (RegEnumKeyExW(hcr, i, extName, &extLen, nullptr, nullptr, nullptr, nullptr) != ERROR_SUCCESS) break;
+        if (extName[0] != L'.') continue;
+
+        HKEY hExt;
+        if (RegOpenKeyExW(hcr, extName, 0, KEY_READ, &hExt) != ERROR_SUCCESS) continue;
+
+        bool found = false;
+
+        // 1. Check direct HKCR\.ext\ShellNew
+        HKEY hNew;
+        if (RegOpenKeyExW(hExt, L"ShellNew", 0, KEY_READ, &hNew) == ERROR_SUCCESS) {
+            ShellNewEntry entry;
+            if (WShell::ProcessShellNewKey(hNew, extName, shellNewDir, entry)) {
+                if (seenExts.insert(extName).second) {
+                    out.push_back(std::move(entry));
+                    found = true;
+                }
+            }
+            RegCloseKey(hNew);
+        }
+
+        // 2. Check subkeys: HKCR\.ext\<ProgID>\ShellNew (Required for Office: Word, Excel, PowerPoint, Access)
+        if (!found) {
+            for (DWORD j = 0;; j++) {
+                wchar_t subName[128];
+                DWORD subLen = ARRAYSIZE(subName);
+                if (RegEnumKeyExW(hExt, j, subName, &subLen, nullptr, nullptr, nullptr, nullptr) != ERROR_SUCCESS) break;
+                if (_wcsicmp(subName, L"ShellNew") == 0) continue;
+
+                HKEY hSub;
+                if (RegOpenKeyExW(hExt, subName, 0, KEY_READ, &hSub) == ERROR_SUCCESS) {
+                    HKEY hSubNew;
+                    if (RegOpenKeyExW(hSub, L"ShellNew", 0, KEY_READ, &hSubNew) == ERROR_SUCCESS) {
+                        ShellNewEntry entry;
+                        if (WShell::ProcessShellNewKey(hSubNew, extName, shellNewDir, entry)) {
+                            if (seenExts.insert(extName).second) {
+                                out.push_back(std::move(entry));
+                                found = true;
+                            }
+                        }
+                        RegCloseKey(hSubNew);
+                    }
+                    RegCloseKey(hSub);
+                }
+                if (found) break;
+            }
+        }
+
+        RegCloseKey(hExt);
+    }
+    RegCloseKey(hcr);
+
+    // 3. Modern Windows 10/11 Fallbacks for UWP Notepad and Paint
+    // (These don't exist in HKCR registry because they are packaged MSIX apps)
+    if (seenExts.find(L".txt") == seenExts.end()) {
+        out.push_back({ L".txt", L"Text Document", L"", {} });
+    }
+    if (seenExts.find(L".bmp") == seenExts.end()) {
+        out.push_back({ L".bmp", L"Bitmap image", L"", s_blankBmpBytes });
+    }
+
+    return out;
 }

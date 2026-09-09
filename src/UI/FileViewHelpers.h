@@ -1,25 +1,98 @@
 #pragma once
-#include "BasicTypes.h"
-#include <string>
-#include <cstdio>
-#include "Tab.h"
-#include <Windows.h>
-#include "imgui.h"
-#include "imgui_internal.h"
-#include "App.h"
-#include "Types\global.h"
-#include <unordered_set>
-#include "ImGuiHelpers.h"
-#include <algorithm>
 
+#define IMGUI_DEFINE_MATH_OPERATORS
+#include "imgui_internal.h"
+#include "imgui.h"
+#include "ImGuiHelpers.h"
+
+#include "WinFramework.h"
+
+#include <string>
+#include <unordered_set>
+#include <algorithm>
+#include <cstdio>
+
+#include "BasicTypes.h"
+#include "Tab.h"
+#include "App.h"
+#include "global.h"
+
+
+#define ExploraMax(a, b) ((a) > (b) ? (a) : (b))
+#define ExploraMin(a, b) ((a) < (b) ? (a) : (b))
+
+#define ExploraCeil(numerator, denominator) (((numerator) + (denominator) - 1) /  (denominator))
+
+inline f32 CenterX(f32 offsetX, f32 fullWidth, f32 usedWidth) {return offsetX + (fullWidth - usedWidth) * 0.5f;}
+
+// Change selection state to a U64 
 inline bool isFileCutOnClipBoard(std::unordered_set<u64>& clipboardCutItems, u64 hashedPidl){
     return clipboardCutItems.find(hashedPidl) != clipboardCutItems.end();
 }
+struct GridVisibleRows{
+    size_t numColumns;
+    size_t totalRows;
+    int firstRow;   // inclusive
+    int lastRow;    // exclusive
+    ImVec2 screenStartPos;
+};
 
 struct GridViewParams {
     f32 width;
     f32 height;
 };
+
+// Computes the number of columns based on the fullWidth and the cellWidths
+inline int ComputeGridColumns(f32 availW, f32 cellW){
+    int columns = (int)(availW / cellW);
+    return ExploraMax(1, columns);
+}
+
+inline GridVisibleRows LayoutGrid(size_t itemCount, f32 cellW, f32 cellH){
+    GridVisibleRows g{};
+    if (itemCount == 0 || cellW <= 0.0f) return g;
+    cellH = (std::max)(cellH, 1.0f);
+    
+    f32 availWidth = ImGui::GetContentRegionAvail().x;
+    g.numColumns = ComputeGridColumns(availWidth, cellW);
+    g.totalRows = ExploraCeil(itemCount, g.numColumns);
+    
+    f32 scrollY = ImGui::GetScrollY();
+    f32 viewHeight = ImGui::GetWindowHeight();
+
+    g.firstRow = (int)ExploraMax(0, scrollY / cellH);
+    g.lastRow  = (int)ExploraMin(g.totalRows, (scrollY + viewHeight) / cellH + 1);   // exclusive, so + 1
+    
+    g.screenStartPos = ImGui::GetCursorScreenPos();
+    return g;
+}
+
+// itemExtent is the dimension of the item along that axis, eg height on Y, width on X
+// ViewExtent is the height or the width of the viewport
+f32 KeepRectVisible(f32 itemMin, f32 itemExtent, f32 scroll, f32 viewExtent){
+    if (itemMin < scroll) return itemMin;
+    else if (itemMin + itemExtent > scroll + viewExtent) return itemMin + itemExtent - viewExtent;
+    else return scroll; // already in view
+}
+
+inline void ScrollToFocusedRow(int focusedIndex, size_t itemCount, size_t numColumns, f32 cellH, f32 reservedHeight){
+    if (focusedIndex < 0 /*Was not changed, default is -1, which represents invalid*/ || focusedIndex >= (int)itemCount) return;
+    int row = (int)(focusedIndex / numColumns);
+    f32 itemMinY = row * cellH;
+    f32 scrollY = ImGui::GetScrollY();
+    f32 viewHeight = ImGui::GetWindowHeight() - reservedHeight;
+    f32 newScrollY = KeepRectVisible(itemMinY, cellH, scrollY, viewHeight);
+    if (newScrollY != scrollY) ImGui::SetScrollY(newScrollY);
+}
+
+inline void ScrollToFocusedColListMode(f32 itemMinX, f32 colWidth){
+    f32 scrollX = ImGui::GetScrollX();
+    f32 viewWidth = ImGui::GetWindowWidth();
+
+    f32 newScrollX = KeepRectVisible(itemMinX, colWidth, scrollX, viewWidth);
+    if (newScrollX != scrollX) ImGui::SetScrollX(newScrollX);
+}
+
 
 inline GridViewParams GetGridParamsForMode(ViewMode mode){
     switch (mode){
@@ -31,6 +104,7 @@ inline GridViewParams GetGridParamsForMode(ViewMode mode){
     return {250.0f, 52.0f};
 }
 
+// delete this
 inline int ShilSizeForMode(ViewMode mode){
     switch (mode){
         case ViewMode::Small: case ViewMode::List:  case ViewMode::Details:    return SHIL_SMALL;
@@ -45,7 +119,7 @@ inline int ShiLSizeForIconSize(f32 iconSize){
 }
 
 
-constexpr f32 kIconsWidthMultiplier = 1.2f; // Icons view: cell width = icon size * this
+constexpr f32 kIconsWidthMultiplier = 1.5f; // Icons view: cell width = icon size * this
 
 // Calculates the physical distance between items in a grid, item-width + empty gap
 // Horizontal stride (cell width + gap) for the wrapping-grid style views (Icons / Small / Tiles). List and Details lay out differently
@@ -62,21 +136,16 @@ inline f32 GetGridItemStride(ViewMode mode, f32 dpi, f32 userIconSize){
     }
 }
 
-inline int ComputeGridColumns(f32 availW, f32 cellW){
-    int columns = (int)(availW / cellW);
-    return (columns < 1) ? 1 : columns;
-}
-
-inline int ComputeListRowsPerColumn(f32 dpi){
+inline int ComputeListRowsPerColumn(f32 dpi, f32 yGap){
     GridViewParams p = GetGridParamsForMode(ViewMode::List);
-    const f32 yGap = 4.0f * dpi;
     const f32 rowStride = (p.height * dpi) + yGap;
     const ImGuiStyle& style = ImGui::GetStyle();
     const f32 availY = ImGui::GetWindowSize().y - (style.WindowPadding.y * 2.0f) - style.ScrollbarSize;
  
     int rows = (int)(availY / rowStride);
-    return rows < 1 ? 1 : rows;
+    return ExploraMax(1, rows);
 }
+
 struct DirListing {
     const Directory& dir;
     const DirChildren* PChildren = nullptr;
@@ -155,6 +224,8 @@ inline ItemInteraction HandleItemInteraction(App& app, const DirParent& parent, 
                 auto c = listing.PChildren->GetItem(listing.refs[i], app.typeStore);
                 selState.selectedHashes.insert(c.hash);
             }
+
+        
 
             selState.focusHash = child.hash;
             // Anchor does NOT change on Shift-Click, allowing further Shift-Clicks
@@ -237,7 +308,32 @@ inline ItemInteraction HandleItemInteraction(App& app, const DirParent& parent, 
     return {ia.hovered || ia.pressed};
 }
 
-inline ItemInteraction DrawItemChrome(ImDrawList* dl, ImGuiWindow* window, App& app, f32 dpi, const DirParent& parent, const ItemView& child, int visualIndex, const ImRect& fullRect, f32 rounding, bool drawFocusRing = true){
+
+inline void RenderRenameWidget(const char* strId, ImVec2 pos, ImVec2 baseSize, ImVec2 maxSize, GrowAxis axis, HWND hwnd, RenameState& renameState, PCIDLIST_ABSOLUTE parentPidl, PCIDLIST_ABSOLUTE childPidl, const char* childName, ImU32 bgCol){
+    AutoInputColors cols;
+    cols.bg = ImGui::ColorConvertU32ToFloat4(bgCol);
+    cols.border = {};
+    cols.selectionBg = {};
+    cols.text = ImGui::ColorConvertU32ToFloat4(Theme::Current.palette.Text);
+
+    bool justOpened = (renameState.renameFocusHandledFor != renameState.renamingItemId.value());
+    if (justOpened) renameState.renameFocusHandledFor = renameState.renamingItemId.value();
+
+    InputResult res = RenderAutoResizingInputText(strId, pos, baseSize, maxSize, renameState.renameBuffer, sizeof(renameState.renameBuffer), axis, false, &cols, justOpened);
+    
+    if (res == InputResult::Committed){
+        WShell::CommitRename(hwnd, parentPidl, {childPidl, childName}, renameState.renameBuffer);
+        renameState.renamingItemId = std::nullopt;
+        renameState.renameFocusHandledFor = std::nullopt;
+    }
+    else if (res == InputResult::Cancelled){
+        renameState.renamingItemId = std::nullopt;
+        renameState.renameFocusHandledFor = std::nullopt;
+    }
+}
+
+
+ItemInteraction DrawItemChrome(ImDrawList* dl, ImGuiWindow* window, App& app, f32 dpi, const DirParent& parent, const ItemView& child, int visualIndex, const ImRect& fullRect, f32 rounding, bool drawFocusRing = true, bool drawBg = true){
     auto& activeTab = app.window.GetActiveTab();
 
     ImGuiID id = window->GetID((void*)(intptr_t)child.hash);
@@ -246,22 +342,24 @@ inline ItemInteraction DrawItemChrome(ImDrawList* dl, ImGuiWindow* window, App& 
     bool isSelected = activeTab.isSelected(child.hash);
     bool isFocused  = activeTab.selState.focusHash == child.hash;
 
-    DrawSelectableBg(dl, fullRect, ia.hovered, isSelected, rounding);
+    if (drawBg) DrawSelectableBg(dl, fullRect, ia.hovered, isSelected, rounding);
 
     if (drawFocusRing && isFocused){
-        dl->AddRect(fullRect.Min, fullRect.Max, Theme::Current.palette.SurfaceActive, rounding, 2.0f * dpi);
+        // todo change it from white to palette.focused
+        dl->AddRect(fullRect.Min, fullRect.Max, 0xFFFFFFFF, rounding, 1.0f * dpi);
     }
     return ia;
 }
 
 
-inline void DrawItemIcon(ImDrawList* dl, App& app, const DirParent& parent, const ItemView& child, ImVec2 pos, f32 iconSize, int shilSize){
+void DrawItemIcon(ImDrawList* dl, App& app, const DirParent& parent, const ItemView& child, ImVec2 pos, f32 iconSize, int shilSize){
     u32 iconIndex = app.icons.GetIconIndex(parent.pidl.get(), child.pidl, child.hash);
     
     auto iconFallback = [&](){
         const char* fallback = child.IsFolder() ? ICON_REG_FOLDER : ICON_REG_DOCUMENT;
         DrawTextCenteredSingleLine(dl, pos, ImVec2(pos.x + iconSize, pos.y + iconSize), fallback, Theme::Current.palette.TextMuted, iconSize);
     };
+
     if (iconIndex == UINT32_MAX){
         iconFallback();
         return;
@@ -280,60 +378,29 @@ inline void DrawItemIcon(ImDrawList* dl, App& app, const DirParent& parent, cons
     dl->AddImage(iconTex, pos, ImVec2(pos.x + iconSize, pos.y + iconSize), ImVec2(0, 0), ImVec2(1, 1), tint);
 }
 
+enum class TextRenderMode {WrappedCentered, SingleLineEllipsis};
 
-// itemExtent is the dimension of the item along that axis, eg height on Y, width on X
-// ViewExtent is the height or the width of the viewport
-f32 KeepRectVisible(f32 itemMin, f32 itemExtent, f32 scroll, f32 viewExtent){
-    if (itemMin < scroll) return itemMin;
-    else if (itemMin + itemExtent > scroll + viewExtent) return itemMin + itemExtent - viewExtent;
-    else return scroll; // already in view
-}
-
-// Iterates a clipped, wrapping grid of fixed-stride cells: handles column count, ImGuiListClipper, and per-row cursor advancement. `cellW` is the horizontal stride between cells (it can be bigger than what is actually drawn, for the purpose of a gap.
-// `drawCell(index, cellScreenPos)` only needs to draw what's inside one cell;
-template <typename Fn>
-inline void ForEachGridCell(size_t itemCount, f32 cellW, f32 cellH, Fn&& drawCell, int focusedDisplayIndex = -1){
-    if (itemCount == 0 || cellW <= 0.0f) return;
-    cellH = (std::max)(cellH, 1.0f);
-
-    const f32 availWidth = ImGui::GetContentRegionAvail().x;
-    int columns = ComputeGridColumns(availWidth, cellW);
-
-    const u16 totalRows = (u16)std::ceil((f32)itemCount / columns);
-    if (totalRows == 0) return;
-
-    int focusedAbsoluteRow = -1;
-    if (focusedDisplayIndex >= 0 && focusedDisplayIndex < (int)itemCount) {
-        focusedAbsoluteRow = focusedDisplayIndex / columns;
-
-        f32 itemMinY = focusedAbsoluteRow * cellH;
-        f32 scrollY = ImGui::GetScrollY();  // current vertical offset in the ImGui window
-        f32 viewHeight = ImGui::GetWindowHeight();
-
-        f32 newScrollY = KeepRectVisible(itemMinY, cellH, scrollY, viewHeight);
-        if (newScrollY != scrollY) ImGui::SetScrollY(newScrollY);
-
+inline void DrawItemText(HWND hwnd, ImDrawList* dl, Tab& activeTab, const DirParent& parent, const ItemView& child, const ImRect& textRect, TextRenderMode textRenderMode, int maxLines){
+    auto& renameState = activeTab.renameState;
+    if (renameState.renamingItemId == child.hash) {
+        bool isSelected = activeTab.isSelected(child.hash);
+        ImU32 bgCol = isSelected ? Theme::Current.palette.SurfaceActive : Theme::Current.palette.Surface;
+ 
+        const f32 textMaxWidth = textRect.GetWidth();
+        ImVec2 baseSize = textRect.GetSize();
+        
+        RenderRenameWidget("iconsRename", textRect.Min, baseSize, baseSize, GrowAxis::X, hwnd, renameState, parent.pidl.get(), child.pidl, child.name, bgCol);
+        return; 
     }
 
-    ImGuiListClipper clipper;
-    clipper.Begin(totalRows, cellH);
-    if (focusedAbsoluteRow >= 0) clipper.IncludeItemByIndex(focusedAbsoluteRow);    // forces listclipper to process and render the row containing the item, even if it is off screen
-
-    const ImVec2 startPos = ImGui::GetCursorScreenPos();
-
-    while (clipper.Step()){
-        for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++){
-            for (int col = 0; col < columns; col++){
-                const size_t i = (size_t)row * columns + col;
-                if (i >= itemCount) break;
-                ImVec2 cellPos(startPos.x + col * cellW, ImGui::GetCursorScreenPos().y);
-                drawCell(i, cellPos);
-            }
-            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + cellH);
-        }
+    switch(textRenderMode){
+        case TextRenderMode::WrappedCentered:       RenderTextWrappedCenteredEllipsis(dl, textRect, child.name, nullptr, maxLines);
+        break;
+        case TextRenderMode::SingleLineEllipsis:    DrawTextEllipsisSingleLine(dl, textRect, child.name, Theme::Current.palette.Text);
+        break;
+        default: assert(false);
     }
 }
-
 
 int GetFocusedItemIndex(App& app){
     DirListing listing = GetVisibleListing(app);
@@ -362,12 +429,23 @@ int GetScrollToItemIndex(DirListing& listing, u64 id){
     return itemIndex;
 }
 
+int ResolvePendingScrollItemIndex(FileViewState& vs, DirListing& listing){
+    int focusedItemIndex = -1;
+    if (vs.scrollToItemId.has_value()){
+        focusedItemIndex = GetScrollToItemIndex(listing, vs.scrollToItemId.value());
+        vs.scrollToItemId = std::nullopt;
+    }
+    return focusedItemIndex;
+}
+
+
+
 inline std::vector<f32> CalculateColumnWidthsForListView(f32 basePadding, const int totalColumns, const f32 minColumnWidth, const f32 maxColumnWidth, const int rowsPerColumn, const int totalItems, const DirListing& listing, App& app){
     std::vector<f32> columnWidths(totalColumns, minColumnWidth);    // fill with minimum
     
     for (int column = 0; column < totalColumns; column++) {
         const int topOfColumn = column * rowsPerColumn;    // item at the very top of the column visually, 
-        const int bottomOfColumn = (std::min)(topOfColumn + rowsPerColumn, totalItems);     // exclusive
+        const int bottomOfColumn = ExploraMin(topOfColumn + rowsPerColumn, totalItems);     // exclusive
 
         for (int itemIndex = topOfColumn; itemIndex < bottomOfColumn; itemIndex++) {
             auto child = listing.PChildren->GetItem(listing.refs[itemIndex], app.typeStore);
@@ -443,6 +521,7 @@ struct FileviewLayout {
     f32 iconSize   = 0.0f;
     f32 cellWidth  = 0.0f;
     f32 cellHeight = 0.0f;
+    int shilSize;
 };
 
 
@@ -450,28 +529,29 @@ FileviewLayout GetFileviewLayoutForMode(ViewMode mode, f32 dpi) {
     FileviewLayout layout;
     switch(mode) {
         case ViewMode::Icons: {
-            layout.xGap = 8.0f * dpi; layout.yGap = 12.0f * dpi; 
+            layout.xGap = 8.0f * dpi; layout.yGap = 12.0f * dpi; layout.padX = 16.0f * dpi; layout.padY = 12.0f * dpi; 
             break;
         }
         case ViewMode::Small: {
-            layout.xGap = 8.0f * dpi; layout.yGap = 4.0f * dpi; layout.cellWidth = 308.0f * dpi; layout.cellHeight = 30.0f * dpi; layout.iconSize = 16.0f * dpi;
+            layout.xGap = 8.0f * dpi; layout.yGap = 4.0f * dpi; layout.padX = 16.0f * dpi; layout.padY = 8.0f * dpi; layout.cellWidth = 308.0f * dpi; layout.cellHeight = 30.0f * dpi; layout.iconSize = 16.0f * dpi;
             break;
         }
         case ViewMode::List: {
-            layout.xGap = 8.0f * dpi; layout.yGap = 4.0f * dpi; layout.padX = 8.0f * dpi; layout.cellWidth = 308.0f * dpi; layout.cellHeight = 30.0f * dpi; layout.iconSize = 16.0f * dpi;
+            layout.xGap = 8.0f * dpi; layout.yGap = 4.0f * dpi; layout.padX = 0.0f * dpi; layout.padY = 16.0f * dpi; layout.cellWidth = 308.0f * dpi; layout.cellHeight = 30.0f * dpi; layout.iconSize = 16.0f * dpi;
             break;
         }
         case ViewMode::Details: {
-            layout.xGap = 16.0f * dpi; layout.yGap = 5.0f * dpi; layout.cellHeight = 30.0f * dpi; layout.iconSize = 16.0f * dpi;
+            layout.xGap = 16.0f * dpi; layout.yGap = 5.0f * dpi; layout.padX = 16.0f * dpi; layout.cellHeight = 30.0f * dpi; layout.iconSize = 16.0f * dpi;
             break;
         }
         case ViewMode::Tiles: {
-            layout.xGap = 8.0f * dpi; layout.yGap = 4.0f * dpi; layout.cellWidth = 250.0f * dpi; layout.cellHeight = 52.0f * dpi; layout.iconSize = layout.cellHeight * 0.7f;
+            layout.xGap = 8.0f * dpi; layout.yGap = 4.0f * dpi; layout.padX = 16.0f * dpi; layout.cellWidth = 250.0f * dpi; layout.cellHeight = 52.0f * dpi; layout.iconSize = layout.cellHeight * 0.7f;
             break;
         }
         default:
-            return GetFileviewLayoutForMode(ViewMode::Icons, dpi);
+        return GetFileviewLayoutForMode(ViewMode::Icons, dpi);  // exception for grid view
     }
+    layout.shilSize = ShiLSizeForIconSize(layout.iconSize);
     return layout;
 }
 
@@ -520,7 +600,11 @@ inline void KeyboardNavigationInteraction(f32 dpi, App& app){
     int rowsPerColumn = 1;
     f32 availW = ImGui::GetContentRegionAvail().x;
 
-    if (mode == ViewMode::List) rowsPerColumn = ComputeListRowsPerColumn(dpi);
+    if (mode == ViewMode::List){
+        FileviewLayout layout = GetFileviewLayoutForMode(ViewMode::List, dpi);
+        rowsPerColumn = ComputeListRowsPerColumn(dpi, layout.yGap);
+
+    } 
     else if (mode == ViewMode::Details) columns = 1;
     else {
         f32 itemStride = GetGridItemStride(mode, dpi, vs.iconSize);
@@ -537,6 +621,9 @@ inline void KeyboardNavigationInteraction(f32 dpi, App& app){
 
             return;
         }
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape) && !ImGui::IsPopupOpen("ItemContextMenu")) {
+        activeTab.DeselectAllItems();
     }
 
     ImGuiKey keyPressed = ImGuiKey_None;
@@ -647,29 +734,6 @@ inline void KeyboardNavigationInteraction(f32 dpi, App& app){
                 }
             }
         }
-    }
-}
-
-inline void RenderRenameWidget(const char* strId, ImVec2 pos, ImVec2 baseSize, ImVec2 maxSize, GrowAxis axis, HWND hwnd, RenameState& renameState, PCIDLIST_ABSOLUTE parentPidl, PCIDLIST_ABSOLUTE childPidl, const char* childName, ImU32 bgCol){
-    AutoInputColors cols;
-    cols.bg = ImGui::ColorConvertU32ToFloat4(bgCol);
-    cols.border = {};
-    cols.selectionBg = {};
-    cols.text = ImGui::ColorConvertU32ToFloat4(Theme::Current.palette.Text);
-
-    bool justOpened = (renameState.renameFocusHandledFor != renameState.renamingItemId.value());
-    if (justOpened) renameState.renameFocusHandledFor = renameState.renamingItemId.value();
-
-    InputResult res = RenderAutoResizingInputText(strId, pos, baseSize, maxSize, renameState.renameBuffer, sizeof(renameState.renameBuffer), axis, false, &cols, justOpened);
-    
-    if (res == InputResult::Committed){
-        WShell::CommitRename(hwnd, parentPidl, {childPidl, childName}, renameState.renameBuffer);
-        renameState.renamingItemId = std::nullopt;
-        renameState.renameFocusHandledFor = std::nullopt;
-    }
-    else if (res == InputResult::Cancelled){
-        renameState.renamingItemId = std::nullopt;
-        renameState.renameFocusHandledFor = std::nullopt;
     }
 }
 

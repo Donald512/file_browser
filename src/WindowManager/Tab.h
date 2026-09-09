@@ -13,6 +13,7 @@
 #include "Watcher.h"
 #include <algorithm>
 #include "CtxMenu.h"
+#include "BasicTypes.h"
 
 // maybe this for multiple different windows
 struct WindowManager{};

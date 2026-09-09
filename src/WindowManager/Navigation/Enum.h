@@ -94,3 +94,6 @@ DirChildren GetDirChildren2(IShellFolder* parentShellFolder, PCIDLIST_ABSOLUTE p
 
 
 std::vector<DirItem> GetOneDriveAccounts();
+
+
+std::vector<ShellNewEntry> BuildShellNewEntries();

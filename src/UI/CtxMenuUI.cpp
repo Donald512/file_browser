@@ -115,7 +115,7 @@ void RenderContextMenuStructure(App& app, ComPtr<IContextMenu> ctxMenu, std::vec
             ImGui::EndMenu(); 
         }
         else if (clicked){ 
-            ExecuteContextMenuCommand(app, ctxMenu, parentPidl, childPidls, item.id, hwnd); 
+            ExecuteContextMenuCommand(app, ctxMenu, parentPidl, childPidls, item.id, hwnd, item.text); 
         }
     }
 }

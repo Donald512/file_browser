@@ -4,7 +4,41 @@
 #include <ShlObj_core.h>
 #include <string>
 #include "Pidl.h"
+#include <vector>
 
+
+struct ShellNewEntry {
+    std::wstring ext;
+    std::wstring baseName;
+    std::wstring templatePath;
+    std::vector<BYTE> data;
+    bool isFolder = false;
+};
+// Minimal valid 1x1 24-bit white bitmap (exactly 58 bytes)
+static const std::vector<BYTE> s_blankBmpBytes = {
+    // BITMAPFILEHEADER (14 bytes)
+    0x42, 0x4D,             // 'BM' magic identifier
+    0x3A, 0x00, 0x00, 0x00, // Total file size: 58 bytes
+    0x00, 0x00,             // Reserved
+    0x00, 0x00,             // Reserved
+    0x36, 0x00, 0x00, 0x00, // Pixel data offset: 54 bytes
+
+    // BITMAPINFOHEADER (40 bytes)
+    0x28, 0x00, 0x00, 0x00, // Header size: 40 bytes
+    0x01, 0x00, 0x00, 0x00, // Width: 1 pixel
+    0x01, 0x00, 0x00, 0x00, // Height: 1 pixel
+    0x01, 0x00,             // Planes: 1
+    0x18, 0x00,             // Bit count: 24-bit (RGB)
+    0x00, 0x00, 0x00, 0x00, // Compression: BI_RGB (none)
+    0x04, 0x00, 0x00, 0x00, // Image data size: 4 bytes (1 pixel + 1 byte padding)
+    0x00, 0x00, 0x00, 0x00, // X pixels per meter
+    0x00, 0x00, 0x00, 0x00, // Y pixels per meter
+    0x00, 0x00, 0x00, 0x00, // Colors used
+    0x00, 0x00, 0x00, 0x00, // Important colors
+
+    // Pixel Data (4 bytes: B, G, R, padding)
+    0xFF, 0xFF, 0xFF, 0x00  // Pure white pixel
+};
 namespace WShell{
 
     // Extracts a child's display name.
@@ -45,6 +79,9 @@ namespace WShell{
     };
 
     void CommitRename(HWND hwnd, PCIDLIST_ABSOLUTE parentPidl, RenameChild child, const char* newName);
+
+    bool ProcessShellNewKey(HKEY hNew, const std::wstring& ext, const std::wstring& shellNewDir, ShellNewEntry& entry);
+
 
 }
 
@@ -108,3 +145,6 @@ public:
     IFACEMETHODIMP_(ULONG) AddRef() override { return 1; }
     IFACEMETHODIMP_(ULONG) Release() override { return 1; }
 };
+
+
+

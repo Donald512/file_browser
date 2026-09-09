@@ -1,26 +1,36 @@
 #pragma once
-#include <string>
-#include "WinFramework.h"
+
+#define IMGUI_DEFINE_MATH_OPERATORS
+#include "imgui_internal.h"
 #include "imgui.h"
-// #include "imgui_internal.h"
+
+#include <string>
+#include <algorithm>
+#include <vector>
+
+#include "WinFramework.h"
 #include "ImGuiHelpers.h"
 #include "UIglobals.h"
 #include "theme.h"
 // #include "iconRegular.h"
-#include <cfloat>
-#include <cmath>
-#include <algorithm>
-#include <vector>
-#include <string>
 #include "TypenameManager.h"
 #include "CtxMenu.h"
 #include "CtxMenuUI.h"
-#include "FileViewHelpers.h"
 
 #include "FileView.h"
+#include "FileViewHelpers.h"
 
+/*
+Grid: Horizontal flow, wrap down, icon on top, multi-line text below.
+Small: Horizontal flow, wrap down, icon on left, single-line text right.
+Tiles: Horizontal flow, wrap down, icon on left, 2-line title + subtitle block.
+List: Vertical flow, wrap into columns to the right, dynamic per-column widths.
+Details: Not even a grid—it's an ImGuiTable with multi-column header clipping and row virtualization
+*/
 
-static void RenderGridView(f32 dpi, App& app){
+// In views where the text rect, eg, List, Small, Details is the full chrome rect, the text rect has to be made smaller than the full rect so that in rename mode, it doesnt cover the focus ring
+// Fixed by adding 2dpi px inset from the full rect, top and bottom, for small view
+static void RenderGridView(f32 dpi, App& app, DirListing& listing){
     ImGuiWindow* window = ImGui::GetCurrentWindow();
     if (!window || window->SkipItems) return;
     ImDrawList* dl = window->DrawList;
@@ -29,53 +39,66 @@ static void RenderGridView(f32 dpi, App& app){
 
     auto& activeTab = app.window.GetActiveTab();
     auto& vs = activeTab.viewState;
-    auto& renameState = activeTab.renameState;
 
     const int shilSize = ShiLSizeForIconSize(vs.iconSize);
     const f32 imageSize = vs.iconSize * dpi;
     const f32 yTextPadding = 4.0f * dpi;
     const f32 lineHeight = ImGui::GetFontSize();
-    const int maxLines = 3;
+    constexpr int maxLines = 3;
     const f32 itemWidth = imageSize * kIconsWidthMultiplier;
-    const f32 cellH = imageSize + yTextPadding + (maxLines * lineHeight) + yTextPadding;
+    const f32 framePadX = 4.0f * dpi;
+    const f32 framePadY = framePadX;
+    const f32 totalFramePadX = framePadX * 2;
+    const f32 cellH = imageSize + yTextPadding + (maxLines * lineHeight) + yTextPadding + 2 * framePadY;
 
-    DirListing listing = GetVisibleListing(app);
+    const f32 cellStrideX = itemWidth + layout.xGap;
+    const f32 cellStrideY = cellH + layout.yGap;
+    
 
-    int focusedItemIndex = -1;
-    if (vs.scrollToItemId.has_value()){
-        focusedItemIndex = GetScrollToItemIndex(listing, vs.scrollToItemId.value());
-        vs.scrollToItemId = std::nullopt;
-    }
+    int focusedItemIndex = ResolvePendingScrollItemIndex(vs, listing);
 
-    // Cells are itemWidth wide but stride by itemWidth + xGap, so there's a visible gap between them.
-    ForEachGridCell(listing.refs.size(), itemWidth + layout.xGap, cellH + layout.yGap, [&](size_t i, ImVec2 cellPos){
-        auto child = listing.PChildren->GetItem(listing.refs[i], app.typeStore);
-        ImRect fullRect(cellPos, ImVec2(cellPos.x + itemWidth, cellPos.y + cellH));
+    GridVisibleRows grid = LayoutGrid(listing.refs.size(), cellStrideX, cellStrideY);   // Also gets and Saves screen start Pos before dummy 
+    ScrollToFocusedRow(focusedItemIndex, listing.refs.size(), grid.numColumns, cellStrideY, 0);
+    const ImVec2 fullVirtualContentSize (ImGui::GetContentRegionAvail().x, grid.totalRows * cellStrideY);
+    ImGui::Dummy(ImVec2(fullVirtualContentSize));   // this reserves a non interactive region to keep ImGui's cursor in sync
+    
+    ImGui::SetCursorScreenPos(grid.screenStartPos);    // Go back to start
 
-        DrawItemChrome(dl, window, app, dpi, listing.dir.parent, child, (int)i, fullRect, 4.0f * dpi);
+    const f32 totalTextHeight = maxLines * lineHeight;
+    // Naturally clips, lastRow is calculated based on current scroll and viewHeight. Exclusive
+    for (int row = grid.firstRow; row < grid.lastRow; row++){
+        const size_t rowStartIndex = row * grid.numColumns;
+        const f32 rowOffsetY = row * cellStrideY;
+        for (int col = 0; col < grid.numColumns; col++){
+            const size_t currentIndex = rowStartIndex + col;
+            if (currentIndex >= listing.refs.size()) break;
 
-        f32 iconX = cellPos.x + (itemWidth - imageSize) * 0.5f;
-        DrawItemIcon(dl, app, listing.dir.parent, child, ImVec2(iconX, cellPos.y), imageSize, shilSize);
+            ImVec2 cellPos(grid.screenStartPos.x + col * cellStrideX, grid.screenStartPos.y + rowOffsetY);
 
-        f32 textX = cellPos.x + 4.0f * dpi;
-        f32 textY = cellPos.y + imageSize + yTextPadding;
-        f32 textMaxWidth = itemWidth - 8.0f * dpi;
-        ImRect textRect(ImVec2(textX, textY), ImVec2(itemWidth - 8.0f * dpi, maxLines * lineHeight));
+            const auto child = listing.PChildren->GetItem(listing.refs[currentIndex]);
+            const ImRect fullRect(cellPos, cellPos + ImVec2(itemWidth, cellH));
+            DrawItemChrome(dl, window, app, dpi, listing.dir.parent, child, (int)currentIndex, fullRect, 4.0f * dpi); 
 
-        if (renameState.renamingItemId == child.hash){
-            bool isSelected = activeTab.isSelected(child.hash);
-            ImU32 bgCol = isSelected ? Theme::Current.palette.SurfaceActive : Theme::Current.palette.Surface;
+            const f32 iconX = CenterX(cellPos.x, itemWidth, imageSize);
+            const f32 iconY = cellPos.y + framePadX;    // todo add 4.0f * dpi 
+            DrawItemIcon(dl, app, listing.dir.parent, child, ImVec2(iconX, iconY), imageSize, shilSize);
 
-            ImVec2 baseSize = ImVec2(textMaxWidth, ImGui::GetTextLineHeight());
-            RenderRenameWidget("iconsRename", textRect.Min, baseSize, baseSize, GrowAxis::X, app.gfx.hwnd, renameState, listing.dir.parent.pidl.get(), child.pidl, child.name, bgCol);
+            const f32 textX = cellPos.x + framePadX;
+            const f32 textY = iconY + imageSize + yTextPadding;
+            const f32 textMaxWidth = itemWidth - totalFramePadX;
+
+            const ImRect textRect(
+                ImVec2(textX, textY), 
+                ImVec2(textX, textY) + ImVec2(textMaxWidth, totalTextHeight)
+            );
+            // const ImRect textRect(ImVec2(textX, textY), ImVec2(textX + itemWidth - framePadX, textY + totalTextHeight));
+            DrawItemText(app.gfx.hwnd, dl, activeTab, listing.dir.parent, child, textRect, TextRenderMode::WrappedCentered, maxLines);
         }
-        else RenderTextWrappedCenteredEllipsis(dl,
-            textRect.Min, textRect.Max, child.name, nullptr, maxLines
-        );
-    }, focusedItemIndex);
+    }
 }
 
-static void RenderSmallView(f32 dpi, App& app){
+
+static void RenderSmallView(f32 dpi, App& app, DirListing& listing){
     ImGuiWindow* window = ImGui::GetCurrentWindow();
     if (!window || window->SkipItems) return;
     ImDrawList* dl = window->DrawList;
@@ -84,159 +107,139 @@ static void RenderSmallView(f32 dpi, App& app){
 
     const f32 iconPad = 6.0f * dpi;
     const f32 textGap = 8.0f * dpi;
-    const ImU32 textCol = Theme::Current.palette.Text;
 
-    DirListing listing = GetVisibleListing(app);
     auto& activeTab = app.window.GetActiveTab();
-    auto& renameState = activeTab.renameState;
-    
-    int focusedItemIndex = -1;
     auto& vs = activeTab.viewState;
-    if (vs.scrollToItemId.has_value()){
-        focusedItemIndex = GetScrollToItemIndex(listing, vs.scrollToItemId.value());
-        vs.scrollToItemId = std::nullopt;
-    }
 
-    ForEachGridCell(listing.refs.size(), layout.cellWidth + layout.xGap, layout.cellHeight + layout.yGap, [&](size_t i, ImVec2 cellPos){
-        auto child = listing.PChildren->GetItem(listing.refs[i], app.typeStore);
-        ImRect fullRect(cellPos, ImVec2(cellPos.x + layout.cellWidth, cellPos.y + layout.cellHeight));
+    // todo, change from fixed cellHeight to lineHeight + some padding, to accomodate font size growth
+    const f32 cellStrideX = layout.cellWidth + layout.xGap; 
+    const f32 cellStrideY = layout.cellHeight + layout.yGap;
+    
 
-        DrawItemChrome(dl, window, app, dpi, listing.dir.parent, child, (int)i, fullRect, 4.0f * dpi);
+    const int focusedItemIndex = ResolvePendingScrollItemIndex(vs, listing);
+    GridVisibleRows grid = LayoutGrid(listing.refs.size(), cellStrideX, cellStrideY);
+    ScrollToFocusedRow(focusedItemIndex, listing.refs.size(), grid.numColumns, cellStrideY, 0);
+    const ImVec2 fullVirtualContentSize (ImGui::GetContentRegionAvail().x, grid.totalRows * cellStrideY);
+    ImGui::Dummy(ImVec2(fullVirtualContentSize));
 
-        f32 iconX = cellPos.x + iconPad;
-        f32 iconY = cellPos.y + (layout.cellHeight - layout.iconSize) * 0.5f;
-        DrawItemIcon(dl, app, listing.dir.parent, child, ImVec2(iconX, iconY), layout.iconSize, SHIL_SMALL);
+    ImGui::SetCursorPos(grid.screenStartPos);
 
-        ImRect textRect(ImVec2(iconX + layout.iconSize + textGap, cellPos.y), ImVec2(cellPos.x + layout.cellWidth - 8.0f * dpi, cellPos.y + layout.cellHeight));
-        
-        if (renameState.renamingItemId == child.hash){
-            bool isSelected = activeTab.isSelected(child.hash);
-            ImU32 bgCol = isSelected ? Theme::Current.palette.SurfaceActive : Theme::Current.palette.Surface;
+    for (int row = grid.firstRow; row < grid.lastRow; row++){
+        const size_t rowStartIndex = row * grid.numColumns;
+        const f32 rowOffsetY = row * cellStrideY;
 
-            ImVec2 baseSize = textRect.GetSize();
-            
-            RenderRenameWidget("smallRename", textRect.Min, baseSize, baseSize, GrowAxis::X, app.gfx.hwnd, renameState, listing.dir.parent.pidl.get(), child.pidl, child.name, bgCol);
+        for (int col = 0; col < grid.numColumns; col++){
+            const size_t currentIndex = rowStartIndex + col;
+            if (currentIndex >= listing.refs.size()) break;
 
+            const ImVec2 cellPos = grid.screenStartPos + ImVec2(col * cellStrideX, rowOffsetY);
+
+            const auto child = listing.PChildren->GetItem(listing.refs[currentIndex]);
+            const ImRect fullRect(cellPos, cellPos + ImVec2(layout.cellWidth, layout.cellHeight));
+            DrawItemChrome(dl, window, app, dpi, listing.dir.parent, child, (int)currentIndex, fullRect, 4.0f * dpi); 
+
+            const f32 iconX =  fullRect.Min.x + iconPad;
+            const f32 iconY =  cellPos.y + (layout.cellHeight - layout.iconSize) * 0.5f;
+            DrawItemIcon(dl, app, listing.dir.parent, child, ImVec2(iconX, iconY), layout.iconSize, SHIL_SMALL);
+
+            const ImRect textRect(ImVec2(iconX + layout.iconSize + textGap, fullRect.Min.y + 2.0f * dpi), ImVec2(fullRect.Max.x - textGap, fullRect.Max.y - 2.0f * dpi));
+
+            DrawItemText(app.gfx.hwnd, dl, activeTab, listing.dir.parent, child, textRect, TextRenderMode::SingleLineEllipsis, 0);
         }
-        else DrawTextEllipsisSingleLine(dl, textRect, child.name, textCol);
-    }, focusedItemIndex);
+    }
 }
 
-static void RenderListViewContent(f32 dpi, App& app){
+static void RenderListViewContent(f32 dpi, App& app, DirListing& listing){
     ImGuiWindow* window = ImGui::GetCurrentWindow();
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    ImVec2 winPos = ImGui::GetWindowPos();
-    ImVec2 winContentMin = ImGui::GetWindowContentRegionMin();
+    HandleHorizontalMouseWheelScroll(dpi);
 
-    ImVec2 origin = ImVec2(winPos.x + winContentMin.x, winPos.y + winContentMin.y);
-    
-    if (ImGui::IsWindowHovered() && ImGui::GetIO().MouseWheel != 0.0f){
-        f32 scrollAmount = ImGui::GetIO().MouseWheel * (60.0f * dpi);
-        ImGui::SetScrollX(ImGui::GetScrollX() - scrollAmount);
-    }
-
-    DirListing listing = GetVisibleListing(app);
     auto& activeTab = app.window.GetActiveTab(); 
-    auto& selState = activeTab.selState; 
-    auto& renameState = activeTab.renameState;
     const auto layout = GetFileviewLayoutForMode(ViewMode::List, dpi);
-
 
     const f32 rowStride = layout.cellHeight + layout.yGap;
 
-    const ImU32 textCol = Theme::Current.palette.Text;
     const f32 minColWidth = 120.0f * dpi;
     const f32 maxColWidth = layout.cellWidth;
 
-    // Same function keyboard nav calls - guarantees the two can't disagree.
-    const int rowsPerColumn = ComputeListRowsPerColumn(dpi);
-
+    const int rowsPerColumn = ComputeListRowsPerColumn(dpi, layout.yGap);
     const int totalItems = (int)listing.refs.size();
     if (totalItems == 0) return;
 
-    const int totalColumns = (totalItems + rowsPerColumn - 1) / rowsPerColumn;
+    const int totalColumns = ExploraCeil(totalItems, rowsPerColumn);
 
-    const f32 basePadding = layout.iconSize + (layout.xGap* 3.0f) + layout.padX;
+    const f32 basePadding = layout.iconSize + (layout.xGap * 3.0f);
     std::vector<f32> columnWidths = CalculateColumnWidthsForListView(basePadding, totalColumns, minColWidth, maxColWidth, rowsPerColumn, totalItems, listing, app);
-
+    
     std::vector<f32> columnStarts = CalculateColumnStartsForListView(totalColumns, columnWidths);
-
-    const f32 totalContentWidth = columnStarts[totalColumns];
-    const f32 totalContentHeight = rowsPerColumn * rowStride;   // a row is top to bottom this time, not left to right
-    ImGui::Dummy(ImVec2(totalContentWidth, totalContentHeight));
-
+    
     f32 windowWidth = ImGui::GetWindowWidth();
     
-    f32 scrollX = ImGui::GetScrollX();
+    const f32 totalContentWidth = columnStarts[totalColumns];
+    const f32 totalContentHeight = rowsPerColumn * rowStride;  
+    ImGui::Dummy(ImVec2(totalContentWidth, totalContentHeight));
+
     auto& vs = activeTab.viewState;
-    if (vs.scrollToItemId.has_value()){
-        int focusedItemIndex = GetScrollToItemIndex(listing, vs.scrollToItemId.value());
-        if (focusedItemIndex >= 0){
-            int focusCol = focusedItemIndex / rowsPerColumn;
+    const int focusedItemIndex = ResolvePendingScrollItemIndex(vs, listing);
+    
+    if (focusedItemIndex >= 0){ 
+        int focusCol = focusedItemIndex / rowsPerColumn;    // vertical
+        if (focusCol < totalColumns){
             f32 colLeft  = columnStarts[focusCol];
             f32 colRight = columnStarts[focusCol + 1];
-            f32 colWidth = colRight - colLeft;
-
-            f32 newScrollX = KeepRectVisible(colLeft, colWidth, scrollX, windowWidth);
-            if (newScrollX != scrollX) ImGui::SetScrollX(newScrollX);
+            f32 colWidth = colRight - colLeft;  // includes padding
+            
+            ScrollToFocusedColListMode(colLeft, colWidth);
         }
-        vs.scrollToItemId = std::nullopt;
     }
 
+    const f32 scrollX = ImGui::GetScrollX();
     const auto visibleColumns = GetVisibleListColumns(scrollX, windowWidth, columnStarts, totalColumns);
 
-    for (int c = visibleColumns.first; c < visibleColumns.last; c++){
-        f32 currentColWidth = columnWidths[c];
-        f32 currentColOffset = columnStarts[c];
-        for (int r = 0; r < rowsPerColumn; r++){
+    for (int column = visibleColumns.first; column < visibleColumns.last; column++){
+        const f32 currentColWidth = columnWidths[column];
+        const f32 currentColOffset = columnStarts[column];
+        int columnStartIndex = column * rowsPerColumn;
+        for (int row = 0; row < rowsPerColumn; row++){
 
-            int i = (c * rowsPerColumn) + r;
-            if (i >= totalItems) break;
-            auto child = listing.PChildren->GetItem(listing.refs[i], app.typeStore);
+            int currentIndex = columnStartIndex + row;
+            if (currentIndex >= totalItems) break;
+            auto child = listing.PChildren->GetItem(listing.refs[currentIndex], app.typeStore);
 
-            ImGui::PushID(i);
-            ImGui::SetCursorPos(ImVec2(currentColOffset, (f32)r * rowStride));
-            ImVec2 cellScreenPos = ImGui::GetCursorScreenPos();
+            ImGui::PushID(currentIndex);
+            ImGui::SetCursorPos(ImVec2(currentColOffset, (f32)row * rowStride));
+            const ImVec2 cellScreenPos = ImGui::GetCursorScreenPos();
 
-            ImRect fullRect(cellScreenPos, ImVec2(cellScreenPos.x + currentColWidth - layout.xGap, cellScreenPos.y + layout.cellHeight));
-            DrawItemChrome(dl, window, app, dpi, listing.dir.parent, child, i, fullRect, 4.0f * dpi);
+            const ImRect fullRect(cellScreenPos, cellScreenPos + ImVec2(currentColWidth - layout.xGap, layout.cellHeight));
 
-            f32 iconY = cellScreenPos.y + (layout.cellHeight - layout.iconSize) * 0.5f;
+            DrawItemChrome(dl, window, app, dpi, listing.dir.parent, child, currentIndex, fullRect, 4.0f * dpi);
+
+            f32 iconY = fullRect.Min.y + (layout.cellHeight - layout.iconSize) * 0.5f;
+
             DrawItemIcon(dl, app, listing.dir.parent, child, ImVec2(cellScreenPos.x + layout.xGap, iconY), layout.iconSize, SHIL_SMALL);
-            f32 textStartX = cellScreenPos.x + layout.xGap + layout.iconSize + layout.xGap;
-            f32 maxTextWidth = currentColWidth - (layout.xGap * 3.0f) - layout.iconSize;
-            if (maxTextWidth > 0.0f){
-                ImRect textRect(ImVec2(textStartX, cellScreenPos.y), ImVec2(textStartX + maxTextWidth, cellScreenPos.y + layout.cellHeight));
-                if (renameState.renamingItemId == child.hash){
-                    bool isSelected = activeTab.isSelected(child.hash);
-                    ImU32 bgCol = isSelected ? Theme::Current.palette.SurfaceActive : Theme::Current.palette.Surface;
-
-                    ImVec2 baseSize = textRect.GetSize();
-                    ImVec2 maxSize = ImVec2(maxTextWidth, baseSize.y);
-
-                    RenderRenameWidget("listRename", textRect.Min, baseSize, maxSize, GrowAxis::X, app.gfx.hwnd, renameState, listing.dir.parent.pidl.get(), child.pidl, child.name, bgCol);
-                }
-                else DrawTextEllipsisSingleLine(dl, textRect, child.name, textCol);
-            }
+            f32 textStartX = fullRect.Min.x + layout.xGap + layout.iconSize + layout.xGap;
+            f32 maxTextWidth = currentColWidth - (layout.xGap * 4.0f) - layout.iconSize;    // 3 * xGap: L edge - icon, icon - text, text - R edge. Dont know why i changed to 4, just looks better
+            
+            ImRect textRect(ImVec2(textStartX, fullRect.Min.y + 2.0f * dpi), ImVec2(textStartX + maxTextWidth, fullRect.Max.y - 2.0f * dpi));
+           
+            DrawItemText(app.gfx.hwnd, dl, activeTab, listing.dir.parent, child, textRect, TextRenderMode::SingleLineEllipsis, 0);
             ImGui::PopID();
         }
     }
 }
 
-static void RenderDetailsView(f32 dpi, App& app){
+static void RenderDetailsView(f32 dpi, App& app, DirListing& listing){
     ImGuiWindow* window = ImGui::GetCurrentWindow();
     if (!window || window->SkipItems) return;
 
     const auto layout = GetFileviewLayoutForMode(ViewMode::Details, dpi);
     auto& activeTab = app.window.GetActiveTab();
-    auto& renameState = activeTab.renameState;
 
-    const ImU32 textCol = Theme::Current.palette.Text;
     const ImU32 mutedCol = Theme::Current.palette.TextMuted;
 
     ImGuiTableFlags flags = ImGuiTableFlags_Resizable | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable | ImGuiTableFlags_PadOuterX | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_NoBordersInBody | ImGuiTableFlags_ScrollY;
-
+ 
     ImVec2 tableSize(0.0f, ImGui::GetContentRegionAvail().y);
         
     ImGui::PushStyleColor(ImGuiCol_TableHeaderBg, IM_COL32(0, 0, 0, 0));
@@ -255,29 +258,47 @@ static void RenderDetailsView(f32 dpi, App& app){
         ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthStretch, 0.1f);
         ImGui::TableHeadersRow();
 
-        DirListing listing = GetVisibleListing(app);
-
-        int focusRow = -1;
-
         f32 headerHeight = ImGui::GetFrameHeight() + ImGui::GetStyle().CellPadding.y * 2.0f;
-        f32 headerBottomY = window->DC.CursorStartPos.y + headerHeight;
-
-        f32 actualViewH = ImGui::GetWindowHeight() - headerHeight;
+        // f32 headerBottomY = window->DC.CursorStartPos.y + headerHeight;
+        // f32 actualViewH = ImGui::GetWindowHeight() - headerHeight;
 
         auto& vs = activeTab.viewState;
-        if (vs.scrollToItemId.has_value()){
-            focusRow = GetScrollToItemIndex(listing, vs.scrollToItemId.value()); // in details view, focused item is same as focused row
-            if (focusRow >= 0){
-                f32 rowStride = layout.cellHeight + layout.yGap;
-                f32 itemMinY = focusRow * rowStride;
-                f32 scrollY = ImGui::GetScrollY();
-                
-                f32 newScrollY = KeepRectVisible(itemMinY, rowStride, scrollY, actualViewH);
-                if (newScrollY != scrollY) ImGui::SetScrollY(newScrollY);
-            }
-            vs.scrollToItemId = std::nullopt;
-        }
 
+        int focusedItemIndex = ResolvePendingScrollItemIndex(vs, listing);
+        // in details view, focused item is same as focused row
+        f32 rowStride = layout.cellHeight + layout.yGap;
+        ScrollToFocusedRow(focusedItemIndex, listing.refs.size(), 1, rowStride, headerHeight);
+
+        ImDrawList* dl = ImGui::GetWindowDrawList(); 
+        ImGuiWindow* currentWindow = ImGui::GetCurrentWindow();
+        // Expanded so ButtonBehavior sees the whole row
+        const f32 tableTopY    = currentWindow->ClipRect.Min.y;
+        const f32 tableBottomY = currentWindow->ClipRect.Max.y;
+    
+        enum class TextRenderModeInDrawColumn {SingleLineEllipsis, RightAlignedClipped};
+        auto drawColumn = [&dl, &mutedCol](const char* desiredText, const char* fallback, f32 minY, f32 maxY, TextRenderModeInDrawColumn textMode){
+            ImGui::TableNextColumn();
+            ImVec2 pos = ImGui::GetCursorScreenPos();
+            f32 width = ImGui::GetContentRegionAvail().x;
+            const char* text = (desiredText && desiredText[0]) ? desiredText : fallback;
+            ImRect rect(ImVec2(pos.x, minY), ImVec2(pos.x + width, maxY));
+            
+            switch(textMode){
+                case TextRenderModeInDrawColumn::SingleLineEllipsis:    DrawTextEllipsisSingleLine(dl, rect, text, mutedCol);
+                break;
+                
+                case TextRenderModeInDrawColumn::RightAlignedClipped:{
+                    ImGui::PushStyleColor(ImGuiCol_Text, mutedCol);
+                    ImGui::RenderTextClipped(pos, ImVec2(pos.x + width, maxY), text, nullptr, nullptr, ImVec2(1.0f, 0.5f), nullptr);
+                    ImGui::PopStyleColor();
+                }
+                break;
+                
+                default: assert(false);
+            }
+            
+        };
+        
         ImGuiListClipper clipper;
         clipper.Begin((int)listing.refs.size(), layout.cellHeight + layout.yGap);
         
@@ -291,8 +312,6 @@ static void RenderDetailsView(f32 dpi, App& app){
                 ImGui::TableNextRow(ImGuiTableRowFlags_None, layout.cellHeight);
                 ImGui::TableNextColumn();
                 
-                ImDrawList* dl = ImGui::GetWindowDrawList(); 
-                ImGuiWindow* currentWindow = ImGui::GetCurrentWindow();
                 ImVec2 cellPos = ImGui::GetCursorScreenPos();
                 
                 f32 tableMaxX = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
@@ -300,25 +319,16 @@ static void RenderDetailsView(f32 dpi, App& app){
                 
                 // restrict rowRect to cell Height ignoring layout.yGap
                 ImRect rowRect(
-                    ImVec2(cellPos.x - cellPadding.x, cellPos.y - cellPadding.y), 
+                    cellPos - cellPadding, 
                     ImVec2(tableMaxX, cellPos.y + layout.cellHeight - cellPadding.y)
                 );
                 
-                // Expanded so ButtonBehavior sees the whole row
-                ImGui::PushClipRect(
-                    ImVec2(rowRect.Min.x, ImMax(rowRect.Min.y, headerBottomY)), 
-                    ImVec2(tableMaxX, ImMin(rowRect.Max.y, actualViewH + window->Pos.y)), false);
-                ImU32 bgCol = 0;
-                ImGuiID id = currentWindow->GetID((void*)(intptr_t)child.hash);
-                ItemInteraction ia = HandleItemInteraction(app, listing.dir.parent, child, row, id, rowRect);
+                ImGui::PushClipRect(ImVec2(rowRect.Min.x, ImMax(rowRect.Min.y, tableTopY)), ImVec2(tableMaxX, ImMin(rowRect.Max.y, tableBottomY)), false);
                 
-                bool isFocused = activeTab.selState.focusHash == child.hash;
-                if (isFocused){
-                    ImVec2 minP = ImVec2(rowRect.Min.x + 1.0f, rowRect.Min.y + 1.0f);
-                    ImVec2 maxP = ImVec2(rowRect.Max.x - 1.0f, rowRect.Max.y - 1.0f);
-                    dl->AddRect(minP, maxP, Theme::Current.palette.SurfaceActive, 4.0f * dpi, 0, 2.0f * dpi);
-                }
+                ItemInteraction ia = DrawItemChrome(dl, window, app, dpi, listing.dir.parent, child, row, rowRect, 4.0f * dpi, true, false);
                 ImGui::PopClipRect();
+
+                ImU32 bgCol = 0;
                 if (isSelected)      bgCol = Theme::Current.palette.SurfaceActive;
                 else if (ia.hovered) bgCol = Theme::Current.palette.SurfaceHover;
                 else if (row & 1)    bgCol = ImGui::GetColorU32(ImGuiCol_TableRowBgAlt);
@@ -326,58 +336,23 @@ static void RenderDetailsView(f32 dpi, App& app){
                 // if (bgCol != 0)      dl->AddRectFilled(rowRect.Min, rowRect.Max, bgCol);
                 if (bgCol != 0)      ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, bgCol);
                 
-                // NAME ---
+                // NAME --- 
                 f32 iconY = cellPos.y + (layout.cellHeight - layout.iconSize) * 0.5f;
                 DrawItemIcon(dl, app, listing.dir.parent, child, ImVec2(cellPos.x + 4.0f * dpi, iconY), layout.iconSize, SHIL_SMALL);
                 
                 f32 textX = cellPos.x + 4.0f * dpi + layout.iconSize + 6.0f * dpi;
                 f32 maxTextWidth = ImGui::GetContentRegionAvail().x - (textX - cellPos.x);
-                if (renameState.renamingItemId == child.hash){
-                    ImVec2 baseSize(maxTextWidth, rowRect.GetHeight());
-                    ImVec2 maxSize(ImGui::GetContentRegionMax().x - textX, rowRect.GetHeight()); // grow into the row, not downward
-                    RenderRenameWidget("detailsRename", ImVec2(textX, rowRect.Min.y), baseSize, maxSize, GrowAxis::X, app.gfx.hwnd, renameState, listing.dir.parent.pidl.get(), child.pidl, child.name, bgCol);
-                }
-                else{
-                    ImRect textRect(ImVec2(textX, rowRect.Min.y), ImVec2(textX + maxTextWidth, rowRect.Max.y));   
-                    DrawTextEllipsisSingleLine(dl, textRect, child.name, textCol);
-                }
+                ImRect textRect(ImVec2(textX, rowRect.Min.y + 2.0f * dpi), ImVec2(textX + maxTextWidth, rowRect.Max.y - 2.0f * dpi));   
 
+                DrawItemText(app.gfx.hwnd, dl, activeTab, listing.dir.parent, child, textRect, TextRenderMode::SingleLineEllipsis, 0);
+  
+                const char* dateText = (child.lastWriteTime.dwLowDateTime != 0 || child.lastWriteTime.dwHighDateTime != 0) ? FormatFileTime(child.lastWriteTime) : "";
+                drawColumn(dateText, "--", rowRect.Min.y, rowRect.Max.y, TextRenderModeInDrawColumn::SingleLineEllipsis);
 
+                drawColumn(child.typeName, "--", rowRect.Min.y, rowRect.Max.y, TextRenderModeInDrawColumn::SingleLineEllipsis);
 
-                // DATE ---
-                ImGui::TableNextColumn();                                                       
-                dl = ImGui::GetWindowDrawList(); 
-                ImVec2 datePos = ImGui::GetCursorScreenPos();
-                f32 dateLiveWidth = ImGui::GetContentRegionAvail().x;
-                const char* dateText = (child.lastWriteTime.dwLowDateTime != 0 || child.lastWriteTime.dwHighDateTime != 0) ? FormatFileTime(child.lastWriteTime) : "--";
-                ImRect dateRect(
-                    ImVec2(datePos.x, rowRect.Min.y), 
-                    ImVec2(datePos.x + dateLiveWidth, rowRect.Max.y)
-                );
-                DrawTextEllipsisSingleLine(dl, dateRect, dateText, mutedCol);
-                
-                // TYPE ---
-                ImGui::TableNextColumn();
-                dl = ImGui::GetWindowDrawList();
-                ImVec2 typePos = ImGui::GetCursorScreenPos();
-                f32 typeLiveWidth = ImGui::GetContentRegionAvail().x;
-                const char* typeName = child.typeName[0] ? child.typeName : "--"; 
-                ImRect typeRect(
-                    ImVec2(typePos.x, rowRect.Min.y), 
-                    ImVec2(typePos.x + typeLiveWidth, rowRect.Max.y)
-                );
-                DrawTextEllipsisSingleLine(dl, typeRect, typeName, mutedCol);
-
-
-                // SIZE ---
-                ImGui::TableNextColumn();
-                dl = ImGui::GetWindowDrawList();
-                ImVec2 sizePos = ImGui::GetCursorScreenPos();
-                f32 liveSizeColWidth = ImGui::GetContentRegionAvail().x - layout.xGap;
-                const char* sizeText = (child.size != 0) ? FormatFileSize(child.size) : "--";
-                ImGui::PushStyleColor(ImGuiCol_Text, mutedCol);
-                ImGui::RenderTextClipped(sizePos, ImVec2(sizePos.x + liveSizeColWidth, rowRect.Max.y), sizeText, nullptr, nullptr, ImVec2(1.0f, 0.5f), nullptr);
-                ImGui::PopStyleColor();
+                const char* sizeText = (child.size != 0) ? FormatFileSize(child.size) : "";
+                drawColumn(sizeText, "--", rowRect.Min.y, rowRect.Max.y, TextRenderModeInDrawColumn::RightAlignedClipped);
 
                 ImGui::PopID();
 
@@ -389,7 +364,7 @@ static void RenderDetailsView(f32 dpi, App& app){
     ImGui::PopStyleColor(5);
 }
 
-static void RenderTilesView(f32 dpi, App& app){
+static void RenderTilesView(f32 dpi, App& app, DirListing& listing){
     ImGuiWindow* window = ImGui::GetCurrentWindow();
     if (!window || window->SkipItems) return;
     ImDrawList* dl = window->DrawList;
@@ -400,52 +375,59 @@ static void RenderTilesView(f32 dpi, App& app){
     const ImU32 textCol = Theme::Current.palette.Text;
     const ImU32 mutedCol = Theme::Current.palette.TextMuted;
 
-    DirListing listing = GetVisibleListing(app);
+    const f32 cellStrideX = layout.cellWidth + layout.xGap;
+    const f32 cellStrideY = layout.cellHeight + layout.yGap;
+
     auto& activeTab = app.window.GetActiveTab();
     auto& renameState = activeTab.renameState;
 
-    int focusedItemIndex = -1;
-    if (activeTab.viewState.scrollToItemId){
-        focusedItemIndex = GetScrollToItemIndex(listing, activeTab.viewState.scrollToItemId.value());
-        activeTab.viewState.scrollToItemId = std::nullopt;
-    }
+    FileViewState& vs = activeTab.viewState;
+    int focusedItemIndex = ResolvePendingScrollItemIndex(vs, listing);
 
-    ForEachGridCell(listing.refs.size(), layout.cellWidth + layout.xGap, layout.cellHeight + layout.yGap, [&](size_t i, ImVec2 cellPos){
-        auto child = listing.PChildren->GetItem(listing.refs[i], app.typeStore);
-        ImRect fullRect(cellPos, ImVec2(cellPos.x + layout.cellWidth, cellPos.y + layout.cellHeight));
 
-        DrawItemChrome(dl, window, app, dpi, listing.dir.parent, child, (int)i, fullRect, 4.0f * dpi);
+    GridVisibleRows grid = LayoutGrid(listing.refs.size(), cellStrideX, cellStrideY); 
+    ScrollToFocusedRow(focusedItemIndex, listing.refs.size(), grid.numColumns, cellStrideY, 0);
 
-        f32 iconX = cellPos.x + 6.0f * dpi;
-        f32 iconY = cellPos.y + (layout.cellHeight - layout.iconSize) * 0.5f;
-        DrawItemIcon(dl, app, listing.dir.parent, child, ImVec2(iconX, iconY), layout.iconSize, ShilSizeForMode(ViewMode::Tiles));
+    const ImVec2 fullVirtualContentSize (ImGui::GetContentRegionAvail().x, grid.totalRows * cellStrideY);
+    ImGui::Dummy(ImVec2(fullVirtualContentSize));
 
-        f32 textX = iconX + layout.iconSize + 8.0f * dpi;
-        f32 textMaxWidth = cellPos.x + layout.cellWidth - textX - 8.0f * dpi;
-        if (textMaxWidth > 0.0f){
-            ImRect nameRect(ImVec2(textX, cellPos.y + 4.0f * dpi), ImVec2(textX + textMaxWidth, cellPos.y + 4.0f * dpi + lineHeight));
-            if (renameState.renamingItemId == child.hash){
+    ImGui::SetCursorScreenPos(grid.screenStartPos);
+
+    for (int row = grid.firstRow; row < grid.lastRow; row++){
+        const size_t rowStartIndex = row * grid.numColumns;
+        const f32 rowOffsetY = row * cellStrideY;
+        for (int col = 0; col < grid.numColumns; col++){
+            const size_t currentIndex = rowStartIndex + col;
+            if (currentIndex >= listing.refs.size()) break;
+
+            auto child = listing.PChildren->GetItem(listing.refs[currentIndex], app.typeStore);
+
+            ImVec2 cellPos(grid.screenStartPos.x + col * cellStrideX, grid.screenStartPos.y + rowOffsetY);
+
+            ImRect fullRect(cellPos, ImVec2(cellPos.x + layout.cellWidth, cellPos.y + layout.cellHeight));
+
+            DrawItemChrome(dl, window, app, dpi, listing.dir.parent, child, (int)currentIndex, fullRect, 4.0f * dpi);
+
+            f32 iconX = cellPos.x + 6.0f * dpi;
+            f32 iconY = cellPos.y + (layout.cellHeight - layout.iconSize) * 0.5f;
+            DrawItemIcon(dl, app, listing.dir.parent, child, ImVec2(iconX, iconY), layout.iconSize, ShilSizeForMode(ViewMode::Tiles));
+
+            f32 textX = iconX + layout.iconSize + 8.0f * dpi;
+            f32 textMaxWidth = cellPos.x + layout.cellWidth - textX - 8.0f * dpi;
+                ImRect textRect(ImVec2(textX, cellPos.y + 4.0f * dpi), ImVec2(textX + textMaxWidth, cellPos.y + 4.0f * dpi + lineHeight));
                 
-                bool isSelected = activeTab.isSelected(child.hash);
-                ImU32 bgCol = isSelected ? Theme::Current.palette.SurfaceActive : Theme::Current.palette.Surface;
+                DrawItemText(app.gfx.hwnd, dl, activeTab, listing.dir.parent, child, textRect, TextRenderMode::SingleLineEllipsis, 0);
 
-                ImVec2 baseSize = nameRect.GetSize();
-                ImVec2 maxSize = ImVec2(textMaxWidth, baseSize.y);  // Grow horizontally
-
-                RenderRenameWidget("tilesRename", nameRect.Min, baseSize, maxSize, GrowAxis::X, app.gfx.hwnd, renameState, listing.dir.parent.pidl.get(), child.pidl, child.name, bgCol );
-            }
-            else DrawTextEllipsisSingleLine(dl, nameRect, child.name, textCol);
-            
-            const char* typeName = child.typeName[0] ? child.typeName : "--";
-            f32 typeY = cellPos.y + 4.0f * dpi + lineHeight + 2.0f * dpi;
-            ImRect typeRect(
-                ImVec2(textX, typeY),
-                ImVec2(textX + textMaxWidth, typeY + lineHeight)
-            );
-            
-            DrawTextEllipsisSingleLine(dl, typeRect, typeName, mutedCol);
+                const char* typeName = child.typeName[0] ? child.typeName : "--";
+                f32 typeY = cellPos.y + 4.0f * dpi + lineHeight + 2.0f * dpi; 
+                ImRect typeRect(
+                    ImVec2(textX, typeY),
+                    ImVec2(textX + textMaxWidth, typeY + lineHeight)
+                );
+                DrawTextEllipsisSingleLine(dl, typeRect, typeName, mutedCol);
+                
         }
-    }, focusedItemIndex);
+    }
 }
 
 
@@ -473,6 +455,7 @@ void RenderFileGrid(f32 dpi, App& app){
     if (newState.expectingNewItem){
         vs.scrollToItemId = newState.itemHash;
         selState.focusHash = newState.itemHash;
+        activeTab.DeselectAllItemsAndSelect(newState.itemHash.value());
         
         renameState.renamingItemId = newState.itemHash;
         strncpy(activeTab.renameState.renameBuffer, newState.itemName.c_str(), sizeof(activeTab.renameState.renameBuffer) - 1);
@@ -485,28 +468,28 @@ void RenderFileGrid(f32 dpi, App& app){
         ImGuiWindowFlags windowFlags = ImGuiWindowFlags_HorizontalScrollbar;
         if (ImGui::BeginChild("FileViewList", ImVec2(0, 0), childFlags, windowFlags)){
             KeyboardNavigationInteraction(dpi, app);
-            RenderListViewContent(dpi, app);
+            RenderListViewContent(dpi, app, listing);
         }
         ImGui::EndChild();
     } else {
         KeyboardNavigationInteraction(dpi, app);
         switch (mode){
-            case ViewMode::Icons:   RenderGridView(dpi, app); break;
-            case ViewMode::Small:   RenderSmallView(dpi, app); break;
-            case ViewMode::Details: RenderDetailsView(dpi, app); break;
-            case ViewMode::Tiles:   RenderTilesView(dpi, app); break;
+            case ViewMode::Icons:   RenderGridView(dpi, app, listing); break;
+            case ViewMode::Small:   RenderSmallView(dpi, app, listing); break;
+            case ViewMode::Details: RenderDetailsView(dpi, app, listing); break;
+            case ViewMode::Tiles:   RenderTilesView(dpi, app, listing); break;
             default: break;
         }
-    }
+    } 
 
-    //  Add ImGuiHoveredFlags_ChildWindows to catch clicks inside BeginChild (List) and Tables (Details)
-    bool isWindowHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByPopup);
+    //  Add ImGuiHoveredFlags_ChildWindows to catch clicks inside BeginChild (List) and Tables (Details) 
+    // bool isWindowHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByPopup);
     //  strict hovered flag: Returns false if a popup menu is covering the mouse
     bool isViewDirectlyHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
     bool ctxMenuPopupOpen = ImGui::IsPopupOpen("ItemContextMenu");
 
 
-    // Left Click on Empty Space
+    // Left Click on Empty Space 
     // ONLY clear selection if the user clicked the actual view, NOT a popup menu!
 
     if (isViewDirectlyHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)){
@@ -540,10 +523,48 @@ void RenderFileGrid(f32 dpi, App& app){
     
     PushMenuTheme(dpi);
     if (ImGui::BeginPopup("ItemContextMenu")) {
-
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape)) ImGui::CloseCurrentPopup();
         RenderContextMenuStructure(app, ctxState.ctxMenuInterface, ctxState.ctxMenuItems, activeTab.dir.parent.pidl.get(), ctxState.selectedPidls, app.gfx.hwnd, dpi);
         ImGui::EndPopup();
     }
     PopMenuTheme();
 }
 
+// 2.25 active yeast
+// 2 tbsp warm water
+// wait 10 mins
+
+// 3.5 cups 
+// 0.25 brown sugar
+
+// 1 tsp salt
+
+// add yeast mixture
+
+// Stir
+
+// 1 tsp vanilla
+
+// 1 egg dont got egg
+
+// dont got any juice
+
+// mix and knead until smooth and non sticky
+
+// 0.25 unsalted butter
+
+// take floured surface
+
+// knead into ball
+
+// put in bowl, with some oil on it and seal it for 1 - 2 hours
+
+// deflate, cut into shares
+
+// i cant do the pinch and fold method, so i will roll it into a smooth ball, should prolly leave to rise tho, since im rolling 
+
+// leave for 30 - 60 mins 
+
+// 350 degrees for 20 - 25 mins
+
+// put on rack and let sit for 15 mins

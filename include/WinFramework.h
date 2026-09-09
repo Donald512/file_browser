@@ -2,7 +2,7 @@
 
 #ifndef _WIN32_WINNT
 // target Windows 7 or later
-    #define _WIN32_WINNT 0x0601
+    #define _WIN32_WINNT 0x0A01
 #endif
 
 #ifndef WINVER
@@ -20,12 +20,12 @@
 // #define WIN32_LEAN_AND_MEAN  // for Shell APIs
 #define NOGDICAPMASKS
 // #define NOSYSMETRICS
-#define NOMENUS
+// #define NOMENUS
 // #define NOICONS
 #define NORASTEROPS
 #define OEMRESOURCE
 #define NOATOM
-#define NOCOLOR
+// #define NOCOLOR
 // #define NOCTLMGR   
 #define NODRAWTEXT
 #define NOKERNEL
@@ -49,7 +49,3 @@
 #define NOPROXYSTUB
 #define NOIMAGE
 #define NOTAPE
-
-
-#include <Windows.h>
-
