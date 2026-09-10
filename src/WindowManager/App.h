@@ -42,6 +42,12 @@ struct UIState{
 template<class... Ts> struct overloaded : Ts... { using Ts::operator()...; };
 template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
+struct CommandQueue{
+    std::vector <AppCommand> cmds;
+    void QueueCommand(AppCommand cmd){
+        cmds.push_back(std::move(cmd));
+    }
+};
 
 struct App{
 
@@ -57,20 +63,17 @@ struct App{
     TypenameStore typeStore;
     DirectoryManager directory{tasks, typeStore};
     
-    DirectoryWatcher watcher{tasks, directory, [this](AppCommand cmd) { QueueCommand(std::move(cmd)); }};
+    CommandQueue cmdQueue;
+
+    DirectoryWatcher watcher{tasks, directory, [this](AppCommand cmd) { cmdQueue.QueueCommand(std::move(cmd)); }};
     
     Window window{directory, watcher};
 
     SidebarManager sidebar;
 
-    std::vector<AppCommand> commandQueue;
     std::unordered_set<u64> clipBoardCutItems{};
 
     std::vector<ShellNewEntry> newEntries;
 
-
-    void QueueCommand(AppCommand cmd){
-        commandQueue.push_back(std::move(cmd));
-    }
     void ProcessCommands();
 };

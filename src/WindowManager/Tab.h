@@ -47,15 +47,6 @@ class Tab{
         return GoTo(history.Current(), Actions::Refresh);
     }
     
-    // void SelectItem(u64 i, SelectMode mode);
-    void DeselectAllItemsAndSelect(u64 i);
-    void DeselectItem(u64 i);
-    void AddItemToSelection(u64 i);
-    void DeselectAllItems();
-    
-    bool isSelected(u64 i) const{
-        return selState.selectedHashes.find(i) != selState.selectedHashes.end();
-    }
     
     void ReSort();
     void ToggleShowHidden(){
@@ -67,10 +58,6 @@ class Tab{
             }
         }
     }
-
-    void ClearViewState();
-    void ClearSelState();
-    void ClearRenameState();
     
     Breadcrumbs breadcrumbs{};
     History history{};
@@ -131,14 +118,19 @@ inline bool Tab::GoTo(PCIDLIST_ABSOLUTE dest, Actions action){
 
     if (action == Actions::Normal) history.Push(dir.parent.pidl.get()); 
     breadcrumbs = GenerateBreadcrumbs(dir.parent.pidl.get());
-    selState.selectedHashes.clear();
 
     dir.ClearForNav();
-    ClearViewState();
-    ClearSelState();
-    ClearRenameState();
 
-    dir.UpdateChildren(*dirManager, viewState);
+    viewState.Clear();
+    selState.Clear();
+    renameState.Clear();
+
+    // this is for the case, where its already cached, wont run in Fileview.cpp, because UpdateChildren, never returns true
+    if (dir.UpdateChildren(*dirManager, viewState)){    
+        if (const DirChildren* fresh = dirManager->Get(dir.HChildren)){
+            selState.selectedMask.Resize(fresh->ItemCount());
+        }
+    }
     watcher->Watch(dir.parent.pidl.get(), dir.parent.hash);
 
 
@@ -163,35 +155,4 @@ inline void Tab::ReSort(){
     dir.Sort(*PChildren, dirManager->GetTypeStore(), viewState);
 
     if (!viewState.showHidden) dir.RebuildNonHiddenIndices(*PChildren);
-}
-
-
-inline void Tab::DeselectAllItemsAndSelect(u64 i){
-    selState.selectedHashes.clear();
-    selState.selectedHashes.insert(i);
-}
-
-inline void Tab::AddItemToSelection(u64 i){    selState.selectedHashes.insert(i);}
-inline void Tab::DeselectItem(u64 i){    selState.selectedHashes.erase(i);}
-inline void Tab::DeselectAllItems(){    selState.selectedHashes.clear();}
-
-inline void Tab::ClearViewState(){
-    viewState.columnStarts.clear();
-    viewState.columnWidths.clear();
-    viewState.scrollToItemId = std::nullopt;
-    viewState.scrollY = 0;
-}
-
-inline void Tab::ClearSelState(){
-    // selState.justNavigated = false;
-    selState.selectedHashes.clear();
-    selState.focusHash = std::nullopt;
-    selState.anchorHash = std::nullopt;
-    selState.anchorVisualIndex = -1;
-}
-
-inline void Tab::ClearRenameState(){
-    renameState.renamingItemId = std::nullopt;
-    renameState.renameBuffer[0] = 0;
-    renameState.renameFocusHandledFor = std::nullopt;
 }

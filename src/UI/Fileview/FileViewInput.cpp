@@ -12,7 +12,8 @@
 #include "App.h"
 
 
-ItemInteraction HandleItemInteraction(App& app, const DirParent& parent, const ItemView& child, int visualIndex, ImGuiID id, const ImRect& rect){
+// Must be activeTab, if that turns out to be false, change the parameter to size_t tabIndex, because the .activeTabIndex is passed to command queue
+ItemInteraction HandleItemInteraction(CommandQueue& cmdQueue, Tab& activeTab, size_t activeTabIndex, DirListing& listing, int visualIndex, ImGuiID id, const ImRect& rect){
     Interaction ia = MakeInteractive(id, rect);
     bool doubleClicked = IsDoubleClick(id, ia.pressed);
 
@@ -22,12 +23,13 @@ ItemInteraction HandleItemInteraction(App& app, const DirParent& parent, const I
     bool isLeftClick  = ImGui::IsMouseClicked(ImGuiMouseButton_Left) && ia.hovered;
     bool isRightClick = ImGui::IsMouseClicked(ImGuiMouseButton_Right) && ia.hovered;
 
-    auto& activeTab = app.window.GetActiveTab();
-
     auto& selState = activeTab.selState; 
     auto& ctxState = activeTab.ctxState;
+    
+    auto rawEntryIndex = listing.refs[visualIndex];
+    auto child = listing.PChildren->GetItem(rawEntryIndex);
 
-    bool isCurrentlySelected = activeTab.isSelected(child.hash);
+    bool isCurrentlySelected = selState.IsSelected(rawEntryIndex);
 
     // track hover state for dead space  clicking
     if (ia.hovered) {
@@ -47,35 +49,28 @@ ItemInteraction HandleItemInteraction(App& app, const DirParent& parent, const I
             int end   = ExploraMax(selState.anchorVisualIndex, visualIndex);
 
             if (!isCtrl){   // if ctrl isnt held, wipe the current selection first, ctrl + shift allows expanding an existing selection
-                selState.selectedHashes.clear(); // Clear unless Ctrl+Shift
+                selState.selectedMask.Clear(); // Clear unless Ctrl+Shift
             }
 
-            DirListing listing = GetVisibleListing(app);
             for (int i = start; i <= end; i++) {
-                auto c = listing.PChildren->GetItem(listing.refs[i], app.typeStore);
-                selState.selectedHashes.insert(c.hash);
+                auto rangeIRawEntryIndex = listing.refs[i];
+                selState.AddItemToSelection(rangeIRawEntryIndex);
             }
-
         
-
             selState.focusHash = child.hash;
             // Anchor does NOT change on Shift-Click, allowing further Shift-Clicks
         }
         else if (isCtrl){
             // Ctrl Click: Toggle
-            if (isCurrentlySelected){
-                activeTab.DeselectItem(child.hash);
-            }
-            else{
-                activeTab.AddItemToSelection(child.hash);
-            }
+            if (isCurrentlySelected) selState.DeselectItem(rawEntryIndex);
+            else selState.AddItemToSelection(rawEntryIndex);
 
             selState.focusHash = child.hash;
             selState.anchorHash = child.hash;
             selState.anchorVisualIndex = visualIndex;
         }
         else{
-            if (isCurrentlySelected && activeTab.selState.selectedHashes.size() == 1){ // its the only one selected
+            if (isCurrentlySelected && activeTab.selState.NumSelected() == 1){ // its the only one selected
                 // enter rename mode
                 renameState.pendingHash = child.hash;
                 renameState.singleClickedAtTime = ImGui::GetTime();
@@ -88,7 +83,7 @@ ItemInteraction HandleItemInteraction(App& app, const DirParent& parent, const I
                 selState.anchorVisualIndex = visualIndex;
             }
             else{
-                activeTab.DeselectAllItemsAndSelect(child.hash);
+                selState.DeselectAllItemsAndSelect(rawEntryIndex);
                 selState.focusHash = child.hash;
                 selState.anchorHash = child.hash;
                 selState.anchorVisualIndex = visualIndex;
@@ -101,12 +96,12 @@ ItemInteraction HandleItemInteraction(App& app, const DirParent& parent, const I
     // ============================
     if (doubleClicked) {
         renameState.pendingHash = std::nullopt; // cancel - this was a double click, not a rename trigger
-        PCIDLIST_ABSOLUTE newPidl = GetFullPidl(parent.pidl.get(), child.pidl);
+        PCIDLIST_ABSOLUTE newPidl = GetFullPidl(listing.dir.parent.pidl.get(), child.pidl);
         // WShell::Pidl steals ownership
-        if (child.IsFolder()) app.QueueCommand(Cmd_GoTo{app.window.activeTabIndex, WShell::Pidl(newPidl) });
+        if (child.IsFolder()) cmdQueue.QueueCommand(Cmd_GoTo{activeTabIndex, WShell::Pidl(newPidl) });
         else{
-            app.QueueCommand(Cmd_OpenFile{ WShell::Pidl(newPidl) });
-            activeTab.DeselectAllItemsAndSelect(child.hash);
+            cmdQueue.QueueCommand(Cmd_OpenFile{ WShell::Pidl(newPidl) });
+            selState.DeselectAllItemsAndSelect(rawEntryIndex);
             selState.focusHash = child.hash;
             selState.anchorHash = child.hash;
             selState.anchorVisualIndex = visualIndex;
@@ -118,7 +113,7 @@ ItemInteraction HandleItemInteraction(App& app, const DirParent& parent, const I
     if (isRightClick) {
         if (!isCurrentlySelected) {
             // Right-clicked an UNSELECTED item: Clear everything else, select this one
-            activeTab.DeselectAllItemsAndSelect(child.hash);
+            selState.DeselectAllItemsAndSelect(rawEntryIndex);
             selState.focusHash = child.hash;
             selState.anchorHash = child.hash;
             selState.anchorVisualIndex = visualIndex;
@@ -192,20 +187,20 @@ void KeyboardNavigationInteraction(f32 dpi, App& app){
     if (renameState.renamingItemId.has_value()) return; 
 
     if (ImGui::IsKeyPressed(ImGuiKey_F2)){
-        if (focusedItemIndex >= 0 && selState.selectedHashes.size() == 1){
-            auto actualItemIndex = listing.refs[focusedItemIndex];
+        if (focusedItemIndex >= 0 && selState.NumSelected() == 1){
+            auto rawEntryIndex = listing.refs[focusedItemIndex];
 
-            renameState.renamingItemId = listing.PChildren->hashes[actualItemIndex];
-            vs.scrollToItemId = listing.PChildren->hashes[actualItemIndex];
+            renameState.renamingItemId = listing.PChildren->hashes[rawEntryIndex];
+            vs.scrollToItemId = listing.PChildren->hashes[rawEntryIndex];
 
-            strncpy(renameState.renameBuffer, listing.PChildren->GetChildName(actualItemIndex), sizeof(renameState.renameBuffer) - 1);
+            strncpy(renameState.renameBuffer, listing.PChildren->GetChildName(rawEntryIndex), sizeof(renameState.renameBuffer) - 1);
             renameState.renameBuffer[sizeof(renameState.renameBuffer) - 1] = '\0';  
 
             return;
         }
     }
     if (ImGui::IsKeyPressed(ImGuiKey_Escape) && !ImGui::IsPopupOpen("ItemContextMenu")) {
-        activeTab.DeselectAllItems();
+        selState.DeselectAllItems();
     }
 
     ImGuiKey keyPressed = ImGuiKey_None;
@@ -275,16 +270,16 @@ void KeyboardNavigationInteraction(f32 dpi, App& app){
             auto newChild = listing.PChildren->GetItem(listing.refs[newFocusIdx], app.typeStore);
              
             if (shift) {
-                int start = (std::min)(selState.anchorVisualIndex, newFocusIdx);
-                int end = (std::max)(selState.anchorVisualIndex, newFocusIdx);
-                if (!ctrl) activeTab.DeselectAllItems();
+                int start = ExploraMin(selState.anchorVisualIndex, newFocusIdx);
+                int end = ExploraMax(selState.anchorVisualIndex, newFocusIdx);
+                if (!ctrl) selState.DeselectAllItems(); 
                 for (int i = start; i <= end; i++) {
-                    auto c = listing.PChildren->GetItem(listing.refs[i], app.typeStore);
-                    activeTab.AddItemToSelection(c.hash);
+                    auto rawEntryIndex = listing.refs[i];
+                    selState.AddItemToSelection(rawEntryIndex);
                 }
             }
             else if (!ctrl){
-                activeTab.DeselectAllItemsAndSelect(newChild.hash);
+                selState.DeselectAllItemsAndSelect(listing.refs[newFocusIdx]);
                 selState.anchorVisualIndex = newFocusIdx;
                 selState.anchorHash = newChild.hash;
             }
@@ -298,11 +293,8 @@ void KeyboardNavigationInteraction(f32 dpi, App& app){
         if (focusedItemIndex >= 0){
             if (ImGui::IsKeyPressed(ImGuiKey_Space)) {
                 auto focusChild = listing.PChildren->GetItem(listing.refs[focusedItemIndex], app.typeStore);
-                if (activeTab.isSelected(focusChild.hash)){
-                    activeTab.DeselectItem(focusChild.hash);
-                } else {
-                    activeTab.AddItemToSelection(focusChild.hash);
-                }
+                if (selState.IsSelected(focusChild.hash)) selState.DeselectItem(listing.refs[newFocusIdx]);
+                else selState.AddItemToSelection(listing.refs[newFocusIdx]);
             }
             
             // Enter: Open / Navigate
@@ -310,9 +302,9 @@ void KeyboardNavigationInteraction(f32 dpi, App& app){
                 auto focusChild = listing.PChildren->GetItem(listing.refs[focusedItemIndex], app.typeStore);
                 PCIDLIST_ABSOLUTE newPidl = GetFullPidl(listing.dir.parent.pidl.get(), focusChild.pidl);
                 if (focusChild.IsFolder()){
-                    app.QueueCommand(Cmd_GoTo{app.window.activeTabIndex, WShell::Pidl(newPidl)}); 
+                    app.cmdQueue.QueueCommand(Cmd_GoTo{app.window.activeTabIndex, WShell::Pidl(newPidl)}); 
                 } else {
-                    app.QueueCommand(Cmd_OpenFile{WShell::Pidl(newPidl)});
+                    app.cmdQueue.QueueCommand(Cmd_OpenFile{WShell::Pidl(newPidl)});
                 }
             }
         }

@@ -1,11 +1,11 @@
 #pragma once
 
 #include "BasicTypes.h"
-
 #include "WinFramework.h"
 #include <ShlObj.h>
 #include <ShlObj_core.h>
 #include <vector>
+
 #include "CtxMenu.h"
 
 struct App;

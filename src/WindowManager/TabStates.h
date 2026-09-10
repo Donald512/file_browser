@@ -3,18 +3,40 @@
 #include "BasicTypes.h"
 #include <unordered_set>
 #include <optional>
-#include <vector>
-#include "CtxMenu.h"
 #include <ShlObj.h>
+#include <vector>
+
+#include "CtxMenu.h"
+#include "Bitmask.h"
 
 
 struct SelectionState {
     // bool justNavigated = false;
-    std::unordered_set<u64> selectedHashes;
+    Bitmask selectedMask;
     std::optional<u64> focusHash = std::nullopt;
     std::optional<u64> anchorHash = std::nullopt;
     int anchorVisualIndex = -1; // for Shift-Click range calculations
     bool isAnyItemHovered = false;
+
+
+    size_t NumSelected(){ return selectedMask.SetBitCount();}
+    bool IsSelected(size_t rawEntryIndex){return selectedMask.IsSet(rawEntryIndex);}
+    void AddItemToSelection(size_t rawEntryIndex){selectedMask.Set(rawEntryIndex);}
+    void DeselectItem(size_t rawEntryIndex){selectedMask.Unset(rawEntryIndex);}
+    void DeselectAllItems(){selectedMask.Clear();}
+    
+    void DeselectAllItemsAndSelect(size_t rawEntryIndex){    
+        selectedMask.Clear();
+        selectedMask.Set(rawEntryIndex);
+    }
+
+    void Clear(){
+        selectedMask.Clear();
+        focusHash = std::nullopt;
+        anchorHash = std::nullopt;
+        anchorVisualIndex = -1;
+        isAnyItemHovered = false;
+    }
 };
 
 struct CtxMenuState{
@@ -48,7 +70,13 @@ struct FileViewState {
 
     std::vector<f32> columnStarts;  // for List mode, to prevent allocing and freeing at 144Hz
     std::vector<f32> columnWidths;
-    
+
+    void Clear(){
+        scrollToItemId = std::nullopt;
+        columnStarts.clear();
+        columnWidths.clear();
+        scrollY = 0.0f;
+    }
 };
 
 struct RenameState{
@@ -58,6 +86,14 @@ struct RenameState{
 
     std::optional<u64> pendingHash = std::nullopt;
     double singleClickedAtTime = 0.0f;
+
+    void Clear(){
+        renamingItemId = std::nullopt;
+        renameFocusHandledFor = std::nullopt;
+        pendingHash = std::nullopt;
+
+        renameBuffer[0] = 0;
+    }
 };
 
 struct NewState{

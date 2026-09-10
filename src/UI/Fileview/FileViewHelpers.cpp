@@ -10,18 +10,20 @@ DirListing GetVisibleListing(App& app){
     return {dir, PChildren, refs};
 }
 
-std::vector<PCITEMID_CHILD> GetSelectedItems(Tab& tab, const DirChildren& children){
+
+// todo Optimize this to move set bit to set bit, instead of all the refs
+std::vector<PCITEMID_CHILD> GetSelectedItems(DirListing& listing, Tab& tab){
     std::vector<PCITEMID_CHILD> childPidls = {};
-    auto& selSet = tab.selState.selectedHashes;
+    auto& selState = tab.selState;
+    if (!listing.PChildren) return childPidls;
 
-    for (auto index : tab.dir.VisibleIndices(tab.viewState.showHidden)){
-        if (childPidls.size() > selSet.size()) break;   // no need to continue searching
-
-        u64 hash = children.hashes[index];
-        if (selSet.find(hash) != selSet.end()){
-            childPidls.push_back(children.GetChildPidl(index));
+    for (size_t bitPos : selState.selectedMask){
+        // the bitPos is directly mapped to rawEntryIndex, same thing
+        if (bitPos < listing.PChildren->ItemCount()){
+            childPidls.reserve(selState.NumSelected());
+            childPidls.push_back(listing.PChildren->GetChildPidl(bitPos));
         }
-    }   
+    }
     return childPidls;
 }
 
@@ -47,21 +49,31 @@ int ResolvePendingScrollItemIndex(FileViewState& vs, DirListing& listing){
 }
 
 
-
-
 int GetFocusedItemIndex(App& app){
     DirListing listing = GetVisibleListing(app);
     auto& activeTab = app.window.GetActiveTab();
 
     int focusedItemIndex = -1;
     for (size_t i = 0; i < listing.refs.size(); i++){
-        auto c = listing.PChildren->GetItem(listing.refs[i], app.typeStore);
+        auto c = listing.PChildren->GetItem(listing.refs[i]);
         if (c.hash == activeTab.selState.focusHash) {
             focusedItemIndex = (int)i; 
             break; 
         }
     }
     return focusedItemIndex;
+}
+
+// Returns visualIndex, because rawIndex can be gotten from visualIndex
+size_t GetVisualIndexFromHash(DirListing& listing, u64 hash){
+    for (size_t visualIndex = 0; visualIndex < listing.refs.size(); visualIndex++){
+        auto rawEntryindex = listing.refs[visualIndex];
+
+        if (listing.PChildren->hashes[rawEntryindex] == hash){
+            return visualIndex;
+        }
+    }
+    return SIZE_MAX;
 }
 
 

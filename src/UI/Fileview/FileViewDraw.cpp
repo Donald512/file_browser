@@ -33,14 +33,18 @@ void RenderRenameWidget(const char* strId, ImVec2 pos, ImVec2 baseSize, ImVec2 m
 }
 
 
-ItemInteraction DrawItemChrome(ImDrawList* dl, ImGuiWindow* window, App& app, f32 dpi, const DirParent& parent, const ItemView& child, int visualIndex, const ImRect& fullRect, f32 rounding, bool drawFocusRing, bool drawBg){
-    auto& activeTab = app.window.GetActiveTab();
+ItemInteraction DrawItemChrome(ImDrawList* dl, ImGuiWindow* window, CommandQueue& cmdQueue, Tab& activeTab, size_t activeTabIndex, f32 dpi, DirListing& listing, int visualIndex, const ImRect& fullRect, f32 rounding, bool drawFocusRing, bool drawBg){
+    auto& selState = activeTab.selState;
+
+    auto& rawEntryIndex = listing.refs[visualIndex];
+    auto child = listing.PChildren->GetItem(rawEntryIndex);
 
     ImGuiID id = window->GetID((void*)(intptr_t)child.hash);
-    ItemInteraction ia = HandleItemInteraction(app, parent, child, visualIndex, id, fullRect);
 
-    bool isSelected = activeTab.isSelected(child.hash);
-    bool isFocused  = activeTab.selState.focusHash == child.hash;
+    ItemInteraction ia = HandleItemInteraction(cmdQueue, activeTab, activeTabIndex, listing, visualIndex, id, fullRect);
+
+    bool isSelected = selState.IsSelected(listing.refs[visualIndex]);
+    bool isFocused  = selState.focusHash == child.hash;
 
     if (drawBg) DrawSelectableBg(dl, fullRect, ia.hovered, isSelected, rounding);
 
@@ -79,15 +83,20 @@ void DrawItemIcon(ImDrawList* dl, App& app, const DirParent& parent, const ItemV
 }
 
 
-void DrawItemText(HWND hwnd, ImDrawList* dl, Tab& activeTab, const DirParent& parent, const ItemView& child, const ImRect& textRect, TextRenderMode textRenderMode, int maxLines){
+void DrawItemText(HWND hwnd, ImDrawList* dl, Tab& activeTab, DirListing& listing, size_t visualIndex, const ImRect& textRect, TextRenderMode textRenderMode, int maxLines){
     auto& renameState = activeTab.renameState;
+    auto& selState = activeTab.selState;
+
+    auto rawEntryIndex = listing.refs[visualIndex];
+    auto child = listing.PChildren->GetItem(rawEntryIndex);
+
     if (renameState.renamingItemId == child.hash) {
-        bool isSelected = activeTab.isSelected(child.hash);
+        bool isSelected = selState.IsSelected(rawEntryIndex);
         ImU32 bgCol = isSelected ? Theme::Current.palette.SurfaceActive : Theme::Current.palette.Surface;
  
         ImVec2 baseSize = textRect.GetSize();
         
-        RenderRenameWidget("iconsRename", textRect.Min, baseSize, baseSize, GrowAxis::X, hwnd, renameState, parent.pidl.get(), child.pidl, child.name, bgCol);
+        RenderRenameWidget("iconsRename", textRect.Min, baseSize, baseSize, GrowAxis::X, hwnd, renameState, listing.dir.parent.pidl.get(), child.pidl, child.name, bgCol);
         return; 
     }
 

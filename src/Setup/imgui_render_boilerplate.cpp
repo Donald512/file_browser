@@ -2,7 +2,7 @@
 #include "theme.h"
 #include "imgui_fonts.h"
 #include "MainApp.h"
-
+#include "App.h"
 
 void InitializeImGui(HWND hwnd, ID3D11Device* pD3dDevice, ID3D11DeviceContext* pD3dContext, f32* dpi){
     IMGUI_CHECKVERSION();

@@ -16,14 +16,13 @@ class Directory{
     public:
     bool updatedChildren = false;
     DirParent parent;
-    // std::shared_ptr<const DirChildren> children;    // delete
     CachedDirHandle HChildren;  
 
     void UpdateParent(PCIDLIST_ABSOLUTE parentPidl){
         parent = GetDirParent(parentPidl);
     }
 
-    void UpdateChildren(DirectoryManager& directory, FileViewState vs);
+    bool UpdateChildren(DirectoryManager& directory, FileViewState vs);
     void ClearForNav();
     
     ItemView GetChildFromHash(const DirChildren& children, TypenameStore& typeStore, u64 hash);
@@ -42,15 +41,15 @@ class Directory{
 
 };
 
-inline void Directory::UpdateChildren(DirectoryManager& dirManager, FileViewState vs){
-    if (updatedChildren) return;
+inline bool Directory::UpdateChildren(DirectoryManager& dirManager, FileViewState vs){
+    if (updatedChildren) return false;
 
     UpdateParentShellFolder(parent);
     HChildren = dirManager.GetOrRequest(parent.pidl.get(), parent.hash);
 
     const DirChildren* PChildren = dirManager.Get(HChildren);
     
-    if (!PChildren) return;
+    if (!PChildren) return false;
 
     size_t count = PChildren->ItemCount();
     sortedIndices.resize(count);
@@ -64,6 +63,7 @@ inline void Directory::UpdateChildren(DirectoryManager& dirManager, FileViewStat
     if (!vs.showHidden) RebuildNonHiddenIndices(*PChildren);
     
     updatedChildren = true;
+    return true;
 }
 
 inline ItemView Directory::GetChildFromHash(const DirChildren& children, TypenameStore& typeStore, u64 hash){

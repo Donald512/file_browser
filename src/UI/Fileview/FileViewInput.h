@@ -13,13 +13,16 @@ struct DirParent;
 class DirChildren;
 struct ItemView;
 struct SelectionState;
+struct DirListing;
+struct CommandQueue;
 
 struct ItemInteraction {
     bool hovered;
     bool clicked;
 };
 
-ItemInteraction HandleItemInteraction(App& app, const DirParent& parent, const ItemView& child, int visualIndex, ImGuiID id, const ImRect& rect);
+ItemInteraction HandleItemInteraction(CommandQueue& cmdQueue, Tab& activeTab, size_t activeTabIndex, DirListing& listing, int visualIndex, ImGuiID id, const ImRect& rect);
+
 
 void KeyboardNavigationInteraction(f32 dpi, App& app);
 

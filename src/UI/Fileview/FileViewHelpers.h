@@ -31,8 +31,9 @@ inline bool isFileCutOnClipBoard(std::unordered_set<u64>& clipboardCutItems, u64
 DirListing GetVisibleListing(App& app);
 
 int ResolvePendingScrollItemIndex(FileViewState& vs, DirListing& listing);
-std::vector<PCITEMID_CHILD> GetSelectedItems(Tab& tab, const DirChildren& children);
+std::vector<PCITEMID_CHILD> GetSelectedItems(DirListing& listing, Tab& tab);
 int GetScrollToItemIndex(DirListing& listing, u64 id);
 int GetFocusedItemIndex(App& app);
+size_t GetVisualIndexFromHash(DirListing& listing, u64 hash);
 
 

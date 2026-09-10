@@ -90,7 +90,7 @@ static void RenderGridView(f32 dpi, App& app, DirListing& listing){
 
             const auto child = listing.PChildren->GetItem(listing.refs[currentIndex]);
             const ImRect fullRect(cellPos, cellPos + ImVec2(itemWidth, cellH));
-            DrawItemChrome(dl, window, app, dpi, listing.dir.parent, child, (int)currentIndex, fullRect, 4.0f * dpi); 
+            DrawItemChrome(dl, window, app.cmdQueue, activeTab, app.window.activeTabIndex, dpi, listing, (int)currentIndex, fullRect, 4.0f * dpi); 
 
             const f32 iconX = CenterX(cellPos.x, itemWidth, imageSize);
             const f32 iconY = cellPos.y + framePadX;    // todo add 4.0f * dpi 
@@ -104,7 +104,7 @@ static void RenderGridView(f32 dpi, App& app, DirListing& listing){
                 ImVec2(textX, textY), 
                 ImVec2(textX, textY) + ImVec2(textMaxWidth, totalTextHeight)
             );
-            DrawItemText(app.gfx.hwnd, dl, activeTab, listing.dir.parent, child, textRect, TextRenderMode::WrappedCentered, maxLines);
+            DrawItemText(app.gfx.hwnd, dl, activeTab, listing, currentIndex, textRect, TextRenderMode::WrappedCentered, maxLines);
         }
     }
 }
@@ -156,7 +156,7 @@ static void RenderSmallView(f32 dpi, App& app, DirListing& listing){
 
             const auto child = listing.PChildren->GetItem(listing.refs[currentIndex]);
             const ImRect fullRect(cellPos, cellPos + ImVec2(layout.cellWidth, layout.cellHeight));
-            DrawItemChrome(dl, window, app, dpi, listing.dir.parent, child, (int)currentIndex, fullRect, 4.0f * dpi); 
+            DrawItemChrome(dl, window, app.cmdQueue, activeTab, app.window.activeTabIndex, dpi, listing, (int)currentIndex, fullRect, 4.0f * dpi); 
 
             const f32 iconX =  fullRect.Min.x + iconPad;
             const f32 iconY =  cellPos.y + (layout.cellHeight - layout.iconSize) * 0.5f;
@@ -164,7 +164,7 @@ static void RenderSmallView(f32 dpi, App& app, DirListing& listing){
 
             const ImRect textRect(ImVec2(iconX + layout.iconSize + textGap, fullRect.Min.y + 2.0f * dpi), ImVec2(fullRect.Max.x - textGap, fullRect.Max.y - 2.0f * dpi));
 
-            DrawItemText(app.gfx.hwnd, dl, activeTab, listing.dir.parent, child, textRect, TextRenderMode::SingleLineEllipsis, 0);
+            DrawItemText(app.gfx.hwnd, dl, activeTab, listing, currentIndex, textRect, TextRenderMode::SingleLineEllipsis, 0);
         }
     }
 }
@@ -240,7 +240,7 @@ static void RenderListView(f32 dpi, App& app, DirListing& listing){
 
             const ImRect fullRect(cellScreenPos, cellScreenPos + ImVec2(currentColWidth - layout.xGap, layout.cellHeight));
 
-            DrawItemChrome(dl, window, app, dpi, listing.dir.parent, child, currentIndex, fullRect, 4.0f * dpi);
+            DrawItemChrome(dl, window, app.cmdQueue, activeTab, app.window.activeTabIndex, dpi, listing, (int)currentIndex, fullRect, 4.0f * dpi); 
 
             f32 iconY = fullRect.Min.y + (layout.cellHeight - layout.iconSize) * 0.5f;
 
@@ -250,7 +250,7 @@ static void RenderListView(f32 dpi, App& app, DirListing& listing){
             
             ImRect textRect(ImVec2(textStartX, fullRect.Min.y + 2.0f * dpi), ImVec2(textStartX + maxTextWidth, fullRect.Max.y - 2.0f * dpi));
            
-            DrawItemText(app.gfx.hwnd, dl, activeTab, listing.dir.parent, child, textRect, TextRenderMode::SingleLineEllipsis, 0);
+            DrawItemText(app.gfx.hwnd, dl, activeTab, listing, currentIndex, textRect, TextRenderMode::SingleLineEllipsis, 0);
             ImGui::PopID();
         }
     }
@@ -337,7 +337,7 @@ static void RenderDetailsView(f32 dpi, App& app, DirListing& listing){
             for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++){
                 auto child = listing.PChildren->GetItem(listing.refs[row], app.typeStore);
                 
-                bool isSelected = activeTab.isSelected(child.hash);
+                bool isSelected = activeTab.selState.IsSelected(listing.refs[row]);
                 
                 ImGui::PushID(row);
                 ImGui::TableNextRow(ImGuiTableRowFlags_None, layout.cellHeight);
@@ -356,7 +356,8 @@ static void RenderDetailsView(f32 dpi, App& app, DirListing& listing){
                 
                 ImGui::PushClipRect(ImVec2(rowRect.Min.x, ImMax(rowRect.Min.y, tableTopY)), ImVec2(tableMaxX, ImMin(rowRect.Max.y, tableBottomY)), false);
                 
-                ItemInteraction ia = DrawItemChrome(dl, window, app, dpi, listing.dir.parent, child, row, rowRect, 4.0f * dpi, true, false);
+                ItemInteraction ia = DrawItemChrome(dl, window, app.cmdQueue, activeTab, app.window.activeTabIndex, dpi, listing, (int)row, rowRect, 4.0f * dpi, true, false); 
+
                 ImGui::PopClipRect();
 
                 ImU32 bgCol = 0;
@@ -375,7 +376,7 @@ static void RenderDetailsView(f32 dpi, App& app, DirListing& listing){
                 f32 maxTextWidth = ImGui::GetContentRegionAvail().x - (textX - cellPos.x);
                 ImRect textRect(ImVec2(textX, rowRect.Min.y + 2.0f * dpi), ImVec2(textX + maxTextWidth, rowRect.Max.y - 2.0f * dpi));   
 
-                DrawItemText(app.gfx.hwnd, dl, activeTab, listing.dir.parent, child, textRect, TextRenderMode::SingleLineEllipsis, 0);
+                DrawItemText(app.gfx.hwnd, dl, activeTab, listing, row, textRect, TextRenderMode::SingleLineEllipsis, 0);
   
                 const char* dateText = (child.lastWriteTime.dwLowDateTime != 0 || child.lastWriteTime.dwHighDateTime != 0) ? FormatFileTime(child.lastWriteTime) : "";
                 drawColumn(dateText, "--", rowRect.Min.y, rowRect.Max.y, TextRenderModeInDrawColumn::SingleLineEllipsis);
@@ -440,7 +441,7 @@ static void RenderTilesView(f32 dpi, App& app, DirListing& listing){
 
             ImRect fullRect(cellPos, ImVec2(cellPos.x + layout.cellWidth, cellPos.y + layout.cellHeight));
 
-            DrawItemChrome(dl, window, app, dpi, listing.dir.parent, child, (int)currentIndex, fullRect, 4.0f * dpi);
+            DrawItemChrome(dl, window, app.cmdQueue, activeTab, app.window.activeTabIndex, dpi, listing, (int)currentIndex, fullRect, 4.0f * dpi); 
 
             f32 iconX = cellPos.x + 6.0f * dpi;
             f32 iconY = cellPos.y + (layout.cellHeight - layout.iconSize) * 0.5f;
@@ -450,7 +451,7 @@ static void RenderTilesView(f32 dpi, App& app, DirListing& listing){
             f32 textMaxWidth = cellPos.x + layout.cellWidth - textX - 8.0f * dpi;
                 ImRect textRect(ImVec2(textX, cellPos.y + 4.0f * dpi), ImVec2(textX + textMaxWidth, cellPos.y + 4.0f * dpi + lineHeight));
                 
-                DrawItemText(app.gfx.hwnd, dl, activeTab, listing.dir.parent, child, textRect, TextRenderMode::SingleLineEllipsis, 0);
+                DrawItemText(app.gfx.hwnd, dl, activeTab, listing, currentIndex, textRect, TextRenderMode::SingleLineEllipsis, 0);
 
                 const char* typeName = child.typeName[0] ? child.typeName : "--";
                 f32 typeY = cellPos.y + 4.0f * dpi + lineHeight + 2.0f * dpi; 
@@ -467,15 +468,28 @@ static void RenderTilesView(f32 dpi, App& app, DirListing& listing){
 
 void RenderFileGrid(f32 dpi, App& app){
     auto& activeTab = app.window.GetActiveTab();
+    
+    FileViewState& vs = activeTab.viewState;
+    SelectionState& selState = activeTab.selState;
 
+    if (activeTab.dir.UpdateChildren(app.directory, vs)){ // needs to be polled every frame, in case data is ready
+        std::cout << "Current Folder name = " << activeTab.dir.parent.name;
+        const DirChildren* fresh = app.directory.Get(activeTab.dir.HChildren);
+        if (fresh){
+            std::cout << " ItemCount = " << fresh->ItemCount() << std::endl;
+            selState.selectedMask.Resize(fresh->ItemCount());
+        } // gives raw item count, listing.refs.size() gives visual count
+        // PChildren is not nullptr if UpdateChildren returns true 
+    }    
+    
     DirListing listing = GetVisibleListing(app);
     if (!listing.PChildren) return; // for now;
+    
+    assert((selState.selectedMask.BitCount() == listing.PChildren->ItemCount()) || !(std::cout << " selState.selectedMask.BitCount() = " << selState.selectedMask.BitCount() << " listing.PChildren->ItemCount() = " << listing.PChildren->ItemCount() << std::endl));
 
-    FileViewState& vs = activeTab.viewState;
     auto& ctxState = activeTab.ctxState;
     auto& newState = activeTab.newState;
     auto& renameState = activeTab.renameState;
-    SelectionState& selState = activeTab.selState;
     ViewMode mode = vs.viewMode;
 
     // Reset hover state at the beginning of the frame
@@ -484,12 +498,13 @@ void RenderFileGrid(f32 dpi, App& app){
     ctxState.openMenu = false;
     ctxState.forChildren = false;   // redundant
     
-    activeTab.dir.UpdateChildren(app.directory, vs);    // needs to be polled every frame, in case data is ready 
+
 
     if (newState.expectingNewItem){
+        size_t visualIndex = GetVisualIndexFromHash(listing, newState.itemHash.value());
         vs.scrollToItemId = newState.itemHash;
         selState.focusHash = newState.itemHash;
-        activeTab.DeselectAllItemsAndSelect(newState.itemHash.value());
+        selState.DeselectAllItemsAndSelect(listing.refs[visualIndex]);
         
         renameState.renamingItemId = newState.itemHash;
         strncpy(activeTab.renameState.renameBuffer, newState.itemName.c_str(), sizeof(activeTab.renameState.renameBuffer) - 1);
@@ -528,15 +543,15 @@ void RenderFileGrid(f32 dpi, App& app){
 
     if (isViewDirectlyHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)){
         if (!activeTab.selState.isAnyItemHovered && !ImGui::IsAnyItemHovered() && !ctxMenuPopupOpen) {
-            activeTab.selState.selectedHashes.clear();
-            activeTab.ClearRenameState();
+            activeTab.selState.selectedMask.Clear();
+            renameState.Clear();
         }
     }
 
 
     if (isViewDirectlyHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right)){
         if (!activeTab.selState.isAnyItemHovered && !ImGui::IsAnyItemHovered() && !ctxMenuPopupOpen) {
-            activeTab.DeselectAllItems();
+            selState.DeselectAllItems(); 
             ctxState.ctxMenuItems = GetBackgroundContextMenu(ctxState.ctxMenuInterface, activeTab.dir.parent.pidl.get(), app.gfx.d3dDevice.Get());
             ctxState.openMenu = true;
             ctxState.forChildren = false;
@@ -546,7 +561,7 @@ void RenderFileGrid(f32 dpi, App& app){
 
     if (ctxState.openMenu){
         if (ctxState.forChildren){
-            ctxState.selectedPidls = GetSelectedItems(activeTab, *listing.PChildren);
+            ctxState.selectedPidls = GetSelectedItems(listing, activeTab);
             ctxState.ctxMenuItems = GetContextMenu(ctxState.ctxMenuInterface, activeTab.dir.parent.pidl.get(), ctxState.selectedPidls, app.gfx.hwnd, app.gfx.d3dDevice.Get());
         }
         // else, do nothing, already gotten by isRightClick
