@@ -1,19 +1,19 @@
 #pragma once
 #include "BasicTypes.h"
+#include <unordered_set>
+#include <optional>
+#include <algorithm>
+
 #include "History.h"
 #include "Breadcrumbs.h"
 #include "Item.h"
-#include <unordered_set>
 #include "Enum.h"
 #include "Directory.h"
 #include "TypenameManager.h"
-#include <optional>
 #include "KnownSpecialFolders.h"
 #include "Breadcrumbs.h"
 #include "Watcher.h"
-#include <algorithm>
 #include "CtxMenu.h"
-#include "BasicTypes.h"
 
 // maybe this for multiple different windows
 struct WindowManager{};

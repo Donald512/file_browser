@@ -1,17 +1,18 @@
 #pragma once
 
-#include <ShlObj.h>
 #include "BasicTypes.h"
 #include "Shell.h"
+
+#include <ShlObj.h>
 #include <vector>
 #include "Lazy.h"
 #include <string>
-#include "IconManager.h"
-#include "TypenameManager.h"
 
 #include <wrl/client.h>
 using Microsoft::WRL::ComPtr;
 
+
+class TypenameStore;
 
 struct DirParent{
     ComPtr<IShellFolder> shellFolder;
@@ -56,6 +57,7 @@ struct ItemView {
     bool IsFolder() const { return (attributes & SFGAO_FOLDER) != 0; }
     bool IsHidden() const { return (attributes & SFGAO_HIDDEN) != 0; }
 };
+
 class DirChildren{
     public:
 
@@ -111,19 +113,6 @@ inline void DirChildren::Clear(){
     std::vector<u16>().swap(typenameIndex);
 }
 
-
-
-inline ItemView DirChildren::GetItem(size_t index, TypenameStore& typeStore) const {
-    return ItemView{
-        GetChildName(index),
-        typeStore.GetTypename(typenameIndex[index]),
-        GetChildPidl(index),
-        hashes[index],
-        attributes[index],
-        lastWriteTimes[index],
-        sizes[index]
-    };
-}
 inline ItemView DirChildren::GetItem(size_t index) const {
     return ItemView{
         GetChildName(index),

@@ -7,9 +7,8 @@
 #include <ShlObj_core.h>
 #include <vector>
 #include "CtxMenu.h"
-#include "App.h"
 
-
+struct App;
 
 void PushMenuTheme(f32);
 void PopMenuTheme();

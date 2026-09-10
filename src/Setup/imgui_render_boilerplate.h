@@ -6,9 +6,9 @@
 #include "WinFramework.h"
 #include "deviceCreation.h"
 #include "BasicTypes.h"
-#include "App.h"
+// #include "App.h"
 
-
+struct App;
 
 struct GraphicsResources {
     ID3D11Device* device = nullptr;

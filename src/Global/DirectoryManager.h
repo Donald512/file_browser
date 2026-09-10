@@ -8,9 +8,11 @@
 #include <atomic>
 #include <optional>
 #include <unordered_map>
+
+#include "TypenameManager.h"
+#include "TaskSystem.h"
 #include "Item.h"
 #include "Enum.h"
-#include "TypenameManager.h"
 
 struct CachedDirChildren{
     DirChildren children;

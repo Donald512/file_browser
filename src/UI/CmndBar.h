@@ -2,11 +2,12 @@
 #include "BasicTypes.h"
 #include "imgui.h"
 #include "imgui_internal.h"
-#include "App.h"
 #include "ImGuiHelpers.h"
 #include "global.h"
 #include "theme.h"
 #include "iconRegular.h"
+
+struct App;
 
 inline void RenderCommandbar(f32 dpi, App& app){
     ImGuiWindow* window = ImGui::GetCurrentWindow();

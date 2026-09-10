@@ -1,5 +1,6 @@
 #pragma once
+#include "BasicTypes.h"
 
-#include "App.h"
+struct App;
 void RenderBottombar(f32 dpi, App& app);
 
