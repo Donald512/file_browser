@@ -90,6 +90,7 @@ void ExecutePendingClick(SelectionState& selState, RenameState& renameState, Dir
     auto rawEntryIndex = listing.refs[visualIndex];
     auto child = listing.PChildren->GetItem(rawEntryIndex);
     
+
     if (selState.mouseDownWasSoleSelection){
         renameState.pendingHash = itemHash;
         renameState.singleClickedAtTime = selState.singleClickedAtTime;
@@ -186,4 +187,23 @@ void ResolvePendingNewState(SelectionState& selState, NewState& newState, Rename
         
         newState.expectingNewItem = false;
     }
+}
+
+void ExecuteItem(CommandQueue& cmdQueue, DirListing& listing, int visualIndex, size_t activeTabIndex){
+    assert(visualIndex < 0 || visualIndex >= listing.refs.size());
+
+    auto rawIndex = listing.refs[visualIndex];
+    auto child = listing.PChildren->GetItem(rawIndex);
+    PCIDLIST_ABSOLUTE newPidl = GetFullPidl(listing.dir.parent.pidl.get(), child.pidl);
+    
+    if (child.IsFolder()) cmdQueue.QueueCommand(Cmd_GoTo{activeTabIndex, WShell::Pidl(newPidl)});
+    else cmdQueue.QueueCommand(Cmd_OpenFile{WShell::Pidl(newPidl)});
+}
+
+void StartRename(RenameState& renameState, FileViewState& vs, DirListing& listing, int visualIndex) {
+    auto rawIndex = listing.refs[visualIndex];
+    renameState.renamingItemId = listing.PChildren->hashes[rawIndex];
+    vs.scrollToItemId = renameState.renamingItemId;
+    strncpy(renameState.renameBuffer, listing.PChildren->GetChildName(rawIndex), sizeof(renameState.renameBuffer) - 1);
+    renameState.renameBuffer[sizeof(renameState.renameBuffer) - 1] = '\0';
 }

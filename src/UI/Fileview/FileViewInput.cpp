@@ -78,13 +78,10 @@ ItemInteraction HandleItemInteraction(CommandQueue& cmdQueue, Tab& activeTab, si
     if (doubleClicked){
         selState.mode = SelectionState::InteractionMode::Idle;
         renameState.pendingHash = std::nullopt;
-        PCIDLIST_ABSOLUTE newPidl = GetFullPidl(listing.dir.parent.pidl.get(), child.pidl);
-        if (child.IsFolder()) cmdQueue.QueueCommand(Cmd_GoTo{activeTabIndex, WShell::Pidl(newPidl)});
-        else {
-            cmdQueue.QueueCommand(Cmd_OpenFile{WShell::Pidl(newPidl)});
+        ExecuteItem(cmdQueue, listing, visualIndex, activeTabIndex);
+        if (!child.IsFolder()){
             selState.DeselectAllItemsAndSelect(rawEntryIndex);
             OnSingleClickOnOneItem(selState, child.hash, visualIndex);
-
         }
         return {ia.hovered || ia.pressed};
     }
@@ -103,44 +100,42 @@ ItemInteraction HandleItemInteraction(CommandQueue& cmdQueue, Tab& activeTab, si
     return{ia.hovered || ia.pressed};
 }
 
-
-void KeyboardNavigationInteraction(f32 dpi, App& app){
-    auto& activeTab = app.window.GetActiveTab();
-    FileViewState& vs = activeTab.viewState;
-    auto& renameState = activeTab.renameState;
-    ViewMode mode = vs.viewMode;
+void ProcessKeyboardInput(f32 dpi, CommandQueue& cmdQueue, DirListing& listing, Tab& activeTab, size_t activeTabIndex){
     SelectionState& selState = activeTab.selState;
+    RenameState& renameState = activeTab.renameState;
+    FileViewState& vs = activeTab.viewState;
+    ViewMode& mode = vs.viewMode;
+    if (listing.refs.empty()) {ClearFocusState(selState); return;}
+    
+    // === Global actions (Independent of focus item) ---
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape) && !ImGui::IsPopupOpen(kItemContextMenuID)){ selState.DeselectAllItems(); return;}
 
-    DirListing listing = GetVisibleListing(app);
+    // === Require a Focused Item ---
+    int focusedVisualIndex = selState.focusHash.has_value() ? GetVisualIndexFromHash(listing, selState.focusHash.value()) : -1;
 
-    int totalItems = (int)listing.refs.size();
+    if (focusedVisualIndex >= 0){
+        if (ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter)) {
+            ExecuteItem(cmdQueue, listing, focusedVisualIndex, activeTabIndex); return;
+        }
+        if (ImGui::IsKeyPressed(ImGuiKey_Space)){ selState.ToggleItemSelection(listing.refs[focusedVisualIndex]); return;}
 
-    // Early exit and clean reset if empty
-    if (totalItems == 0) {
-        ClearFocusState(selState);
-        return;
+        if (ImGui::IsKeyPressed(ImGuiKey_F2) && selState.NumSelected() == 1) {
+            StartRename(renameState, vs, listing, focusedVisualIndex);
+            return;
+        }
     }
 
-    // Find current focus index strictly by hash
-    int focusedItemIndex = -1;
-    if (activeTab.selState.focusHash.has_value()){
-        focusedItemIndex = GetFocusedItemIndex(app);
-    }
-        
-    // If focus is lost, invalid, or 0, reset it
-    if (focusedItemIndex == -1) {
-        ClearFocusState(selState);
-    }
+    // ===  NAVIGATION (Arrow keys, Home, End, etc.) ---
+    if (!ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup | ImGuiHoveredFlags_ChildWindows)) return;
+    if (renameState.renamingItemId.has_value()) return; // Block nav while renaming
 
-    bool shift = ImGui::GetIO().KeyShift;
-    bool ctrl = ImGui::GetIO().KeyCtrl;
-    int newFocusIdx = focusedItemIndex;
+    int pendingFocusedVisualIndex = focusedVisualIndex;
     bool navOccurred = false;
-
-
+    
     int columns = 1;
     int rowsPerColumn = 1;
     f32 availW = ImGui::GetContentRegionAvail().x;
+    FileviewLayout layout = GetFileviewLayoutForMode(ViewMode::List, dpi);
 
     if (mode == ViewMode::List){
         FileviewLayout layout = GetFileviewLayoutForMode(ViewMode::List, dpi);
@@ -153,126 +148,57 @@ void KeyboardNavigationInteraction(f32 dpi, App& app){
         f32 itemStride = GetGridItemStride(mode, dpi, vs.iconSize);
         if (itemStride > 0.0f) columns = ComputeGridColumns(availW, itemStride);
     }
-    if (renameState.renamingItemId.has_value()) return; 
 
-    if (ImGui::IsKeyPressed(ImGuiKey_F2)){
-        if (focusedItemIndex >= 0 && selState.NumSelected() == 1){
-            auto rawEntryIndex = listing.refs[focusedItemIndex];
-
-            renameState.renamingItemId = listing.PChildren->hashes[rawEntryIndex];
-            vs.scrollToItemId = listing.PChildren->hashes[rawEntryIndex];
-
-            strncpy(renameState.renameBuffer, listing.PChildren->GetChildName(rawEntryIndex), sizeof(renameState.renameBuffer) - 1);
-            renameState.renameBuffer[sizeof(renameState.renameBuffer) - 1] = '\0';  
-
-            return;
-        }
+    auto updatePendingFocusIdx = [&](int delta, bool isDelta = true){
+        if (isDelta) pendingFocusedVisualIndex += delta; 
+        else pendingFocusedVisualIndex = delta;
+        navOccurred = true;
+    };
+    if (mode == ViewMode::List) {
+        if (ImGui::IsKeyPressed(ImGuiKey_DownArrow)) updatePendingFocusIdx(1);
+        if (ImGui::IsKeyPressed(ImGuiKey_UpArrow)) updatePendingFocusIdx(-1);
+        if (ImGui::IsKeyPressed(ImGuiKey_RightArrow)) updatePendingFocusIdx(rowsPerColumn);
+        if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow)) updatePendingFocusIdx(-rowsPerColumn);
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_Escape) && !ImGui::IsPopupOpen("ItemContextMenu")) {
-        selState.DeselectAllItems();
+    else if (mode == ViewMode::Details) {
+        if (ImGui::IsKeyPressed(ImGuiKey_DownArrow)) updatePendingFocusIdx(1);
+        if (ImGui::IsKeyPressed(ImGuiKey_UpArrow)) updatePendingFocusIdx(-1);
     }
+    else{
+        if (ImGui::IsKeyPressed(ImGuiKey_DownArrow)) updatePendingFocusIdx(columns);
+        if (ImGui::IsKeyPressed(ImGuiKey_UpArrow)) updatePendingFocusIdx(-columns);
+        if (ImGui::IsKeyPressed(ImGuiKey_RightArrow)) updatePendingFocusIdx(1);
+        if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow)) updatePendingFocusIdx(-1); 
+    }
+    size_t totalItems = listing.refs.size();
+    if (ImGui::IsKeyPressed(ImGuiKey_Home)) updatePendingFocusIdx(0, false);
+    if (ImGui::IsKeyPressed(ImGuiKey_End)) updatePendingFocusIdx(totalItems - 1, false);
+    
+    int pageStride = (mode == ViewMode::List) ? rowsPerColumn : columns;
+    if (ImGui::IsKeyPressed(ImGuiKey_PageDown)) updatePendingFocusIdx(pageStride * 10);
+    if (ImGui::IsKeyPressed(ImGuiKey_PageUp)) updatePendingFocusIdx(-pageStride * 10);
 
-    ImGuiKey keyPressed = ImGuiKey_None;
-
-    // Handle Input (Only if window is hovered, including child windows)
-    if (ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup | ImGuiHoveredFlags_ChildWindows)){
+    if (navOccurred){
+        bool shift = ImGui::GetIO().KeyShift;
+        bool ctrl = ImGui::GetIO().KeyCtrl;
+        focusedVisualIndex = ImClamp(pendingFocusedVisualIndex, 0, (int)totalItems - 1);
         
-        // Arrow Keys: Branch logic for List (vertical wrap) vs Grid (horizontal wrap)
-        if (mode == ViewMode::List) {
-            if (ImGui::IsKeyPressed(ImGuiKey_DownArrow))  { 
-                newFocusIdx += 1; 
-                navOccurred = true; 
-                keyPressed = ImGuiKey_DownArrow;
-            }
-            if (ImGui::IsKeyPressed(ImGuiKey_UpArrow))    { 
-                newFocusIdx -= 1; 
-                navOccurred = true; 
-                keyPressed = ImGuiKey_UpArrow;
-            }
-            if (ImGui::IsKeyPressed(ImGuiKey_RightArrow)) { 
-                newFocusIdx += rowsPerColumn; 
-                navOccurred = true; 
-                keyPressed = ImGuiKey_RightArrow;
-            }
-            if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))  { 
-                newFocusIdx -= rowsPerColumn; 
-                navOccurred = true; 
-                keyPressed = ImGuiKey_LeftArrow;
-            }
+        u64 newFocusChildHash = listing.PChildren->hashes[focusedVisualIndex];
+        if (shift){
+            // prevent i starting at 0
+            if (selState.anchorVisualIndex < 0) selState.anchorVisualIndex = focusedVisualIndex;
+            int rangeStart = ExploraMin(selState.anchorVisualIndex, focusedVisualIndex);
+            int rangeEnd   = ExploraMax(selState.anchorVisualIndex, focusedVisualIndex);
+            if (!ctrl)  selState.DeselectAllItems(); // Replace entire selection with current range
+            for (int i = rangeStart; i <= rangeEnd; i++) selState.AddItemToSelection(listing.refs[i]);
         }
-        else if (mode == ViewMode::Details) {
-            if (ImGui::IsKeyPressed(ImGuiKey_DownArrow)) { newFocusIdx += 1; navOccurred = true; keyPressed = ImGuiKey_DownArrow; }
-            if (ImGui::IsKeyPressed(ImGuiKey_UpArrow))   { newFocusIdx -= 1; navOccurred = true; keyPressed = ImGuiKey_UpArrow; }
-            // Left/Right: no horizontal axis in a single-column table, so no-op
+        else if (!ctrl){
+            selState.DeselectAllItemsAndSelect(listing.refs[focusedVisualIndex]);
+            selState.anchorVisualIndex = focusedVisualIndex;
+            selState.anchorHash = newFocusChildHash;    
         }
-        else {
-            if (ImGui::IsKeyPressed(ImGuiKey_DownArrow))  { 
-                newFocusIdx += columns; 
-                navOccurred = true; 
-                keyPressed = ImGuiKey_DownArrow;
-            }
-            if (ImGui::IsKeyPressed(ImGuiKey_UpArrow))    { 
-                newFocusIdx -= columns; 
-                navOccurred = true; 
-                keyPressed = ImGuiKey_UpArrow;
-            }
-            if (ImGui::IsKeyPressed(ImGuiKey_RightArrow)) { 
-                newFocusIdx += 1; 
-                navOccurred = true; 
-                keyPressed = ImGuiKey_RightArrow;
-            }
-            if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))  { 
-                newFocusIdx -= 1; 
-                navOccurred = true; 
-                keyPressed = ImGuiKey_LeftArrow;
-            }
-        }
-
-        if (ImGui::IsKeyPressed(ImGuiKey_Home))       { newFocusIdx = 0; navOccurred = true; }
-        if (ImGui::IsKeyPressed(ImGuiKey_End))        { newFocusIdx = totalItems - 1; navOccurred = true; }
-        if (ImGui::IsKeyPressed(ImGuiKey_PageDown))   { newFocusIdx += (mode == ViewMode::List ? rowsPerColumn : columns) * 10; navOccurred = true; }
-        if (ImGui::IsKeyPressed(ImGuiKey_PageUp))     { newFocusIdx -= (mode == ViewMode::List ? rowsPerColumn : columns) * 10; navOccurred = true; }
-
-        if (navOccurred){
-
-            newFocusIdx = std::clamp(newFocusIdx, 0, totalItems - 1);
-            auto newChild = listing.PChildren->GetItem(listing.refs[newFocusIdx], app.typeStore);
-             
-            if (shift) {
-                int start = ExploraMin(selState.anchorVisualIndex, newFocusIdx);
-                int end = ExploraMax(selState.anchorVisualIndex, newFocusIdx);
-                if (!ctrl) selState.DeselectAllItems(); 
-                for (int i = start; i <= end; i++) {
-                    auto rawEntryIndex = listing.refs[i];
-                    selState.AddItemToSelection(rawEntryIndex);
-                }
-            }
-            else if (!ctrl){
-                selState.DeselectAllItemsAndSelect(listing.refs[newFocusIdx]);
-                selState.anchorVisualIndex = newFocusIdx;
-                selState.anchorHash = newChild.hash;
-            }
-            
-            // Update focus hash ONLY on explicit navigation
-            selState.focusHash = newChild.hash;
-            vs.scrollToItemId = newChild.hash;
-        }
-
-        // Spacebar: Toggle selection of focused item
-        if (focusedItemIndex >= 0){
-            if (ImGui::IsKeyPressed(ImGuiKey_Space)) selState.ToggleItemSelection(listing.refs[focusedItemIndex]);
-            
-            // Enter: Open / Navigate
-            if (ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter)) {
-                auto focusChild = listing.PChildren->GetItem(listing.refs[focusedItemIndex], app.typeStore);
-                PCIDLIST_ABSOLUTE newPidl = GetFullPidl(listing.dir.parent.pidl.get(), focusChild.pidl);
-                if (focusChild.IsFolder()){
-                    app.cmdQueue.QueueCommand(Cmd_GoTo{app.window.activeTabIndex, WShell::Pidl(newPidl)}); 
-                } else {
-                    app.cmdQueue.QueueCommand(Cmd_OpenFile{WShell::Pidl(newPidl)});
-                }
-            }
-        }
+        selState.focusHash = newFocusChildHash;
+        vs.scrollToItemId = newFocusChildHash;
     }
 }
 

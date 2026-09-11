@@ -11,6 +11,7 @@
 
 
 struct App;
+struct CommandQueue;
 enum class ViewMode;
 class Directory;
 class DirChildren;
@@ -51,3 +52,6 @@ void ExecutePendingClick(SelectionState& selState, RenameState& renameState, Dir
 void OnLeftClickOnDeadSpace(SelectionState& selState);
 void OnRightClickOnDeadSpace(SelectionState& selState, CtxMenuState& ctxState, PCIDLIST_ABSOLUTE parentPidl, ID3D11Device* dev);
 void ResolvePendingNewState(SelectionState& selState, NewState& newState, RenameState& renameState, FileViewState& vs, DirListing& listing);
+
+void ExecuteItem(CommandQueue& cmdQueue, DirListing& listing, int visualIndex, size_t activeTabIndex);
+void StartRename(RenameState& renameState, FileViewState& vs, DirListing& listing, int visualIndex);
