@@ -129,6 +129,7 @@ inline bool Tab::GoTo(PCIDLIST_ABSOLUTE dest, Actions action){
     if (dir.UpdateChildren(*dirManager, viewState)){    
         if (const DirChildren* fresh = dirManager->Get(dir.HChildren)){
             selState.selectedMask.Resize(fresh->ItemCount());
+            selState.marqueeBaseMask.Resize(fresh->ItemCount());
         }
     }
     watcher->Watch(dir.parent.pidl.get(), dir.parent.hash);

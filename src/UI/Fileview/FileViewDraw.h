@@ -12,6 +12,7 @@ struct CommandQueue;
 struct ItemView;
 struct DirListing;
 struct DirParent;
+struct SelectionState;
 struct RenameState;
 
 
@@ -24,3 +25,4 @@ ItemInteraction DrawItemChrome(ImDrawList* dl, ImGuiWindow* window, CommandQueue
 void DrawItemIcon(ImDrawList* dl, App& app, const DirParent& parent, const ItemView& child, ImVec2 pos, f32 iconSize, int shilSize);
 
 void DrawItemText(HWND hwnd, ImDrawList* dl, Tab& activeTab, DirListing& listing, size_t visualIndex, const ImRect& textRect, TextRenderMode textRenderMode, int maxLines);
+void DrawSelectingMarque(SelectionState& selState);

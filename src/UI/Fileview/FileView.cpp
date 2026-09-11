@@ -468,7 +468,7 @@ static void RenderTilesView(f32 dpi, App& app, DirListing& listing){
 
 void RenderFileGrid(f32 dpi, App& app){
     auto& activeTab = app.window.GetActiveTab();
-    
+
     FileViewState& vs = activeTab.viewState;
     SelectionState& selState = activeTab.selState;
 
@@ -478,6 +478,7 @@ void RenderFileGrid(f32 dpi, App& app){
         if (fresh){
             std::cout << " ItemCount = " << fresh->ItemCount() << std::endl;
             selState.selectedMask.Resize(fresh->ItemCount());
+            selState.marqueeBaseMask.Resize(fresh->ItemCount());
         } // gives raw item count, listing.refs.size() gives visual count
         // PChildren is not nullptr if UpdateChildren returns true 
     }    
@@ -494,23 +495,14 @@ void RenderFileGrid(f32 dpi, App& app){
 
     // Reset hover state at the beginning of the frame
     activeTab.selState.isAnyItemHovered = false; 
-    
     ctxState.openMenu = false;
     ctxState.forChildren = false;   // redundant
     
-
-
-    if (newState.expectingNewItem){
-        size_t visualIndex = GetVisualIndexFromHash(listing, newState.itemHash.value());
-        vs.scrollToItemId = newState.itemHash;
-        selState.focusHash = newState.itemHash;
-        selState.DeselectAllItemsAndSelect(listing.refs[visualIndex]);
-        
-        renameState.renamingItemId = newState.itemHash;
-        strncpy(activeTab.renameState.renameBuffer, newState.itemName.c_str(), sizeof(activeTab.renameState.renameBuffer) - 1);
-
-        newState.expectingNewItem = false;
-    }
+    
+    
+    ResolvePendingNewState(selState, newState, renameState, vs, listing);
+    ResolvePendingRenameState(renameState);
+    ResolvePendingInteractionSelState(selState);
 
     if (mode == ViewMode::List){
         ImGuiChildFlags childFlags = ImGuiChildFlags_NavFlattened;
@@ -520,7 +512,8 @@ void RenderFileGrid(f32 dpi, App& app){
             RenderListView(dpi, app, listing);
         }
         ImGui::EndChild();
-    } else {
+    } 
+    else {
         KeyboardNavigationInteraction(dpi, app);
         switch (mode){
             case ViewMode::Icons:   RenderGridView(dpi, app, listing); break;
@@ -530,35 +523,14 @@ void RenderFileGrid(f32 dpi, App& app){
             default: break;
         }
     } 
-
-    //  Add ImGuiHoveredFlags_ChildWindows to catch clicks inside BeginChild (List) and Tables (Details) 
-    // bool isWindowHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByPopup);
-    //  strict hovered flag: Returns false if a popup menu is covering the mouse
-    bool isViewDirectlyHovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows);
-    bool ctxMenuPopupOpen = ImGui::IsPopupOpen("ItemContextMenu");
-
-
-    // Left Click on Empty Space 
-    // ONLY clear selection if the user clicked the actual view, NOT a popup menu!
-
-    if (isViewDirectlyHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)){
-        if (!activeTab.selState.isAnyItemHovered && !ImGui::IsAnyItemHovered() && !ctxMenuPopupOpen) {
-            activeTab.selState.selectedMask.Clear();
-            renameState.Clear();
-        }
-    }
-
-
-    if (isViewDirectlyHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right)){
-        if (!activeTab.selState.isAnyItemHovered && !ImGui::IsAnyItemHovered() && !ctxMenuPopupOpen) {
-            selState.DeselectAllItems(); 
-            ctxState.ctxMenuItems = GetBackgroundContextMenu(ctxState.ctxMenuInterface, activeTab.dir.parent.pidl.get(), app.gfx.d3dDevice.Get());
-            ctxState.openMenu = true;
-            ctxState.forChildren = false;
-        }
-    }
+    // Has to happen on top of file views
     
+    ResolveLeftMouseRelease(selState, renameState, listing);
 
+    DrawSelectingMarque(selState); 
+    OnLeftClickOnDeadSpace(selState);
+    OnRightClickOnDeadSpace(selState, ctxState, activeTab.dir.parent.pidl.get(), app.gfx.d3dDevice.Get());
+    
     if (ctxState.openMenu){
         if (ctxState.forChildren){
             ctxState.selectedPidls = GetSelectedItems(listing, activeTab);
@@ -567,11 +539,11 @@ void RenderFileGrid(f32 dpi, App& app){
         // else, do nothing, already gotten by isRightClick
 
         ImGui::SetNextWindowPos(ImGui::GetMousePos());
-        ImGui::OpenPopup("ItemContextMenu");
+        ImGui::OpenPopup(kItemContextMenuID);
     }
     
     PushMenuTheme(dpi);
-    if (ImGui::BeginPopup("ItemContextMenu")) {
+    if (ImGui::BeginPopup(kItemContextMenuID)) {
         if (ImGui::IsKeyPressed(ImGuiKey_Escape)) ImGui::CloseCurrentPopup();
         RenderContextMenuStructure(app, ctxState.ctxMenuInterface, ctxState.ctxMenuItems, activeTab.dir.parent.pidl.get(), ctxState.selectedPidls, app.gfx.hwnd, dpi);
         ImGui::EndPopup();

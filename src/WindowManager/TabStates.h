@@ -9,8 +9,16 @@
 #include "CtxMenu.h"
 #include "Bitmask.h"
 
-
 struct SelectionState {
+    // todo, move this to an InteractionState
+    enum class InteractionMode {
+        Idle,
+        PendingClick,      // Mouse went down on an item, waiting for release or drag threshold
+        PendingMarquee,    // Mouse went down on empty space, waiting for release or drag threshold
+        DraggingItems,     // User is actively dragging selected files
+        SelectingMarquee   // User is actively drawing a selection box
+    };
+
     // bool justNavigated = false;
     Bitmask selectedMask;
     std::optional<u64> focusHash = std::nullopt;
@@ -18,10 +26,20 @@ struct SelectionState {
     int anchorVisualIndex = -1; // for Shift-Click range calculations
     bool isAnyItemHovered = false;
 
+    InteractionMode mode = InteractionMode::Idle;
+    ImVec2 mouseDownPos = ImVec2(0, 0);
+    std::optional<u64> mouseDownItemHash = std::nullopt;
+    double singleClickedAtTime = 0.0f;
+    std::optional<u64> mouseDownVisualIndex = std::nullopt;
+    bool mouseDownWasSoleSelection = false;  // captured at press time, for click vs rename
+    bool marqueCtrlHeld = false;    // was ctrl held when the marque drag started
+    Bitmask marqueeBaseMask;    // snapshot of selection at marque start
+
 
     size_t NumSelected(){ return selectedMask.SetBitCount();}
     bool IsSelected(size_t rawEntryIndex){return selectedMask.IsSet(rawEntryIndex);}
     void AddItemToSelection(size_t rawEntryIndex){selectedMask.Set(rawEntryIndex);}
+    void ToggleItemSelection(size_t rawEntryIndex){selectedMask.Toggle(rawEntryIndex);}
     void DeselectItem(size_t rawEntryIndex){selectedMask.Unset(rawEntryIndex);}
     void DeselectAllItems(){selectedMask.Clear();}
     

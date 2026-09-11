@@ -26,6 +26,4 @@ ItemInteraction HandleItemInteraction(CommandQueue& cmdQueue, Tab& activeTab, si
 
 void KeyboardNavigationInteraction(f32 dpi, App& app);
 
-std::vector<PCITEMID_CHILD> GetSelectedItems(Tab& tab, const DirChildren& children);
-
 void ClearFocusState(SelectionState& selState);

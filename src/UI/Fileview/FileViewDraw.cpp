@@ -108,3 +108,16 @@ void DrawItemText(HWND hwnd, ImDrawList* dl, Tab& activeTab, DirListing& listing
         default: assert(false);
     }
 }
+
+void DrawSelectingMarque(SelectionState& selState){
+    using Mode = SelectionState::InteractionMode;
+    if (selState.mode != Mode::SelectingMarquee)  return;
+    ImVec2 mousePos = ImGui::GetMousePos();
+    ImVec2 rectMin = ImMin(selState.mouseDownPos, mousePos);
+    ImVec2 rectMax = ImMax(selState.mouseDownPos, mousePos);
+    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    constexpr auto marqueFill = IM_COL32(80, 140, 255, 60);
+    constexpr auto marqueBorder = IM_COL32(80, 140, 255, 200);
+    dl->AddRectFilled(rectMin, rectMax, marqueFill);
+    dl->AddRect(rectMin, rectMax, marqueBorder);
+}

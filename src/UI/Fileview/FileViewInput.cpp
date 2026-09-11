@@ -1,9 +1,8 @@
 #pragma once
 
+
 #include "TabStates.h"
-
 #include "FileViewInput.h"
-
 #include "ImGuiHelpers.h"
 #include "global.h"
 #include "DirectoryManager.h"
@@ -12,126 +11,96 @@
 #include "App.h"
 
 
+/*
+Idle
+ ├─ mouse down on an item, no modifier ──▶ PendingClick
+ │      ├─ released without crossing drag threshold ─▶ resolve as a click (select / arm rename)
+ │      └─ moved past drag threshold ─────────────────▶ DraggingItems
+ │
+ └─ mouse down on empty space ──────────▶ PendingMarquee
+        ├─ released without crossing drag threshold ─▶ resolve as "clear selection"
+        └─ moved past drag threshold ─────────────────▶ SelectingMarquee
+Shift+click and ctrl-click never enter this ambigous state, so they are immediate 
+*/
+
+
 // Must be activeTab, if that turns out to be false, change the parameter to size_t tabIndex, because the .activeTabIndex is passed to command queue
 ItemInteraction HandleItemInteraction(CommandQueue& cmdQueue, Tab& activeTab, size_t activeTabIndex, DirListing& listing, int visualIndex, ImGuiID id, const ImRect& rect){
+    auto& selState = activeTab.selState;   
+    auto& renameState = activeTab.renameState;
     Interaction ia = MakeInteractive(id, rect);
-    bool doubleClicked = IsDoubleClick(id, ia.pressed);
-
-    // Detect Modifiers
-    bool isCtrl  = ImGui::GetIO().KeyCtrl;
-    bool isShift = ImGui::GetIO().KeyShift;
-    bool isLeftClick  = ImGui::IsMouseClicked(ImGuiMouseButton_Left) && ia.hovered;
-    bool isRightClick = ImGui::IsMouseClicked(ImGuiMouseButton_Right) && ia.hovered;
-
-    auto& selState = activeTab.selState; 
-    auto& ctxState = activeTab.ctxState;
-    
     auto rawEntryIndex = listing.refs[visualIndex];
     auto child = listing.PChildren->GetItem(rawEntryIndex);
+    
+    if (ia.hovered) activeTab.selState.isAnyItemHovered = true; // for dead space  clicking
 
-    bool isCurrentlySelected = selState.IsSelected(rawEntryIndex);
+    if (selState.mode == SelectionState::InteractionMode::SelectingMarquee){
+        ImVec2 mousePos = ImGui::GetMousePos();
+        ImRect marqueRect(ImMin(selState.mouseDownPos, mousePos), ImMax(selState.mouseDownPos, mousePos));
+        bool inRect = marqueRect.Overlaps(rect);
+        bool wasInBase = selState.marqueCtrlHeld && selState.marqueeBaseMask.IsSet(rawEntryIndex); 
+        if (inRect || wasInBase) selState.AddItemToSelection(rawEntryIndex);
+        else selState.DeselectItem(rawEntryIndex);
+        return {ia.hovered || ia.pressed};   // nothing else should happen when mid marque
 
-    // track hover state for dead space  clicking
-    if (ia.hovered) {
-        activeTab.selState.isAnyItemHovered = true;
     }
+        
+    bool isCtrl  = ImGui::GetIO().KeyCtrl;
+    bool isShift = ImGui::GetIO().KeyShift;
+    bool isCurrentlySelected = selState.IsSelected(rawEntryIndex);
+    bool doubleClicked = IsDoubleClick(id, ia.pressed);
 
-    auto& renameState = activeTab.renameState;
-    // ============================
-    // LEFT CLICK
-    // ============================
-    if (isLeftClick && !doubleClicked){
-        // Shift-Click: Range Selection of continuous items between anchor and current
+    if (ia.pressed && !doubleClicked && selState.mode == SelectionState::InteractionMode::Idle){
+        renameState.pendingHash = std::nullopt; // any fresh press cancels a stale rename-arm
+
         if (isShift && selState.anchorVisualIndex != -1){
-
-            // determine index boundaries regardless of click direction, (up or down)
             int start = ExploraMin(selState.anchorVisualIndex, visualIndex);
             int end   = ExploraMax(selState.anchorVisualIndex, visualIndex);
-
-            if (!isCtrl){   // if ctrl isnt held, wipe the current selection first, ctrl + shift allows expanding an existing selection
-                selState.selectedMask.Clear(); // Clear unless Ctrl+Shift
-            }
-
-            for (int i = start; i <= end; i++) {
-                auto rangeIRawEntryIndex = listing.refs[i];
-                selState.AddItemToSelection(rangeIRawEntryIndex);
-            }
-        
+            if (!isCtrl) selState.selectedMask.Clear();
+            for (int i = start; i <= end; i++) selState.AddItemToSelection(listing.refs[i]);
             selState.focusHash = child.hash;
-            // Anchor does NOT change on Shift-Click, allowing further Shift-Clicks
         }
         else if (isCtrl){
-            // Ctrl Click: Toggle
             if (isCurrentlySelected) selState.DeselectItem(rawEntryIndex);
             else selState.AddItemToSelection(rawEntryIndex);
-
-            selState.focusHash = child.hash;
-            selState.anchorHash = child.hash;
-            selState.anchorVisualIndex = visualIndex;
+            OnSingleClickOnOneItem(selState, child.hash, visualIndex);
         }
         else{
-            if (isCurrentlySelected && activeTab.selState.NumSelected() == 1){ // its the only one selected
-                // enter rename mode
-                renameState.pendingHash = child.hash;
-                renameState.singleClickedAtTime = ImGui::GetTime();
-                
-                strncpy(renameState.renameBuffer, child.name, sizeof(renameState.renameBuffer) - 1);
-                renameState.renameBuffer[sizeof(renameState.renameBuffer) - 1] = '\0';
-
-                selState.focusHash = child.hash;
-                selState.anchorHash = child.hash;
-                selState.anchorVisualIndex = visualIndex;
-            }
-            else{
-                selState.DeselectAllItemsAndSelect(rawEntryIndex);
-                selState.focusHash = child.hash;
-                selState.anchorHash = child.hash;
-                selState.anchorVisualIndex = visualIndex;
-                renameState.pendingHash = std::nullopt;
-            }
+            selState.mode = SelectionState::InteractionMode::PendingClick;
+            selState.mouseDownPos = ImGui::GetMousePos();
+            selState.mouseDownItemHash = child.hash;
+            selState.mouseDownVisualIndex = visualIndex;
+            selState.mouseDownWasSoleSelection = isCurrentlySelected && selState.NumSelected() == 1;
+            selState.singleClickedAtTime = ImGui::GetTime();
         }
-    } 
-    // ============================
-    // DOUBLE CLICK
-    // ============================
-    if (doubleClicked) {
-        renameState.pendingHash = std::nullopt; // cancel - this was a double click, not a rename trigger
+    }
+
+    if (doubleClicked){
+        selState.mode = SelectionState::InteractionMode::Idle;
+        renameState.pendingHash = std::nullopt;
         PCIDLIST_ABSOLUTE newPidl = GetFullPidl(listing.dir.parent.pidl.get(), child.pidl);
-        // WShell::Pidl steals ownership
-        if (child.IsFolder()) cmdQueue.QueueCommand(Cmd_GoTo{activeTabIndex, WShell::Pidl(newPidl) });
-        else{
-            cmdQueue.QueueCommand(Cmd_OpenFile{ WShell::Pidl(newPidl) });
+        if (child.IsFolder()) cmdQueue.QueueCommand(Cmd_GoTo{activeTabIndex, WShell::Pidl(newPidl)});
+        else {
+            cmdQueue.QueueCommand(Cmd_OpenFile{WShell::Pidl(newPidl)});
             selState.DeselectAllItemsAndSelect(rawEntryIndex);
-            selState.focusHash = child.hash;
-            selState.anchorHash = child.hash;
-            selState.anchorVisualIndex = visualIndex;
+            OnSingleClickOnOneItem(selState, child.hash, visualIndex);
+
         }
-    } 
-    // ============================
-    // RIGHT CLICK
-    // ============================
-    if (isRightClick) {
-        if (!isCurrentlySelected) {
-            // Right-clicked an UNSELECTED item: Clear everything else, select this one
+        return {ia.hovered || ia.pressed};
+    }
+
+    bool isRightClick = ImGui::IsMouseClicked(ImGuiMouseButton_Right) && ia.hovered;
+    auto& ctxState = activeTab.ctxState;
+    if (isRightClick){
+        if (!isCurrentlySelected){
             selState.DeselectAllItemsAndSelect(rawEntryIndex);
-            selState.focusHash = child.hash;
-            selState.anchorHash = child.hash;
-            selState.anchorVisualIndex = visualIndex;
+            OnSingleClickOnOneItem(selState, child.hash, visualIndex);
         }
         ctxState.openMenu = true;
         ctxState.forChildren = true;
+        return{ia.hovered || ia.pressed};
     }
-
-    // check if renameMode is active
-    if (renameState.pendingHash.has_value()){
-        double elapsed = ImGui::GetTime() - renameState.singleClickedAtTime;
-        if (elapsed > ImGui::GetIO().MouseDoubleClickTime){
-            renameState.renamingItemId = renameState.pendingHash;
-            renameState.pendingHash = std::nullopt;
-        }
-    }
-
-    return {ia.hovered || ia.pressed};
+    return{ia.hovered || ia.pressed};
 }
 
 
@@ -291,11 +260,7 @@ void KeyboardNavigationInteraction(f32 dpi, App& app){
 
         // Spacebar: Toggle selection of focused item
         if (focusedItemIndex >= 0){
-            if (ImGui::IsKeyPressed(ImGuiKey_Space)) {
-                auto focusChild = listing.PChildren->GetItem(listing.refs[focusedItemIndex], app.typeStore);
-                if (selState.IsSelected(focusChild.hash)) selState.DeselectItem(listing.refs[newFocusIdx]);
-                else selState.AddItemToSelection(listing.refs[newFocusIdx]);
-            }
+            if (ImGui::IsKeyPressed(ImGuiKey_Space)) selState.ToggleItemSelection(listing.refs[focusedItemIndex]);
             
             // Enter: Open / Navigate
             if (ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter)) {
