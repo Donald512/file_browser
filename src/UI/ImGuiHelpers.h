@@ -194,10 +194,11 @@ inline Interaction MakeInteractive(ImGuiID id, const ImRect& rect){
     Interaction it{};
     // ItemAdd returns true ONLY if the item is inside the visible clip rect
     const auto extraFlags = (int)ImGuiItemFlags_NoNav | (int)ImGuiItemFlags_NoNavDisableMouseHover;
+    const auto extraBtnFlags = (int)ImGuiButtonFlags_NoNavFocus | (int)ImGuiButtonFlags_PressedOnClick;
     // So, Adding ImGuiItemFlags_NoNav because else, it causes undeterministic behaviour, imgui internal focus engine moves the hover 
     // So, Adding ImGuiItemFlags_NoNavDisableMouseHover because else, it causes the annoying behavior of where the item appears to lose focus, when the keyboard is used
     if (ImGui::ItemAdd(rect, id, nullptr, extraFlags)) {
-        it.pressed = ImGui::ButtonBehavior(rect, id, &it.hovered, &it.held, ImGuiButtonFlags_NoNavFocus);
+        it.pressed = ImGui::ButtonBehavior(rect, id, &it.hovered, &it.held, extraBtnFlags);
     }
     it.hovered = it.hovered && rect.Contains(ImGui::GetMousePos());
     return it;

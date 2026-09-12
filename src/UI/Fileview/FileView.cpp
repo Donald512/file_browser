@@ -497,24 +497,24 @@ void RenderFileGrid(f32 dpi, App& app){
     activeTab.selState.isAnyItemHovered = false; 
     ctxState.openMenu = false;
     ctxState.forChildren = false;   // redundant
-    
+    selState.dragHoverTargetHash = std::nullopt;
     
     
     ResolvePendingNewState(selState, newState, renameState, vs, listing);
     ResolvePendingRenameState(renameState);
-    ResolvePendingInteractionSelState(selState);
+    ResolvePendingInteractionSelState(selState, listing, activeTab);
 
     if (mode == ViewMode::List){
         ImGuiChildFlags childFlags = ImGuiChildFlags_NavFlattened;
         ImGuiWindowFlags windowFlags = ImGuiWindowFlags_HorizontalScrollbar;
         if (ImGui::BeginChild("FileViewList", ImVec2(0, 0), childFlags, windowFlags)){
-            KeyboardNavigationInteraction(dpi, app);
+            ProcessKeyboardInput(dpi, app.cmdQueue, listing, activeTab, app.window.activeTabIndex);
             RenderListView(dpi, app, listing);
         }
         ImGui::EndChild();
     } 
     else {
-        KeyboardNavigationInteraction(dpi, app);
+        ProcessKeyboardInput(dpi, app.cmdQueue, listing, activeTab, app.window.activeTabIndex);
         switch (mode){
             case ViewMode::Icons:   RenderGridView(dpi, app, listing); break;
             case ViewMode::Small:   RenderSmallView(dpi, app, listing); break;
@@ -525,9 +525,10 @@ void RenderFileGrid(f32 dpi, App& app){
     } 
     // Has to happen on top of file views
     
-    ResolveLeftMouseRelease(selState, renameState, listing);
+    ResolveLeftMouseRelease(app.cmdQueue, selState, renameState, listing);
 
     DrawSelectingMarque(selState); 
+    DrawDrag(selState); 
     OnLeftClickOnDeadSpace(selState);
     OnRightClickOnDeadSpace(selState, ctxState, activeTab.dir.parent.pidl.get(), app.gfx.d3dDevice.Get());
     
@@ -540,6 +541,7 @@ void RenderFileGrid(f32 dpi, App& app){
 
         ImGui::SetNextWindowPos(ImGui::GetMousePos());
         ImGui::OpenPopup(kItemContextMenuID);
+        selState.mode = SelectionState::InteractionMode::Idle;
     }
     
     PushMenuTheme(dpi);

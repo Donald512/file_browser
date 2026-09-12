@@ -1,3 +1,7 @@
+
+#define IMGUI_DEFINE_MATH_OPERATORS
+#include "imgui_internal.h" 
+
 #include "FileViewDraw.h"
 #include "TabStates.h"
 #include "ImGuiHelpers.h"
@@ -46,12 +50,17 @@ ItemInteraction DrawItemChrome(ImDrawList* dl, ImGuiWindow* window, CommandQueue
     bool isSelected = selState.IsSelected(listing.refs[visualIndex]);
     bool isFocused  = selState.focusHash == child.hash;
 
+
+    bool isDropTarget = (selState.dragHoverTargetHash == child.hash);
+
     if (drawBg) DrawSelectableBg(dl, fullRect, ia.hovered, isSelected, rounding);
 
+    
     if (drawFocusRing && isFocused){
         // todo change it from white to palette.focused
         dl->AddRect(fullRect.Min, fullRect.Max, 0xFFFFFFFF, rounding, 1.0f * dpi);
     }
+    if (isDropTarget) DrawDropTargetHighlight(dl, fullRect, rounding, dpi);
     return ia;
 }
 
@@ -64,10 +73,7 @@ void DrawItemIcon(ImDrawList* dl, App& app, const DirParent& parent, const ItemV
         DrawTextCenteredSingleLine(dl, pos, ImVec2(pos.x + iconSize, pos.y + iconSize), fallback, Theme::Current.palette.TextMuted, iconSize);
     };
 
-    if (iconIndex == UINT32_MAX){
-        iconFallback();
-        return;
-    }
+    if (iconIndex == UINT32_MAX){ iconFallback(); return; }
 
     ImTextureID iconTex = app.textures.GetTexture({iconIndex, shilSize});
     if (!iconTex){
@@ -120,4 +126,25 @@ void DrawSelectingMarque(SelectionState& selState){
     constexpr auto marqueBorder = IM_COL32(80, 140, 255, 200);
     dl->AddRectFilled(rectMin, rectMax, marqueFill);
     dl->AddRect(rectMin, rectMax, marqueBorder);
+}
+
+void DrawDrag(SelectionState& selState){
+    using Mode = SelectionState::InteractionMode;
+    if (selState.mode != Mode::DraggingItems)  return;
+    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    ImVec2 mousePos = ImGui::GetMousePos();
+    char label[8];
+    snprintf(label, sizeof(label), "%zu", selState.dragPidls.size());
+    ImVec2 textSize = ImGui::CalcTextSize(label);
+    ImVec2 textMin  = mousePos + ImVec2(14, 10);
+    ImVec2 textMax = textMin + textSize + ImVec2(12, 8);
+    dl->AddRectFilled(textMin, textMax, IM_COL32(40,40,40,220), 4.0f);
+    dl->AddText(textMin + ImVec2(6, 4), IM_COL32(255,255,255,255), label);
+}
+
+void DrawDropTargetHighlight(ImDrawList* dl, const ImRect& rect, f32 rounding, f32 dpi){
+    constexpr auto marqueFill = IM_COL32(80, 140, 255, 60);
+    constexpr auto marqueBorder = IM_COL32(80, 140, 255, 200);
+    dl->AddRectFilled(rect.Min, rect.Max, marqueFill, rounding);
+    dl->AddRect(rect.Min, rect.Max, marqueBorder, rounding, 2.0f * dpi);
 }

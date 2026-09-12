@@ -43,8 +43,8 @@ int GetScrollToItemIndex(DirListing& listing, u64 id);
 int GetFocusedItemIndex(App& app);
 size_t GetVisualIndexFromHash(DirListing& listing, u64 hash);
 void ResolvePendingRenameState(RenameState& renameState);
-void ResolvePendingInteractionSelState(SelectionState& selState);
-void ResolveLeftMouseRelease(SelectionState& selState, RenameState& renameState,DirListing& listing);
+void ResolvePendingInteractionSelState(SelectionState& selState, DirListing& listing, Tab& activeTab);
+void ResolveLeftMouseRelease(CommandQueue& cmdQueue, SelectionState& selState, RenameState& renameState, DirListing& listing);
 void OnSingleClickOnOneItem(SelectionState& selState, u64 itemHash, int visualIndex);
 
 void ExecutePendingClick(SelectionState& selState, RenameState& renameState, DirListing& listing);
@@ -55,3 +55,5 @@ void ResolvePendingNewState(SelectionState& selState, NewState& newState, Rename
 
 void ExecuteItem(CommandQueue& cmdQueue, DirListing& listing, int visualIndex, size_t activeTabIndex);
 void StartRename(RenameState& renameState, FileViewState& vs, DirListing& listing, int visualIndex);
+void UpdateMarqueSelection(SelectionState& selState, size_t rawEntryIndex, ImRect rect);
+void FreePidlVector(std::vector<PITEMID_CHILD>& pidls);

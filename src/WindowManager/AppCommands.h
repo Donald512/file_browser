@@ -19,9 +19,10 @@ struct Cmd_GoParent    { size_t tabIndex;};
 struct Cmd_OpenFile    { WShell::Pidl targetPidl; };
 struct Cmd_ReSort      { size_t tabIndex; };
 struct Cmd_RefreshByHash { u64 hash;};
+struct Cmd_CopyOrMoveItems {PIDLIST_ABSOLUTE parentPidl; std::vector<PITEMID_CHILD> items; PIDLIST_ABSOLUTE targetPidl; bool isCopy;};
 
 using AppCommand = std::variant<
     Cmd_NewTab, Cmd_CloseTab, Cmd_SwitchTab, Cmd_GoTo,
     Cmd_Rename, Cmd_Delete, Cmd_Refresh, Cmd_RefreshByHash, Cmd_GoBack,
-    Cmd_GoForward, Cmd_GoParent, Cmd_OpenFile, Cmd_ReSort
+    Cmd_GoForward, Cmd_GoParent, Cmd_OpenFile, Cmd_ReSort, Cmd_CopyOrMoveItems
 >;

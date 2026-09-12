@@ -31,26 +31,29 @@ ItemInteraction HandleItemInteraction(CommandQueue& cmdQueue, Tab& activeTab, si
     Interaction ia = MakeInteractive(id, rect);
     auto rawEntryIndex = listing.refs[visualIndex];
     auto child = listing.PChildren->GetItem(rawEntryIndex);
+    using Mode = SelectionState::InteractionMode;
     
-    if (ia.hovered) activeTab.selState.isAnyItemHovered = true; // for dead space  clicking
-
-    if (selState.mode == SelectionState::InteractionMode::SelectingMarquee){
-        ImVec2 mousePos = ImGui::GetMousePos();
-        ImRect marqueRect(ImMin(selState.mouseDownPos, mousePos), ImMax(selState.mouseDownPos, mousePos));
-        bool inRect = marqueRect.Overlaps(rect);
-        bool wasInBase = selState.marqueCtrlHeld && selState.marqueeBaseMask.IsSet(rawEntryIndex); 
-        if (inRect || wasInBase) selState.AddItemToSelection(rawEntryIndex);
-        else selState.DeselectItem(rawEntryIndex);
+    if (ia.hovered) selState.isAnyItemHovered = true; // for dead space  clicking
+    
+    if (selState.mode == Mode::SelectingMarquee){
+        UpdateMarqueSelection(selState, rawEntryIndex, rect);
         return {ia.hovered || ia.pressed};   // nothing else should happen when mid marque
-
+    }
+    bool isCurrentlySelected = selState.IsSelected(rawEntryIndex);
+    if (selState.mode == Mode::DraggingItems){
+        // ia.hovered unusable here, the drag source item still owns ImGui's ActiveId
+        // so ItemHoverable() suppresses hover on every other item for the whole gesture.
+        // Test geometry directly instead of going through ButtonBehavior.
+        bool isDragHovered = ImGui::IsMouseHoveringRect(rect.Min, rect.Max, true);
+        if (isDragHovered && child.IsFolder() && !isCurrentlySelected) selState.dragHoverTargetHash = child.hash;  // saves the current child as a target for dropping into
+        return {isDragHovered || ia.pressed};
     }
         
     bool isCtrl  = ImGui::GetIO().KeyCtrl;
     bool isShift = ImGui::GetIO().KeyShift;
-    bool isCurrentlySelected = selState.IsSelected(rawEntryIndex);
     bool doubleClicked = IsDoubleClick(id, ia.pressed);
 
-    if (ia.pressed && !doubleClicked && selState.mode == SelectionState::InteractionMode::Idle){
+    if (ia.pressed && !doubleClicked && selState.mode == Mode::Idle){
         renameState.pendingHash = std::nullopt; // any fresh press cancels a stale rename-arm
 
         if (isShift && selState.anchorVisualIndex != -1){
@@ -61,22 +64,22 @@ ItemInteraction HandleItemInteraction(CommandQueue& cmdQueue, Tab& activeTab, si
             selState.focusHash = child.hash;
         }
         else if (isCtrl){
-            if (isCurrentlySelected) selState.DeselectItem(rawEntryIndex);
-            else selState.AddItemToSelection(rawEntryIndex);
+            selState.ToggleItemSelection(rawEntryIndex);
             OnSingleClickOnOneItem(selState, child.hash, visualIndex);
         }
         else{
-            selState.mode = SelectionState::InteractionMode::PendingClick;
+            selState.mode = Mode::PendingClick;
             selState.mouseDownPos = ImGui::GetMousePos();
             selState.mouseDownItemHash = child.hash;
             selState.mouseDownVisualIndex = visualIndex;
             selState.mouseDownWasSoleSelection = isCurrentlySelected && selState.NumSelected() == 1;
             selState.singleClickedAtTime = ImGui::GetTime();
+            selState.mouseDownItemWasSelected = isCurrentlySelected;
         }
     }
 
     if (doubleClicked){
-        selState.mode = SelectionState::InteractionMode::Idle;
+        selState.mode = Mode::Idle;
         renameState.pendingHash = std::nullopt;
         ExecuteItem(cmdQueue, listing, visualIndex, activeTabIndex);
         if (!child.IsFolder()){
@@ -105,13 +108,28 @@ void ProcessKeyboardInput(f32 dpi, CommandQueue& cmdQueue, DirListing& listing, 
     RenameState& renameState = activeTab.renameState;
     FileViewState& vs = activeTab.viewState;
     ViewMode& mode = vs.viewMode;
+    using Mode = SelectionState::InteractionMode;
     if (listing.refs.empty()) {ClearFocusState(selState); return;}
     
     // === Global actions (Independent of focus item) ---
-    if (ImGui::IsKeyPressed(ImGuiKey_Escape) && !ImGui::IsPopupOpen(kItemContextMenuID)){ selState.DeselectAllItems(); return;}
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape) && !ImGui::IsPopupOpen(kItemContextMenuID)){ 
+        selState.DeselectAllItems(); 
+        if (selState.mode == Mode::DraggingItems){
+            FreePidlVector(selState.dragPidls);
+            selState.dragHoverTargetHash = std::nullopt;
+            selState.mode = Mode::Idle;
+        }
+        return;
+    }
+
 
     // === Require a Focused Item ---
-    int focusedVisualIndex = selState.focusHash.has_value() ? GetVisualIndexFromHash(listing, selState.focusHash.value()) : -1;
+
+    int focusedVisualIndex = - 1;
+    if (selState.focusHash.has_value()){
+        size_t idx = GetVisualIndexFromHash(listing, selState.focusHash.value());
+        if (idx != SIZE_MAX) focusedVisualIndex = (int) idx;
+    } 
 
     if (focusedVisualIndex >= 0){
         if (ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter)) {
@@ -135,7 +153,6 @@ void ProcessKeyboardInput(f32 dpi, CommandQueue& cmdQueue, DirListing& listing, 
     int columns = 1;
     int rowsPerColumn = 1;
     f32 availW = ImGui::GetContentRegionAvail().x;
-    FileviewLayout layout = GetFileviewLayoutForMode(ViewMode::List, dpi);
 
     if (mode == ViewMode::List){
         FileviewLayout layout = GetFileviewLayoutForMode(ViewMode::List, dpi);
@@ -172,7 +189,7 @@ void ProcessKeyboardInput(f32 dpi, CommandQueue& cmdQueue, DirListing& listing, 
     }
     size_t totalItems = listing.refs.size();
     if (ImGui::IsKeyPressed(ImGuiKey_Home)) updatePendingFocusIdx(0, false);
-    if (ImGui::IsKeyPressed(ImGuiKey_End)) updatePendingFocusIdx(totalItems - 1, false);
+    if (ImGui::IsKeyPressed(ImGuiKey_End)) updatePendingFocusIdx((int)totalItems - 1, false);
     
     int pageStride = (mode == ViewMode::List) ? rowsPerColumn : columns;
     if (ImGui::IsKeyPressed(ImGuiKey_PageDown)) updatePendingFocusIdx(pageStride * 10);
@@ -183,7 +200,7 @@ void ProcessKeyboardInput(f32 dpi, CommandQueue& cmdQueue, DirListing& listing, 
         bool ctrl = ImGui::GetIO().KeyCtrl;
         focusedVisualIndex = ImClamp(pendingFocusedVisualIndex, 0, (int)totalItems - 1);
         
-        u64 newFocusChildHash = listing.PChildren->hashes[focusedVisualIndex];
+        u64 newFocusChildHash = listing.PChildren->hashes[listing.refs[focusedVisualIndex]];
         if (shift){
             // prevent i starting at 0
             if (selState.anchorVisualIndex < 0) selState.anchorVisualIndex = focusedVisualIndex;

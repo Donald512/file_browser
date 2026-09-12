@@ -24,6 +24,6 @@ struct ItemInteraction {
 ItemInteraction HandleItemInteraction(CommandQueue& cmdQueue, Tab& activeTab, size_t activeTabIndex, DirListing& listing, int visualIndex, ImGuiID id, const ImRect& rect);
 
 
-void KeyboardNavigationInteraction(f32 dpi, App& app);
+void ProcessKeyboardInput(f32 dpi, CommandQueue& cmdQueue, DirListing& listing, Tab& activeTab, size_t activeTabIndex);
 
 void ClearFocusState(SelectionState& selState);

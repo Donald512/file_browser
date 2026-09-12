@@ -26,3 +26,6 @@ void DrawItemIcon(ImDrawList* dl, App& app, const DirParent& parent, const ItemV
 
 void DrawItemText(HWND hwnd, ImDrawList* dl, Tab& activeTab, DirListing& listing, size_t visualIndex, const ImRect& textRect, TextRenderMode textRenderMode, int maxLines);
 void DrawSelectingMarque(SelectionState& selState);
+
+void DrawDrag(SelectionState& selState);
+void DrawDropTargetHighlight(ImDrawList* dl, const ImRect& rect, f32 rounding, f32 dpi);

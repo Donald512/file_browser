@@ -35,6 +35,10 @@ struct SelectionState {
     bool marqueCtrlHeld = false;    // was ctrl held when the marque drag started
     Bitmask marqueeBaseMask;    // snapshot of selection at marque start
 
+    bool mouseDownItemWasSelected = false; // was the pressed item selected *at all* when clicked (not just "sole")
+    std::vector<PITEMID_CHILD> dragPidls;       // snapshot of items being dragged — match whatever type ctxState.selectedPidls actually is
+    std::optional<u64> dragHoverTargetHash; // folder currently hovered as a drop target, if any
+
 
     size_t NumSelected(){ return selectedMask.SetBitCount();}
     bool IsSelected(size_t rawEntryIndex){return selectedMask.IsSet(rawEntryIndex);}
