@@ -15,13 +15,14 @@ struct ItemView;
 struct SelectionState;
 struct DirListing;
 struct CommandQueue;
+struct DragInfo;
 
 struct ItemInteraction {
     bool hovered;
     bool clicked;
 };
 
-ItemInteraction HandleItemInteraction(CommandQueue& cmdQueue, Tab& activeTab, size_t activeTabIndex, DirListing& listing, int visualIndex, ImGuiID id, const ImRect& rect);
+ItemInteraction HandleItemInteraction(CommandQueue& cmdQueue, DragInfo& dragInfo, Tab& activeTab, size_t activeTabIndex, DirListing& listing, int visualIndex, ImGuiID id, const ImRect& rect);
 
 
 void ProcessKeyboardInput(f32 dpi, CommandQueue& cmdQueue, DirListing& listing, Tab& activeTab, size_t activeTabIndex);

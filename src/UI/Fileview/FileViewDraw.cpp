@@ -20,24 +20,25 @@ void RenderRenameWidget(const char* strId, ImVec2 pos, ImVec2 baseSize, ImVec2 m
     cols.selectionBg = {};
     cols.text = ImGui::ColorConvertU32ToFloat4(Theme::Current.palette.Text);
 
-    bool justOpened = (renameState.renameFocusHandledFor != renameState.renamingItemId.value());
-    if (justOpened) renameState.renameFocusHandledFor = renameState.renamingItemId.value();
+    // bool justOpened = (renameState.renameFocusHandledFor != renameState.renamingItemId.value());
+    // if (justOpened) renameState.renameFocusHandledFor = renameState.renamingItemId.value();
 
-    InputResult res = RenderAutoResizingInputText(strId, pos, baseSize, maxSize, renameState.renameBuffer, sizeof(renameState.renameBuffer), axis, false, &cols, justOpened);
-    
+    InputResult res = RenderAutoResizingInputText(strId, pos, baseSize, maxSize, renameState.renameBuffer, sizeof(renameState.renameBuffer), axis, false, &cols, renameState.setFocus, &renameState.selectAll);
+
+    renameState.setFocus = false;
+
+
     if (res == InputResult::Committed){
         WShell::CommitRename(hwnd, parentPidl, {childPidl, childName}, renameState.renameBuffer);
-        renameState.renamingItemId = std::nullopt;
-        renameState.renameFocusHandledFor = std::nullopt;
+        renameState.Clear();
     }
     else if (res == InputResult::Cancelled){
-        renameState.renamingItemId = std::nullopt;
-        renameState.renameFocusHandledFor = std::nullopt;
+        renameState.Clear();
     }
 }
 
 
-ItemInteraction DrawItemChrome(ImDrawList* dl, ImGuiWindow* window, CommandQueue& cmdQueue, Tab& activeTab, size_t activeTabIndex, f32 dpi, DirListing& listing, int visualIndex, const ImRect& fullRect, f32 rounding, bool drawFocusRing, bool drawBg){
+ItemInteraction DrawItemChrome(DragInfo& dragInfo, ImDrawList* dl, ImGuiWindow* window, CommandQueue& cmdQueue, Tab& activeTab, size_t activeTabIndex, f32 dpi, DirListing& listing, int visualIndex, const ImRect& fullRect, f32 rounding, bool drawFocusRing, bool drawBg){
     auto& selState = activeTab.selState;
 
     auto& rawEntryIndex = listing.refs[visualIndex];
@@ -45,16 +46,15 @@ ItemInteraction DrawItemChrome(ImDrawList* dl, ImGuiWindow* window, CommandQueue
 
     ImGuiID id = window->GetID((void*)(intptr_t)child.hash);
 
-    ItemInteraction ia = HandleItemInteraction(cmdQueue, activeTab, activeTabIndex, listing, visualIndex, id, fullRect);
+    ItemInteraction ia = HandleItemInteraction(cmdQueue, dragInfo, activeTab, activeTabIndex, listing, visualIndex, id, fullRect);
 
     bool isSelected = selState.IsSelected(listing.refs[visualIndex]);
     bool isFocused  = selState.focusHash == child.hash;
 
 
-    bool isDropTarget = (selState.dragHoverTargetHash == child.hash);
+    bool isDropTarget = (dragInfo.dropTargetHash == child.hash);
 
     if (drawBg) DrawSelectableBg(dl, fullRect, ia.hovered, isSelected, rounding);
-
     
     if (drawFocusRing && isFocused){
         // todo change it from white to palette.focused

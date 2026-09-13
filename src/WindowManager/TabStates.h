@@ -103,17 +103,18 @@ struct FileViewState {
 
 struct RenameState{
     std::optional<u64> renamingItemId = std::nullopt;
-    std::optional<u64> renameFocusHandledFor = std::nullopt;   // which item's initial focus we've already applied
     char renameBuffer[512] = {0};
 
-    std::optional<u64> pendingHash = std::nullopt;
     double singleClickedAtTime = 0.0f;
+
+    bool setFocus = false;
+    bool selectAll = false;
 
     void Clear(){
         renamingItemId = std::nullopt;
-        renameFocusHandledFor = std::nullopt;
-        pendingHash = std::nullopt;
 
+        setFocus = false;
+        selectAll = false;
         renameBuffer[0] = 0;
     }
 };

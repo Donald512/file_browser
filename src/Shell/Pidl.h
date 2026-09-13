@@ -3,7 +3,7 @@
 #include <ShlObj.h>
 #include "BasicTypes.h"
 #include <string>
-
+#include <vector>
 
 namespace WShell{
     class Pidl{
@@ -75,3 +75,5 @@ u64 HashItemIdentity(PCIDLIST_ABSOLUTE fullPidl);
 
 // Overload 2: parent + child (used for clipboard CIDA items)
 u64 HashItemIdentity(PCIDLIST_ABSOLUTE parentPidl, LPCITEMIDLIST childPidl);
+
+void FreePidlVector(std::vector<PITEMID_CHILD>& pidls);

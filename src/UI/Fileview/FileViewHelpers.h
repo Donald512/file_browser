@@ -21,12 +21,8 @@ struct RenameState;
 struct NewState;
 struct SelectionState;
 struct CtxMenuState;
-
-struct DirListing {
-    const Directory& dir;
-    const DirChildren* PChildren = nullptr;
-    const std::vector<u32>& refs;
-};
+struct DragInfo;
+struct DirListing;
 
 static constexpr const char* kItemContextMenuID = "ItemContextMenu";
 
@@ -35,25 +31,21 @@ inline bool isFileCutOnClipBoard(std::unordered_set<u64>& clipboardCutItems, u64
     return clipboardCutItems.find(hashedPidl) != clipboardCutItems.end();
 }
 
-DirListing GetVisibleListing(App& app);
 
 int ResolvePendingScrollItemIndex(FileViewState& vs, DirListing& listing);
 std::vector<PCITEMID_CHILD> GetSelectedItems(DirListing& listing, Tab& tab);
 int GetScrollToItemIndex(DirListing& listing, u64 id);
 int GetFocusedItemIndex(App& app);
-size_t GetVisualIndexFromHash(DirListing& listing, u64 hash);
-void ResolvePendingRenameState(RenameState& renameState);
-void ResolvePendingInteractionSelState(SelectionState& selState, DirListing& listing, Tab& activeTab);
-void ResolveLeftMouseRelease(CommandQueue& cmdQueue, SelectionState& selState, RenameState& renameState, DirListing& listing);
+void ResolveLeftMouseRelease(SelectionState& selState,RenameState& renameState, FileViewState& vs,  DirListing& listing);
+void ResolvePendingInteractionSelState(DragInfo& dragInfo, Tab& activeTab, SelectionState& selState, DirListing& listing);
 void OnSingleClickOnOneItem(SelectionState& selState, u64 itemHash, int visualIndex);
 
-void ExecutePendingClick(SelectionState& selState, RenameState& renameState, DirListing& listing);
+void ExecutePendingClick(SelectionState& selState, RenameState& renameState, FileViewState& vs, DirListing& listing);
 
 void OnLeftClickOnDeadSpace(SelectionState& selState);
 void OnRightClickOnDeadSpace(SelectionState& selState, CtxMenuState& ctxState, PCIDLIST_ABSOLUTE parentPidl, ID3D11Device* dev);
-void ResolvePendingNewState(SelectionState& selState, NewState& newState, RenameState& renameState, FileViewState& vs, DirListing& listing);
+void ResolvePendingNewState(NewState& newState, RenameState& renameState, FileViewState& vs, DirListing& listing);
 
 void ExecuteItem(CommandQueue& cmdQueue, DirListing& listing, int visualIndex, size_t activeTabIndex);
 void StartRename(RenameState& renameState, FileViewState& vs, DirListing& listing, int visualIndex);
 void UpdateMarqueSelection(SelectionState& selState, size_t rawEntryIndex, ImRect rect);
-void FreePidlVector(std::vector<PITEMID_CHILD>& pidls);

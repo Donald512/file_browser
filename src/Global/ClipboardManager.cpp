@@ -4,14 +4,6 @@
 #include "Pidl.h"
 #include "Types/global.h"
 
-// #include <ShlObj.h>
-// #include <unordered_set>
-// #include "Shell.h"
-// #include <iostream>
-
-
-// inline std::unordered_set<u64> clipBoardCutItems{};
-
 static UINT GetCfDropEffect() {
     static const UINT cf = RegisterClipboardFormat(CFSTR_PREFERREDDROPEFFECT);
     return cf;

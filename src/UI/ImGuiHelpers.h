@@ -557,7 +557,7 @@ struct AutoInputColors {
     ImVec4 selectionBg = ImVec4(0,0,0,0); // The highlight color when text is selected!
 };
 
-inline InputResult RenderAutoResizingInputText(const char* strId, ImVec2 pos, ImVec2 baseSize, ImVec2 maxSize, char* buffer, size_t bufferSize, GrowAxis axis, bool commitOnLostFocus, const AutoInputColors* colors, bool forceFocus){
+inline InputResult RenderAutoResizingInputText(const char* strId, ImVec2 pos, ImVec2 baseSize, ImVec2 maxSize, char* buffer, size_t bufferSize, GrowAxis axis, bool commitOnLostFocus, const AutoInputColors* colors, bool forceFocus, bool* selectAll){
     ImVec2 cursorBefore = ImGui::GetCursorScreenPos();
     
     ImGui::SetCursorScreenPos(pos);
@@ -570,6 +570,7 @@ inline InputResult RenderAutoResizingInputText(const char* strId, ImVec2 pos, Im
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(hPad, vPad));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+    // todo Push No Scrollbar
 
 
     int colorPushCount = 0;
@@ -598,9 +599,8 @@ inline InputResult RenderAutoResizingInputText(const char* strId, ImVec2 pos, Im
     // the callback will fire and force SelectAll(), then disable itself.
     if (forceFocus) ImGui::SetKeyboardFocusHere();
 
-    ImGuiID myId = ImGui::GetID("##input");
-    struct CallbackData { bool justActivated; };
-    CallbackData cbData{ ImGui::GetActiveID() != myId }; 
+    struct CallbackData { bool* selectAll; };
+    CallbackData cbData{selectAll}; 
     
     auto callback = [](ImGuiInputTextCallbackData* data) -> int {
         if (data->EventFlag == ImGuiInputTextFlags_CallbackCharFilter) {
@@ -608,9 +608,9 @@ inline InputResult RenderAutoResizingInputText(const char* strId, ImVec2 pos, Im
         }
         if (data->EventFlag == ImGuiInputTextFlags_CallbackAlways) {
             CallbackData* cd = (CallbackData*)data->UserData;
-            if (cd->justActivated) {
+            if (cd->selectAll && *cd->selectAll) {
                 data->SelectAll();
-                cd->justActivated = false; 
+                *cd->selectAll = false; 
             }
         }
         return 0;

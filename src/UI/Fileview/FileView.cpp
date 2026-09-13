@@ -90,7 +90,7 @@ static void RenderGridView(f32 dpi, App& app, DirListing& listing){
 
             const auto child = listing.PChildren->GetItem(listing.refs[currentIndex]);
             const ImRect fullRect(cellPos, cellPos + ImVec2(itemWidth, cellH));
-            DrawItemChrome(dl, window, app.cmdQueue, activeTab, app.window.activeTabIndex, dpi, listing, (int)currentIndex, fullRect, 4.0f * dpi); 
+            DrawItemChrome(app.dragInfo, dl, window, app.cmdQueue, activeTab, app.window.activeTabIndex, dpi, listing, (int)currentIndex, fullRect, 4.0f * dpi); 
 
             const f32 iconX = CenterX(cellPos.x, itemWidth, imageSize);
             const f32 iconY = cellPos.y + framePadX;    // todo add 4.0f * dpi 
@@ -156,7 +156,7 @@ static void RenderSmallView(f32 dpi, App& app, DirListing& listing){
 
             const auto child = listing.PChildren->GetItem(listing.refs[currentIndex]);
             const ImRect fullRect(cellPos, cellPos + ImVec2(layout.cellWidth, layout.cellHeight));
-            DrawItemChrome(dl, window, app.cmdQueue, activeTab, app.window.activeTabIndex, dpi, listing, (int)currentIndex, fullRect, 4.0f * dpi); 
+            DrawItemChrome(app.dragInfo, dl, window, app.cmdQueue, activeTab, app.window.activeTabIndex, dpi, listing, (int)currentIndex, fullRect, 4.0f * dpi); 
 
             const f32 iconX =  fullRect.Min.x + iconPad;
             const f32 iconY =  cellPos.y + (layout.cellHeight - layout.iconSize) * 0.5f;
@@ -240,7 +240,7 @@ static void RenderListView(f32 dpi, App& app, DirListing& listing){
 
             const ImRect fullRect(cellScreenPos, cellScreenPos + ImVec2(currentColWidth - layout.xGap, layout.cellHeight));
 
-            DrawItemChrome(dl, window, app.cmdQueue, activeTab, app.window.activeTabIndex, dpi, listing, (int)currentIndex, fullRect, 4.0f * dpi); 
+            DrawItemChrome(app.dragInfo, dl, window, app.cmdQueue, activeTab, app.window.activeTabIndex, dpi, listing, (int)currentIndex, fullRect, 4.0f * dpi); 
 
             f32 iconY = fullRect.Min.y + (layout.cellHeight - layout.iconSize) * 0.5f;
 
@@ -290,6 +290,7 @@ static void RenderDetailsView(f32 dpi, App& app, DirListing& listing){
         ImGui::TableHeadersRow();
 
         f32 headerHeight = ImGui::GetFrameHeight() + ImGui::GetStyle().CellPadding.y * 2.0f;
+        const f32 bodyTopY = ImGui::GetCursorScreenPos().y;
         // f32 headerBottomY = window->DC.CursorStartPos.y + headerHeight;
         // f32 actualViewH = ImGui::GetWindowHeight() - headerHeight;
 
@@ -302,10 +303,11 @@ static void RenderDetailsView(f32 dpi, App& app, DirListing& listing){
 
         ImDrawList* dl = ImGui::GetWindowDrawList(); 
         ImGuiWindow* currentWindow = ImGui::GetCurrentWindow();
-        // Expanded so ButtonBehavior sees the whole row
-        const f32 tableTopY    = currentWindow->ClipRect.Min.y;
+        // const f32 tableTopY    = currentWindow->ClipRect.Min.y; // useless, replaced with bodyTopY
         const f32 tableBottomY = currentWindow->ClipRect.Max.y;
-    
+        
+        
+        
         enum class TextRenderModeInDrawColumn {SingleLineEllipsis, RightAlignedClipped};
         auto drawColumn = [&dl, &mutedCol](const char* desiredText, const char* fallback, f32 minY, f32 maxY, TextRenderModeInDrawColumn textMode){
             ImGui::TableNextColumn();
@@ -349,14 +351,14 @@ static void RenderDetailsView(f32 dpi, App& app, DirListing& listing){
                 ImVec2 cellPadding = ImGui::GetStyle().CellPadding;
                 
                 // restrict rowRect to cell Height ignoring layout.yGap
-                ImRect rowRect(
-                    cellPos - cellPadding, 
-                    ImVec2(tableMaxX, cellPos.y + layout.cellHeight - cellPadding.y)
-                );
+                ImRect rowRect(cellPos - cellPadding, ImVec2(tableMaxX, cellPos.y + layout.cellHeight - cellPadding.y));
+                ImVec2 clipMin(rowRect.Min.x, ImMax(rowRect.Min.y, bodyTopY));
+                ImVec2 clipMax(tableMaxX, ImMin(rowRect.Max.y, tableBottomY));
                 
-                ImGui::PushClipRect(ImVec2(rowRect.Min.x, ImMax(rowRect.Min.y, tableTopY)), ImVec2(tableMaxX, ImMin(rowRect.Max.y, tableBottomY)), false);
+                ImGui::PushClipRect(clipMin, clipMax, false);   // make Make Interactive seee the whole row, (not limited to first column)
                 
-                ItemInteraction ia = DrawItemChrome(dl, window, app.cmdQueue, activeTab, app.window.activeTabIndex, dpi, listing, (int)row, rowRect, 4.0f * dpi, true, false); 
+                // Expanded so ButtonBehavior sees the whole row
+                ItemInteraction ia = DrawItemChrome(app.dragInfo, dl, window, app.cmdQueue, activeTab, app.window.activeTabIndex, dpi, listing, (int)row, rowRect, 4.0f * dpi, true, false); 
 
                 ImGui::PopClipRect();
 
@@ -441,7 +443,7 @@ static void RenderTilesView(f32 dpi, App& app, DirListing& listing){
 
             ImRect fullRect(cellPos, ImVec2(cellPos.x + layout.cellWidth, cellPos.y + layout.cellHeight));
 
-            DrawItemChrome(dl, window, app.cmdQueue, activeTab, app.window.activeTabIndex, dpi, listing, (int)currentIndex, fullRect, 4.0f * dpi); 
+            DrawItemChrome(app.dragInfo, dl, window, app.cmdQueue, activeTab, app.window.activeTabIndex, dpi, listing, (int)currentIndex, fullRect, 4.0f * dpi); 
 
             f32 iconX = cellPos.x + 6.0f * dpi;
             f32 iconY = cellPos.y + (layout.cellHeight - layout.iconSize) * 0.5f;
@@ -497,12 +499,12 @@ void RenderFileGrid(f32 dpi, App& app){
     activeTab.selState.isAnyItemHovered = false; 
     ctxState.openMenu = false;
     ctxState.forChildren = false;   // redundant
-    selState.dragHoverTargetHash = std::nullopt;
+    app.dragInfo.dropTargetHash = std::nullopt;
+    app.dragInfo.targetView = DragInfo::DropView::None;
+
     
-    
-    ResolvePendingNewState(selState, newState, renameState, vs, listing);
-    ResolvePendingRenameState(renameState);
-    ResolvePendingInteractionSelState(selState, listing, activeTab);
+    ResolvePendingNewState(newState, renameState, vs, listing);
+    ResolvePendingInteractionSelState(app.dragInfo, activeTab, selState, listing);
 
     if (mode == ViewMode::List){
         ImGuiChildFlags childFlags = ImGuiChildFlags_NavFlattened;
@@ -522,16 +524,22 @@ void RenderFileGrid(f32 dpi, App& app){
             case ViewMode::Tiles:   RenderTilesView(dpi, app, listing); break;
             default: break;
         }
-    } 
+    }
     // Has to happen on top of file views
     
-    ResolveLeftMouseRelease(app.cmdQueue, selState, renameState, listing);
+    ResolveLeftMouseRelease(selState, renameState, vs, listing);
 
     DrawSelectingMarque(selState); 
     DrawDrag(selState); 
     OnLeftClickOnDeadSpace(selState);
     OnRightClickOnDeadSpace(selState, ctxState, activeTab.dir.parent.pidl.get(), app.gfx.d3dDevice.Get());
-    
+
+    const bool dragActive = app.dragInfo.isExternalDragActive || app.dragInfo.isInternalDragActive;
+    if (dragActive && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) && !selState.isAnyItemHovered){
+        app.dragInfo.dropTargetHash = listing.dir.parent.hash;
+        app.dragInfo.targetView = DragInfo::DropView::CurrentDir;
+    }
+
     if (ctxState.openMenu){
         if (ctxState.forChildren){
             ctxState.selectedPidls = GetSelectedItems(listing, activeTab);

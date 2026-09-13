@@ -17,6 +17,7 @@
 
 // maybe this for multiple different windows
 struct WindowManager{};
+struct app;
 
 enum class Actions {Normal, Back, Forward, Refresh};
 
@@ -157,3 +158,12 @@ inline void Tab::ReSort(){
 
     if (!viewState.showHidden) dir.RebuildNonHiddenIndices(*PChildren);
 }
+
+struct DirListing {
+    const Directory& dir;
+    const DirChildren* PChildren = nullptr;
+    const std::vector<u32>& refs;
+};
+
+DirListing GetVisibleListing(App& app);
+size_t GetVisualIndexFromHash(DirListing& listing, u64 hash);

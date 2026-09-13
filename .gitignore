@@ -28,3 +28,5 @@ test\color_pixel_inspector.py
 !setup.bat
 !shell.bat
 
+/test/color_pixel_inspector.py
+/test/fileLstr.cpp

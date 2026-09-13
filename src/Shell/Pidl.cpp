@@ -102,3 +102,13 @@ u64 HashItemIdentity(PCIDLIST_ABSOLUTE parentPidl, LPCITEMIDLIST childPidl){
     ILFree(fullPidl);
     return hash;
 }
+
+void FreePidlVector(std::vector<PITEMID_CHILD>& pidls){
+    for (auto& pidl : pidls){
+        if (pidl){
+            ILFree(pidl);
+            pidl = nullptr;
+        }
+    }
+    pidls.clear();
+}

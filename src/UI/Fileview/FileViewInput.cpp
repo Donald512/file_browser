@@ -9,7 +9,7 @@
 #include "FileViewHelpers.h"
 #include "FileViewLayout.h"
 #include "App.h"
-
+#include "Pidl.h"
 
 /*
 Idle
@@ -21,11 +21,15 @@ Idle
         ├─ released without crossing drag threshold ─▶ resolve as "clear selection"
         └─ moved past drag threshold ─────────────────▶ SelectingMarquee
 Shift+click and ctrl-click never enter this ambigous state, so they are immediate 
+
+Press on an item that isn't currently selected at all → select it immediately, on press. No ambiguity to protect — there's no existing multi-selection that a drag might want to preserve.
+
+Press on an item that is already selected (solo or part of a multi-select) → defer any change to release, specifically so a drag can grab the whole existing selection, and so a plain re-click on a sole selection can still arm a rename.
 */
 
 
 // Must be activeTab, if that turns out to be false, change the parameter to size_t tabIndex, because the .activeTabIndex is passed to command queue
-ItemInteraction HandleItemInteraction(CommandQueue& cmdQueue, Tab& activeTab, size_t activeTabIndex, DirListing& listing, int visualIndex, ImGuiID id, const ImRect& rect){
+ItemInteraction HandleItemInteraction(CommandQueue& cmdQueue, DragInfo& dragInfo, Tab& activeTab, size_t activeTabIndex, DirListing& listing, int visualIndex, ImGuiID id, const ImRect& rect){
     auto& selState = activeTab.selState;   
     auto& renameState = activeTab.renameState;
     Interaction ia = MakeInteractive(id, rect);
@@ -39,22 +43,32 @@ ItemInteraction HandleItemInteraction(CommandQueue& cmdQueue, Tab& activeTab, si
         UpdateMarqueSelection(selState, rawEntryIndex, rect);
         return {ia.hovered || ia.pressed};   // nothing else should happen when mid marque
     }
+
     bool isCurrentlySelected = selState.IsSelected(rawEntryIndex);
-    if (selState.mode == Mode::DraggingItems){
+
+    const bool dragActive = dragInfo.isExternalDragActive || dragInfo.isInternalDragActive;
+    if (dragActive){
+        bool isDragHovered = ImGui::IsMouseHoveringRect(rect.Min, rect.Max, true);
+        if (isDragHovered) selState.isAnyItemHovered = true;
         // ia.hovered unusable here, the drag source item still owns ImGui's ActiveId
         // so ItemHoverable() suppresses hover on every other item for the whole gesture.
-        // Test geometry directly instead of going through ButtonBehavior.
-        bool isDragHovered = ImGui::IsMouseHoveringRect(rect.Min, rect.Max, true);
-        if (isDragHovered && child.IsFolder() && !isCurrentlySelected) selState.dragHoverTargetHash = child.hash;  // saves the current child as a target for dropping into
+        if (isDragHovered && child.IsFolder()){
+            bool isSelf = dragInfo.isInternalDragActive && isCurrentlySelected;
+            if (!isSelf){
+                dragInfo.dropTargetHash = child.hash;
+                dragInfo.targetView = DragInfo::DropView::FolderItem;
+                selState.dragHoverTargetHash = child.hash;
+            }
+        }    
         return {isDragHovered || ia.pressed};
     }
+
         
     bool isCtrl  = ImGui::GetIO().KeyCtrl;
     bool isShift = ImGui::GetIO().KeyShift;
     bool doubleClicked = IsDoubleClick(id, ia.pressed);
 
     if (ia.pressed && !doubleClicked && selState.mode == Mode::Idle){
-        renameState.pendingHash = std::nullopt; // any fresh press cancels a stale rename-arm
 
         if (isShift && selState.anchorVisualIndex != -1){
             int start = ExploraMin(selState.anchorVisualIndex, visualIndex);
@@ -68,11 +82,15 @@ ItemInteraction HandleItemInteraction(CommandQueue& cmdQueue, Tab& activeTab, si
             OnSingleClickOnOneItem(selState, child.hash, visualIndex);
         }
         else{
+            selState.mouseDownWasSoleSelection = isCurrentlySelected && selState.NumSelected() == 1;
+            if (!isCurrentlySelected){
+                selState.DeselectAllItemsAndSelect(rawEntryIndex);
+                OnSingleClickOnOneItem(selState, child.hash, visualIndex);
+            }
             selState.mode = Mode::PendingClick;
             selState.mouseDownPos = ImGui::GetMousePos();
             selState.mouseDownItemHash = child.hash;
             selState.mouseDownVisualIndex = visualIndex;
-            selState.mouseDownWasSoleSelection = isCurrentlySelected && selState.NumSelected() == 1;
             selState.singleClickedAtTime = ImGui::GetTime();
             selState.mouseDownItemWasSelected = isCurrentlySelected;
         }
@@ -80,7 +98,6 @@ ItemInteraction HandleItemInteraction(CommandQueue& cmdQueue, Tab& activeTab, si
 
     if (doubleClicked){
         selState.mode = Mode::Idle;
-        renameState.pendingHash = std::nullopt;
         ExecuteItem(cmdQueue, listing, visualIndex, activeTabIndex);
         if (!child.IsFolder()){
             selState.DeselectAllItemsAndSelect(rawEntryIndex);
@@ -113,7 +130,6 @@ void ProcessKeyboardInput(f32 dpi, CommandQueue& cmdQueue, DirListing& listing, 
     
     // === Global actions (Independent of focus item) ---
     if (ImGui::IsKeyPressed(ImGuiKey_Escape) && !ImGui::IsPopupOpen(kItemContextMenuID)){ 
-        selState.DeselectAllItems(); 
         if (selState.mode == Mode::DraggingItems){
             FreePidlVector(selState.dragPidls);
             selState.dragHoverTargetHash = std::nullopt;
@@ -145,7 +161,18 @@ void ProcessKeyboardInput(f32 dpi, CommandQueue& cmdQueue, DirListing& listing, 
 
     // ===  NAVIGATION (Arrow keys, Home, End, etc.) ---
     if (!ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup | ImGuiHoveredFlags_ChildWindows)) return;
-    if (renameState.renamingItemId.has_value()) return; // Block nav while renaming
+    if (renameState.renamingItemId.has_value()){
+        ImGuiIO& io = ImGui::GetIO();
+        // Check if the user typed text characters OR pressed text-modifying keys (Backspace/Delete)
+        bool typedCharacter = !io.InputQueueCharacters.empty();
+        bool pressedTextKey = ImGui::IsKeyPressed(ImGuiKey_Backspace) || ImGui::IsKeyPressed(ImGuiKey_Delete);
+        if (typedCharacter || pressedTextKey){
+            vs.scrollToItemId = renameState.renamingItemId;
+            renameState.setFocus = true;
+        } 
+        // Re-trigger auto-scroll to keep the renaming item inside the viewport on keystroke
+        return; // Block nav while renaming
+    }; 
 
     int pendingFocusedVisualIndex = focusedVisualIndex;
     bool navOccurred = false;

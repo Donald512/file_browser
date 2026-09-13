@@ -147,4 +147,37 @@ public:
 };
 
 
+class CFileDropSource : public IDropSource {
+    ULONG m_cRef;
+public:
+    CFileDropSource() : m_cRef(1) {}
+
+    // IUnknown
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
+        if (riid == IID_IUnknown || riid == IID_IDropSource) { *ppv = this; AddRef(); return S_OK; }
+        return E_NOINTERFACE;
+    }
+    ULONG STDMETHODCALLTYPE AddRef() override { return ++m_cRef; }
+    ULONG STDMETHODCALLTYPE Release() override { 
+        if (--m_cRef == 0) { delete this; return 0; } 
+        return m_cRef; 
+    }
+
+    // IDropSource
+    HRESULT STDMETHODCALLTYPE QueryContinueDrag(BOOL fEscapePressed, DWORD grfKeyState) override {
+        if (fEscapePressed) return DRAGDROP_S_CANCEL;
+        if (!(grfKeyState & MK_LBUTTON)) return DRAGDROP_S_DROP; // Mouse released
+        return S_OK; // Keep dragging
+    }
+
+    HRESULT STDMETHODCALLTYPE GiveFeedback(DWORD dwEffect) override {
+        (void)dwEffect;
+        return DRAGDROP_S_USEDEFAULTCURSORS;
+    }
+};
+
+void StartOleDrag(f32 dpi, PIDLIST_ABSOLUTE parentPidl, std::vector<PITEMID_CHILD>& childPidls);
+
+HBITMAP CreateDragBadgeBitmap(size_t itemCount, int width, int height);
+
 

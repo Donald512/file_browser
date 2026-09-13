@@ -5,6 +5,7 @@
 #include "BasicTypes.h"
 #include <wrl/client.h>
 #include <variant>
+#include <optional>
 
 #include "IconManager.h"
 #include "TextureManager.h"
@@ -17,6 +18,7 @@
 
 using Microsoft::WRL::ComPtr;
 
+class FileDropTarget;
 
 
 struct GraphicsContext{
@@ -49,7 +51,24 @@ struct CommandQueue{
     }
 };
 
+struct DragInfo{
+    enum class DropView {None, FolderItem, CurrentDir, Sidebar, Tab};
+
+    bool isInternalDragActive = false;
+    bool isExternalDragActive = false;
+
+    bool pendingInternalDrag = false;
+    PIDLIST_ABSOLUTE parentPidl = nullptr;
+    std::vector<PITEMID_CHILD> pendingDragPidls;
+
+    DropView targetView = DropView::None;
+    std::optional<u64> dropTargetHash = std::nullopt; // Updated by UI during drag
+};
+
 struct App{
+
+    App();
+    ~App();
 
     UIState ui{};
     GraphicsContext gfx;
@@ -74,6 +93,13 @@ struct App{
     std::unordered_set<u64> clipBoardCutItems{};
 
     std::vector<ShellNewEntry> newEntries;
+
+    DragInfo dragInfo;
+    ComPtr<FileDropTarget> dropTarget;
+
+
+    void InitDragAndDrop();
+    void ShutdownDragAndDrop();
 
     void ProcessCommands();
 };

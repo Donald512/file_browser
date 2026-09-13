@@ -7,6 +7,7 @@
 #include <vector>
 #include <wrl/client.h>
 #include "Textures.h"
+#include "ComUtils.h"
 
 using Microsoft::WRL::ComPtr;
 

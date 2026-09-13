@@ -26,14 +26,13 @@ bool g_isResizing = false;
 bool g_isMinimized = false;
 bool g_appReady = false;
 
+
 int main (void){
     OleInitialize(nullptr);  // Calls CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
     GetSpecialFolders();
 
     App app{};
-
-    
 
     app.window.NewTab(SpecialFolders::defaultStartupFolder);
     app.window.NewTab(SpecialFolders::pidlHome);
@@ -48,9 +47,9 @@ int main (void){
 
     WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"File Browser Window", nullptr };
 
-
     app.gfx.hwnd = CreateMyOSWindow(wc, &app);
     
+    app.InitDragAndDrop();
     app.newEntries = BuildShellNewEntries();
     
     if (!InitializeGraphicsAPI(app.gfx.hwnd, wc, app.gfx.d3dDevice.GetAddressOf(),app.gfx.d3dContext.GetAddressOf(),app.gfx.swapChain.GetAddressOf(), app.gfx.renderTargetView.GetAddressOf())) return 1;
@@ -98,10 +97,22 @@ int main (void){
             g_dpiChanged = false;
         }
 
+        if (app.dragInfo.pendingInternalDrag) {
+            app.dragInfo.pendingInternalDrag = false;
+            app.dragInfo.isInternalDragActive = true;
+            
+            StartOleDrag(app.ui.dpi, app.dragInfo.parentPidl, app.dragInfo.pendingDragPidls);
+            FreePidlVector(app.dragInfo.pendingDragPidls);  // Who calls Cmd_CopyOrMove
+            app.dragInfo.isInternalDragActive = false;
+            
+            // Reset ImGui mouse state so the main loop doesn't get confused
+            ImGui::GetIO().MouseDown[ImGuiMouseButton_Left] = false;
+        }
     }
 
     ::UnregisterClassW(wc.lpszClassName, wc.hInstance);
     ShutdownImGui(app.gfx.hwnd, app.gfx.d3dDevice.GetAddressOf() ,app.gfx.d3dContext.GetAddressOf(), app.gfx.swapChain.GetAddressOf(), app.gfx.renderTargetView.GetAddressOf(), wc);
+    app.ShutdownDragAndDrop();
     OleUninitialize();
     printf("Exited succefully\n");
     return 0;

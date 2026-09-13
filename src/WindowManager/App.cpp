@@ -1,5 +1,24 @@
+
 #include "App.h"
 #include "FileOpAsync.h"
+#include "FileDropTarget.h"
+
+App::App() = default;
+App::~App() = default;
+
+void App::InitDragAndDrop() {
+    // Create instance wrapped by ComPtr (starts with m_cRef = 1)
+    dropTarget = new FileDropTarget(*this);
+    // Pass naked pointer to Win32 API
+    ::RegisterDragDrop(gfx.hwnd, dropTarget.Get());
+}
+
+void App::ShutdownDragAndDrop() {
+    if (gfx.hwnd){
+        RevokeDragDrop(gfx.hwnd);
+    }
+    dropTarget.Reset(); // Releases the ComPtr reference
+}
 
 void App::ProcessCommands() {
     for (auto& cmd : cmdQueue.cmds) {

@@ -12,7 +12,7 @@
 #include "Shell.h"
 #include <propvarutil.h>
 #include "App.h"
-
+#include <cwchar>
 
 #include <wrl/client.h>
 using Microsoft::WRL::ComPtr;
@@ -484,5 +484,92 @@ namespace WShell{
         pfo->Unadvise(cookie);
     }
 
+}
+
+HBITMAP CreateDragBadgeBitmap(size_t itemCount, int width, int height){
+    if (width <= 0 || height <= 0) return nullptr;
+
+    // Get screen DC and create compatible memory DC
+    std::unique_ptr<std::remove_pointer_t<HDC>, DcReleaser> hdcScreen(GetDC(nullptr));
+    if (!hdcScreen) return nullptr;
+
+    std::unique_ptr<std::remove_pointer_t<HDC>, DcDeleter> memDC(CreateCompatibleDC(hdcScreen.get()));
+    if (!memDC) return nullptr;
+
+    // Create target bitmap
+    HBITMAP hBmp = CreateCompatibleBitmap(hdcScreen.get(), width, height);
+    if (!hBmp) return nullptr;
+
+    // Ensure bitmap deletion on failure prior to handoff
+    bool handedOff = false;
+    ScopeGuard bmpGuard([&]() {
+        if (!handedOff && hBmp) DeleteObject(hBmp);
+    });
+
+    HBITMAP oldBmp = (HBITMAP)SelectObject(memDC.get(), hBmp);
+    ScopeGuard restoreBmp([&]() { SelectObject(memDC.get(), oldBmp); });
+
+    // 1. Draw Background
+    RECT rc = { 0, 0, width, height };
+    FillRect(memDC.get(), &rc, (HBRUSH)GetStockObject(WHITE_BRUSH));
+
+    // 2. Draw Text Badge
+    SetTextColor(memDC.get(), RGB(0, 120, 215)); // Windows Blue
+    SetBkMode(memDC.get(), TRANSPARENT);
+
+    HFONT hFont = CreateFontW(
+        64, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+        OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+        DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI"
+    );
+
+    if (hFont) {
+        HFONT oldFont = (HFONT)SelectObject(memDC.get(), hFont);
+        
+        wchar_t text[16];
+        swprintf_s(text, L"%zu", itemCount);
+        DrawTextW(memDC.get(), text, -1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+        SelectObject(memDC.get(), oldFont);
+        DeleteObject(hFont);
+    }
+
+    handedOff = true; // Signal guard to keep HBITMAP alive for IDragSourceHelper
+    return hBmp;
+}
+
+
+void StartOleDrag(f32 dpi, PIDLIST_ABSOLUTE parentPidl, std::vector<PITEMID_CHILD>& childPidls){
+    // Create the IDataObject
+    IDataObject* pDataObj = nullptr;
+    HRESULT hr = SHCreateDataObject(parentPidl, (UINT)childPidls.size(), const_cast<LPCITEMIDLIST*> (childPidls.data()), nullptr, IID_PPV_ARGS(&pDataObj));
+    if (FAILED(hr) || !pDataObj) return;
+
+    // Create the Drop source
+    CFileDropSource* pDropSource = new CFileDropSource();
+
+    // Initialize the drag image using the screenshot method
+    IDragSourceHelper* pDragSrcHelper = nullptr;
+    hr = CoCreateInstance(CLSID_DragDropHelper, NULL, CLSCTX_INPROC_SERVER, IID_IDragSourceHelper, (void**)&pDragSrcHelper);
+    if (pDragSrcHelper && SUCCEEDED(hr)){
+        // Draw White Background
+        // This replaces the one windows gives, for the ugly bitmap, i thought it would only be for my app
+        HBITMAP hBadgeBmp = CreateDragBadgeBitmap(childPidls.size(), (int)(100 * dpi), (int)(100 * dpi));
+        if (hBadgeBmp){
+            SHDRAGIMAGE sdi = {};
+            sdi.sizeDragImage.cx = (LONG)(100 * dpi); sdi.sizeDragImage.cy = (LONG)(100 * dpi); sdi.ptOffset.x = (LONG)(50 * dpi); 
+            sdi.ptOffset.y = (LONG)(50 * dpi); sdi.hbmpDragImage = hBadgeBmp; sdi.crColorKey = CLR_NONE;
+            
+            if (FAILED(pDragSrcHelper->InitializeFromBitmap(&sdi, pDataObj))) DeleteObject(hBadgeBmp);
+        }
+        pDragSrcHelper->Release();
+    }
+
+    // Start the drag (Blocks main thread until drop/cancel)
+    DWORD dwEffect = DROPEFFECT_NONE;
+    DoDragDrop(pDataObj, pDropSource, DROPEFFECT_COPY | DROPEFFECT_MOVE, &dwEffect);
+
+    pDataObj->Release();
+    pDropSource->Release();
 }
 

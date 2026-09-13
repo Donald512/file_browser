@@ -27,7 +27,7 @@
 #define NOATOM
 // #define NOCOLOR
 // #define NOCTLMGR   
-#define NODRAWTEXT
+// #define NODRAWTEXT
 #define NOKERNEL
 // #define NONLS
 #define NOMEMMGR

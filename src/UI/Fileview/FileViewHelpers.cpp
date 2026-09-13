@@ -3,13 +3,6 @@
 #include "App.h"
 #include "imgui_internal.h"
 
-DirListing GetVisibleListing(App& app){
-    auto& activeTab = app.window.GetActiveTab();
-    const Directory& dir = activeTab.dir;
-    const DirChildren* PChildren = app.directory.Get(dir.HChildren);
-    const std::vector<u32>& refs = dir.VisibleIndices(activeTab.viewState.showHidden);
-    return {dir, PChildren, refs};
-}
 
 std::vector<PCITEMID_CHILD> GetSelectedItems(DirListing& listing, Tab& tab){
     std::vector<PCITEMID_CHILD> childPidls = {};
@@ -77,17 +70,6 @@ int GetFocusedItemIndex(App& app){
     return focusedItemIndex;
 }
 
-// Returns visualIndex, because rawIndex can be gotten from visualIndex
-size_t GetVisualIndexFromHash(DirListing& listing, u64 hash){
-    for (size_t visualIndex = 0; visualIndex < listing.refs.size(); visualIndex++){
-        auto rawEntryindex = listing.refs[visualIndex];
-
-        if (listing.PChildren->hashes[rawEntryindex] == hash){
-            return visualIndex;
-        }
-    }
-    return SIZE_MAX;
-}
 
 
 void OnSingleClickOnOneItem(SelectionState& selState, u64 itemHash, int visualIndex){
@@ -96,20 +78,18 @@ void OnSingleClickOnOneItem(SelectionState& selState, u64 itemHash, int visualIn
     selState.anchorVisualIndex = visualIndex;
 }
 
-void ExecutePendingClick(SelectionState& selState, RenameState& renameState, DirListing& listing) {
+void ExecutePendingClick(SelectionState& selState, RenameState& renameState, FileViewState& vs, DirListing& listing) {
     if (!selState.mouseDownItemHash.has_value()) return;
     size_t itemHash = selState.mouseDownItemHash.value();
     auto visualIndex = GetVisualIndexFromHash(listing, itemHash);
     assert(visualIndex != SIZE_MAX);    // will prolly segfault below anyway
+    if (visualIndex >= listing.refs.size()){selState.mouseDownItemHash = std::nullopt; return; }
     auto rawEntryIndex = listing.refs[visualIndex];
     auto child = listing.PChildren->GetItem(rawEntryIndex);
     
 
     if (selState.mouseDownWasSoleSelection){
-        renameState.pendingHash = itemHash;
-        renameState.singleClickedAtTime = selState.singleClickedAtTime;
-        strncpy(renameState.renameBuffer, child.name, sizeof(renameState.renameBuffer) - 1);
-        renameState.renameBuffer[sizeof(renameState.renameBuffer) - 1] = '\0';
+        StartRename(renameState, vs, listing, (int)visualIndex);
     }
     else{
         selState.DeselectAllItemsAndSelect(rawEntryIndex);
@@ -119,74 +99,36 @@ void ExecutePendingClick(SelectionState& selState, RenameState& renameState, Dir
 }
 
 
-
-void ResolvePendingRenameState(RenameState& renameState){
-    if (renameState.pendingHash.has_value() && (ImGui::GetTime() - renameState.singleClickedAtTime > ImGui::GetIO().MouseDoubleClickTime)){
-        renameState.renamingItemId = renameState.pendingHash;
-        renameState.pendingHash = std::nullopt;
-    }
-}
-
-void FreePidlVector(std::vector<PITEMID_CHILD>& pidls){
-    for (auto pidl : pidls){
-        if (pidl){
-            ILFree(pidl);
-            pidl = nullptr;
-        }
-    }
-    pidls.clear();
-}
-
 // Resolve pending -> dragging/marquee once the mouse has actually moved.
-void ResolvePendingInteractionSelState(SelectionState& selState, DirListing& listing, Tab& activeTab){
+void ResolvePendingInteractionSelState(DragInfo& dragInfo, Tab& activeTab, SelectionState& selState, DirListing& listing){
     using Mode = SelectionState::InteractionMode;
     f32 dragThreshold = ImGui::GetIO().MouseDragThreshold;
     ImVec2 mousePos = ImGui::GetMousePos();
-    auto PendingClick = Mode::PendingClick;
-    auto PendingMarquee = Mode::PendingMarquee;
-    if (selState.mode == PendingClick || selState.mode == PendingMarquee){
+    if (selState.mode == Mode::PendingClick || selState.mode == Mode::PendingMarquee){
         f32 dist = ImLengthSqr(mousePos - selState.mouseDownPos);
         if (dist > dragThreshold * dragThreshold){
-            if (selState.mode == PendingClick){
-                if (!selState.mouseDownItemWasSelected && selState.mouseDownItemHash.has_value()){
-                    auto dragVisualIndex = GetVisualIndexFromHash(listing, selState.mouseDownItemHash.value());
-                    selState.DeselectAllItemsAndSelect(listing.refs[dragVisualIndex]);
-                }
-                selState.dragPidls = CloneSelectedItems(listing, activeTab);
-                selState.mode = Mode::DraggingItems;
-                assert(!selState.dragPidls.empty() && "Drag started but no PIDLs were cloned!");
+            if (selState.mode == Mode::PendingClick){
+                dragInfo.parentPidl = ILClone(listing.dir.parent.pidl.get());
+                dragInfo.pendingDragPidls = CloneSelectedItems(listing, activeTab);
+                dragInfo.pendingInternalDrag = true;
+
+                selState.mode = Mode::Idle;
             }
             else selState.mode = Mode::SelectingMarquee;
         }
     }
-    // else stayPending
 }
 
-void ResolveLeftMouseRelease(CommandQueue& cmdQueue, SelectionState& selState, RenameState& renameState, DirListing& listing){
+void ResolveLeftMouseRelease(SelectionState& selState,RenameState& renameState, FileViewState& vs,  DirListing& listing){
     using Mode = SelectionState::InteractionMode;   
     bool leftReleased = ImGui::IsMouseReleased(ImGuiMouseButton_Left);
     if (leftReleased){
-        if (selState.mode == Mode::PendingClick) ExecutePendingClick(selState, renameState, listing);
+        if (selState.mode == Mode::PendingClick) ExecutePendingClick(selState, renameState, vs, listing);
         else if (selState.mode == Mode::PendingMarquee){    // Didnt move far enough to become a marquee, so interpret as dead space
             selState.DeselectAllItems();
             renameState.Clear();
         }
-        else if (selState.mode == Mode::DraggingItems){
-            if (selState.dragHoverTargetHash.has_value()){
-                auto targetVisualIndex = GetVisualIndexFromHash(listing, *selState.dragHoverTargetHash);
-                assert (targetVisualIndex < listing.refs.size());
-                if (targetVisualIndex < listing.refs.size()){
-                    auto targetChild = listing.PChildren->GetItem(listing.refs[targetVisualIndex]);
-                    PIDLIST_ABSOLUTE parentPidl = ILClone(listing.dir.parent.pidl.get());
-                    PIDLIST_ABSOLUTE targetPidl = GetFullPidl(listing.dir.parent.pidl.get(), targetChild.pidl);
-                    bool isCopy = ImGui::GetIO().KeyCtrl;
-                    cmdQueue.QueueCommand(Cmd_CopyOrMoveItems{parentPidl, std::move(selState).dragPidls, targetPidl, isCopy});
-                }
-            }
-            FreePidlVector(selState.dragPidls);
-            selState.dragHoverTargetHash = std::nullopt;
-        }
-        selState.mode = Mode::Idle; // A release means something must happen, but we must end up doing nothing
+        selState.mode = Mode::Idle;
     }
 }
 
@@ -222,16 +164,12 @@ void OnRightClickOnDeadSpace(SelectionState& selState, CtxMenuState& ctxState, P
     }
 }
 
-void ResolvePendingNewState(SelectionState& selState, NewState& newState, RenameState& renameState, FileViewState& vs, DirListing& listing){
+void ResolvePendingNewState(NewState& newState, RenameState& renameState, FileViewState& vs, DirListing& listing){
     if (newState.expectingNewItem){
         size_t visualIndex = GetVisualIndexFromHash(listing, newState.itemHash.value());
-        vs.scrollToItemId = newState.itemHash;
-        selState.focusHash = newState.itemHash;
-        selState.DeselectAllItemsAndSelect(listing.refs[visualIndex]);
-        
-        renameState.renamingItemId = newState.itemHash;
-        strncpy(renameState.renameBuffer, newState.itemName.c_str(), sizeof(renameState.renameBuffer) - 1);
-        
+        bool isValid = visualIndex < listing.refs.size();
+        assert(isValid);
+        if (isValid) StartRename(renameState, vs, listing, (int)visualIndex);
         newState.expectingNewItem = false;
     }
 }
@@ -253,6 +191,8 @@ void StartRename(RenameState& renameState, FileViewState& vs, DirListing& listin
     vs.scrollToItemId = renameState.renamingItemId;
     strncpy(renameState.renameBuffer, listing.PChildren->GetChildName(rawIndex), sizeof(renameState.renameBuffer) - 1);
     renameState.renameBuffer[sizeof(renameState.renameBuffer) - 1] = '\0';
+    renameState.selectAll = true;
+    renameState.setFocus = true;
 }
 
 void UpdateMarqueSelection(SelectionState& selState, size_t rawEntryIndex, ImRect rect){
