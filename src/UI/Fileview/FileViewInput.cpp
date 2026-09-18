@@ -30,8 +30,8 @@ Press on an item that is already selected (solo or part of a multi-select) → d
 
 // Must be activeTab, if that turns out to be false, change the parameter to size_t tabIndex, because the .activeTabIndex is passed to command queue
 ItemInteraction HandleItemInteraction(CommandQueue& cmdQueue, DragInfo& dragInfo, Tab& activeTab, size_t activeTabIndex, DirListing& listing, int visualIndex, ImGuiID id, const ImRect& rect){
+    auto renameState = activeTab.renameState;
     auto& selState = activeTab.selState;   
-    auto& renameState = activeTab.renameState;
     Interaction ia = MakeInteractive(id, rect);
     auto rawEntryIndex = listing.refs[visualIndex];
     auto child = listing.PChildren->GetItem(rawEntryIndex);
@@ -91,18 +91,20 @@ ItemInteraction HandleItemInteraction(CommandQueue& cmdQueue, DragInfo& dragInfo
             selState.mouseDownPos = ImGui::GetMousePos();
             selState.mouseDownItemHash = child.hash;
             selState.mouseDownVisualIndex = visualIndex;
-            selState.singleClickedAtTime = ImGui::GetTime();
+            // selState.singleClickedAtTime = ImGui::GetTime();
             selState.mouseDownItemWasSelected = isCurrentlySelected;
         }
     }
 
     if (doubleClicked){
         selState.mode = Mode::Idle;
+        renameState.pendingHash = std::nullopt;
         ExecuteItem(cmdQueue, listing, visualIndex, activeTabIndex);
         if (!child.IsFolder()){
             selState.DeselectAllItemsAndSelect(rawEntryIndex);
             OnSingleClickOnOneItem(selState, child.hash, visualIndex);
         }
+
         return {ia.hovered || ia.pressed};
     }
 

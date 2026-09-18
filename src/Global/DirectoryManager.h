@@ -124,7 +124,7 @@ inline CachedDirHandle DirectoryManager::GetOrRequest(PCIDLIST_ABSOLUTE parentPi
             // Gen check: If someone invalidated while we were working, discard
             // if the slot that we were gonna put the result in (the generation), changes while we were computing the result, or getting the result failed, return
             // Prevents an old directory from rewriting new cache data
-            if (slot.gen != generation || !resultOpt.has_value()) return;  // ! Dont get this
+            if (slot.gen != generation || !resultOpt.has_value()) return; 
             
             slot.isPending = false;      // this has to happen after we are sure this result belongs to this thread. tres important. another thread might be reusing this slot and has set slot.isPending to false
 

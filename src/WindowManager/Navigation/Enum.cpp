@@ -13,6 +13,8 @@
 #include <shlwapi.h>
 #include "WinFramework.h"
 #include "Shlwapi.h"
+#include <unordered_set>
+
 
 std::vector<DirItem> EnumFolder(PCIDLIST_ABSOLUTE folder, DirItem* parentItem){
     std::vector<DirItem> items;

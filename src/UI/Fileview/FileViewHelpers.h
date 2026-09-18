@@ -36,15 +36,16 @@ int ResolvePendingScrollItemIndex(FileViewState& vs, DirListing& listing);
 std::vector<PCITEMID_CHILD> GetSelectedItems(DirListing& listing, Tab& tab);
 int GetScrollToItemIndex(DirListing& listing, u64 id);
 int GetFocusedItemIndex(App& app);
-void ResolveLeftMouseRelease(SelectionState& selState,RenameState& renameState, FileViewState& vs,  DirListing& listing);
+void ResolveLeftMouseRelease(SelectionState& selState, RenameState& renameState,  DirListing& listing);
 void ResolvePendingInteractionSelState(DragInfo& dragInfo, Tab& activeTab, SelectionState& selState, DirListing& listing);
 void OnSingleClickOnOneItem(SelectionState& selState, u64 itemHash, int visualIndex);
 
-void ExecutePendingClick(SelectionState& selState, RenameState& renameState, FileViewState& vs, DirListing& listing);
+void ExecutePendingClick(SelectionState& selState, RenameState& renameState, DirListing& listing);
 
 void OnLeftClickOnDeadSpace(SelectionState& selState);
 void OnRightClickOnDeadSpace(SelectionState& selState, CtxMenuState& ctxState, PCIDLIST_ABSOLUTE parentPidl, ID3D11Device* dev);
 void ResolvePendingNewState(NewState& newState, RenameState& renameState, FileViewState& vs, DirListing& listing);
+void ResolvePendingRenameState(SelectionState& selState, RenameState& renameState, FileViewState& vs, DirListing& listing);
 
 void ExecuteItem(CommandQueue& cmdQueue, DirListing& listing, int visualIndex, size_t activeTabIndex);
 void StartRename(RenameState& renameState, FileViewState& vs, DirListing& listing, int visualIndex);

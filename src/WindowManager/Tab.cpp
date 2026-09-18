@@ -1,11 +1,18 @@
 #include "App.h"
 #include "Tab.h"
+
+
 DirListing GetVisibleListing(App& app){
     auto& activeTab = app.window.GetActiveTab();
     const Directory& dir = activeTab.dir;
-    const DirChildren* PChildren = app.directory.Get(dir.HChildren);
-    const std::vector<u32>& refs = dir.VisibleIndices(activeTab.viewState.showHidden);
-    return {dir, PChildren, refs};
+    if (activeTab.searchState.active){
+        return {dir, &activeTab.searchResults.children, activeTab.searchResults.VisibleIndices()};
+    }else{
+
+        const DirChildren* PChildren = app.directory.Get(dir.HChildren);
+        const std::vector<u32>& refs = dir.VisibleIndices(activeTab.viewState.showHidden);
+        return {dir, PChildren, refs};
+    }
 }
 
 // Returns visualIndex, because rawIndex can be gotten from visualIndex

@@ -14,6 +14,7 @@
 #include "Breadcrumbs.h"
 #include "Watcher.h"
 #include "CtxMenu.h"
+#include "SearchResults.h"
 
 // maybe this for multiple different windows
 struct WindowManager{};
@@ -24,9 +25,17 @@ enum class Actions {Normal, Back, Forward, Refresh};
 class Tab{
     public:
     
-    Tab(DirectoryManager& dirManager, DirectoryWatcher& watcher, PCIDLIST_ABSOLUTE startFolder) : dirManager(&dirManager), watcher(&watcher){
+    Tab(DirectoryManager& dirManager, DirectoryWatcher& watcher, TaskSystem& tasks, TypenameStore& typeStore, PCIDLIST_ABSOLUTE startFolder)
+        : tasks(&tasks), 
+          typeStore(&typeStore), 
+          dirManager(&dirManager), 
+          watcher(&watcher), 
+          searchResults(*this->tasks, *this->typeStore) 
+    {
+        searchResults.Init();
         GoTo(startFolder);
     }
+
     bool GoTo(PCIDLIST_ABSOLUTE dest, Actions action = Actions::Normal);
     
     bool CanGoBack() const {return history.CanGoBack();}
@@ -63,7 +72,9 @@ class Tab{
     Breadcrumbs breadcrumbs{};
     History history{};
     Directory dir{};
+    SearchResults searchResults;
     
+    SearchState searchState;
     FileViewState viewState;
     SelectionState selState;
     CtxMenuState ctxState;
@@ -72,15 +83,27 @@ class Tab{
 
     
     private:
+        TaskSystem* tasks;
+        TypenameStore* typeStore;
         DirectoryManager* dirManager;
         DirectoryWatcher* watcher;
 };
+
+// wtf am i doing 
 
 // Maybe Window manager handles multiple windows, or maybe its not neccessary
 struct Window{
     DirectoryManager& directory;
     DirectoryWatcher& watcher;
-    Window(DirectoryManager& dm, DirectoryWatcher& dw) : directory(dm), watcher(dw){}
+    TaskSystem& tasks;
+    TypenameStore& typeStore;
+
+    Window(DirectoryManager& dm, DirectoryWatcher& dw, TaskSystem& ts, TypenameStore& tys) 
+        : directory(dm), watcher(dw), tasks(ts), typeStore(tys) 
+    {
+
+        tabs.reserve(32); 
+    }
 
     std::vector<Tab> tabs{};
     size_t activeTabIndex = 0;  // or maybe vector for tile windows
@@ -109,7 +132,7 @@ struct Window{
 inline bool Tab::GoTo(PCIDLIST_ABSOLUTE dest, Actions action){
     if (!dest) return false;
     // change currentFolder, update directory, and push new path to history
-    // preventing currentFolder from being null, becasue it will crash ILIsEqual
+    // preventing currentFolder from being null, becasue it will crash ILIsEqual 
 
     // skip check for Actions::Refresh so that it always navigates
     if (action != Actions::Refresh && dir.parent.pidl && ILIsEqual(dest, dir.parent.pidl)){
@@ -122,6 +145,7 @@ inline bool Tab::GoTo(PCIDLIST_ABSOLUTE dest, Actions action){
 
     dir.ClearForNav();
 
+    searchResults.clear();
     viewState.Clear();
     selState.Clear();
     renameState.Clear();

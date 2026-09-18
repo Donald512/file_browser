@@ -504,6 +504,7 @@ void RenderFileGrid(f32 dpi, App& app){
 
     
     ResolvePendingNewState(newState, renameState, vs, listing);
+    ResolvePendingRenameState(selState, renameState, vs, listing );
     ResolvePendingInteractionSelState(app.dragInfo, activeTab, selState, listing);
 
     if (mode == ViewMode::List){
@@ -527,7 +528,7 @@ void RenderFileGrid(f32 dpi, App& app){
     }
     // Has to happen on top of file views
     
-    ResolveLeftMouseRelease(selState, renameState, vs, listing);
+    ResolveLeftMouseRelease(selState, renameState, listing);
 
     DrawSelectingMarque(selState); 
     DrawDrag(selState); 

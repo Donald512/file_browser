@@ -6,12 +6,6 @@
 #include <Windows.h>
 #include <filesystem>
 
-#define PRINTERR \
-    do { \
-        std::cout << "File: " << __FILE__ << "\n"; \
-        std::cout << "Line: " << __LINE__ << "\n"; \
-    } while(0)
-
 
 template <typename T>
 void shrinkVec(std::vector<T>& vec){
@@ -53,9 +47,6 @@ inline std::string GetExeDirectoryUtf8() {
     return std::filesystem::path(path).parent_path().string();
 }
 
-#define ExploraMax(a, b) ((a) > (b) ? (a) : (b))
-#define ExploraMin(a, b) ((a) < (b) ? (a) : (b))
 
-#define ExploraCeil(numerator, denominator) (((numerator) + (denominator) - 1) /  (denominator))
 
 inline f32 CenterX(f32 offsetX, f32 fullWidth, f32 usedWidth) {return offsetX + (fullWidth - usedWidth) * 0.5f;}

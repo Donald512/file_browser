@@ -110,6 +110,8 @@ struct RenameState{
     bool setFocus = false;
     bool selectAll = false;
 
+    std::optional<u64> pendingHash;
+
     void Clear(){
         renamingItemId = std::nullopt;
 
@@ -124,4 +126,14 @@ struct NewState{
     std::optional<u64> itemHash = std::nullopt;
     bool hasScrolledToNewItem = false;
     std::string itemName;
+};
+
+struct SearchState{
+    char buffer[512];
+    bool active = false;
+
+    void Clear(){
+        buffer[0] = 0;
+        active = false;
+    }
 };

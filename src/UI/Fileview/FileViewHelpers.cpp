@@ -78,7 +78,7 @@ void OnSingleClickOnOneItem(SelectionState& selState, u64 itemHash, int visualIn
     selState.anchorVisualIndex = visualIndex;
 }
 
-void ExecutePendingClick(SelectionState& selState, RenameState& renameState, FileViewState& vs, DirListing& listing) {
+void ExecutePendingClick(SelectionState& selState, RenameState& renameState, DirListing& listing) {
     if (!selState.mouseDownItemHash.has_value()) return;
     size_t itemHash = selState.mouseDownItemHash.value();
     auto visualIndex = GetVisualIndexFromHash(listing, itemHash);
@@ -86,11 +86,10 @@ void ExecutePendingClick(SelectionState& selState, RenameState& renameState, Fil
     if (visualIndex >= listing.refs.size()){selState.mouseDownItemHash = std::nullopt; return; }
     auto rawEntryIndex = listing.refs[visualIndex];
     auto child = listing.PChildren->GetItem(rawEntryIndex);
+    selState.singleClickedAtTime = ImGui::GetTime();
     
 
-    if (selState.mouseDownWasSoleSelection){
-        StartRename(renameState, vs, listing, (int)visualIndex);
-    }
+    if (selState.mouseDownWasSoleSelection) renameState.pendingHash = itemHash;
     else{
         selState.DeselectAllItemsAndSelect(rawEntryIndex);
         OnSingleClickOnOneItem(selState, child.hash, (int)visualIndex);
@@ -119,11 +118,14 @@ void ResolvePendingInteractionSelState(DragInfo& dragInfo, Tab& activeTab, Selec
     }
 }
 
-void ResolveLeftMouseRelease(SelectionState& selState,RenameState& renameState, FileViewState& vs,  DirListing& listing){
+void ResolveLeftMouseRelease(SelectionState& selState,RenameState& renameState, DirListing& listing){
     using Mode = SelectionState::InteractionMode;   
     bool leftReleased = ImGui::IsMouseReleased(ImGuiMouseButton_Left);
     if (leftReleased){
-        if (selState.mode == Mode::PendingClick) ExecutePendingClick(selState, renameState, vs, listing);
+        if (selState.mode == Mode::PendingClick){
+            selState.singleClickedAtTime = ImGui::GetTime();
+            ExecutePendingClick(selState, renameState, listing);
+        }
         else if (selState.mode == Mode::PendingMarquee){    // Didnt move far enough to become a marquee, so interpret as dead space
             selState.DeselectAllItems();
             renameState.Clear();
@@ -171,6 +173,15 @@ void ResolvePendingNewState(NewState& newState, RenameState& renameState, FileVi
         assert(isValid);
         if (isValid) StartRename(renameState, vs, listing, (int)visualIndex);
         newState.expectingNewItem = false;
+    }
+}
+
+void ResolvePendingRenameState(SelectionState& selState, RenameState& renameState, FileViewState& vs, DirListing& listing){
+    if (renameState.pendingHash.has_value() && ImGui::GetTime() - selState.singleClickedAtTime > ImGui::GetIO().MouseDoubleClickTime){
+        auto visualIndex = GetVisualIndexFromHash(listing, *renameState.pendingHash);
+
+        StartRename(renameState, vs, listing, (int)visualIndex);
+        renameState.pendingHash = std::nullopt;
     }
 }
 

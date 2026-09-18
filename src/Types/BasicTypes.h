@@ -11,3 +11,9 @@ using u64 = std::uint64_t;
 using i64 = std::int64_t;
 using u8  = std::uint8_t;
 
+#define u64Max UINT64_MAX
+
+struct StringSlice{
+    const char* data;
+    u32 len;
+};

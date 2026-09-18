@@ -86,7 +86,7 @@ struct App{
 
     DirectoryWatcher watcher{tasks, directory, [this](AppCommand cmd) { cmdQueue.QueueCommand(std::move(cmd)); }};
     
-    Window window{directory, watcher};
+    Window window{directory, watcher, tasks, typeStore};
 
     SidebarManager sidebar;
 

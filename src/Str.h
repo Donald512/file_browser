@@ -2,8 +2,40 @@
 #pragma once
 #include <string>
 #include "WinFramework.h"
-#include "BasicTypes.h"
 #include "search.h"
+#include "Windows.h"
+
+#include "BasicTypes.h"
+#include "MemoryArena.h"
+#include "macros.h"
+#include <cassert>
+
+struct Str8 {
+    u8 *data;
+    u64 count;
+};
+
+
+internal Str8 Str8Substr(Str8 s, u64 start, u64 count){
+    if (start > s.count) start = s.count;   // if the start is > count, it returns an empty string
+    u64 remaining = s.count - start;
+    if (start + count > s.count) count = s.count - start;   // returns from the start passed  in, to the end, so a sentinel large value can be used instead of calculating bounds 
+    return Str8{ .data = s.data + start, .count = count };
+}
+
+
+internal Str8 Str8Concat(Arena* arena, Str8 a, Str8 b){
+    u64 totalLen = a.count + b.count;
+    CHECK_RET(a.count < u64Max - b.count, Str8{});
+    u8* dest = PushArray(arena, u8, totalLen + 1);  // + 1 for null temrinator
+    CHECK_RET(dest != nullptr, Str8{});
+
+    memcpy(dest, a.data, a.count);
+    memcpy(dest + a.count, b.data, b.count);
+    dest[totalLen] = 0;
+    return Str8{ .data = dest, .count = totalLen };
+}
+
 
 namespace Str{
 

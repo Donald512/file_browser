@@ -125,6 +125,20 @@ inline ItemView DirChildren::GetItem(size_t index) const {
     };
 }
 
+// DO not treat like a search r
+struct FileSysItem{
+    // todo make it SOA, one day
+    StringSlice path;
+    u64 size;
+    FILETIME lastMod;
+
+    u64 hash;
+    SFGAOF attrs;
+    u16 typenameIndex;
+
+};
+
+
 
 // Actually first goal is making the current Code a hybrid, switch to Pidl when virtual, before indexing folders recursively
 // do i need 8 arenas? for each DirList Item
