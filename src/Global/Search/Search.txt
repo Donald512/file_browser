@@ -1,0 +1,371 @@
+struct SearchQuery {
+    std::string pattern;
+    u64 scopeHash;
+    bool recursive = true;
+    bool matchCase = false;
+};
+
+struct SearchQuery {
+    WHAT am I looking for;
+    WHERE am I looking;
+    DO I search subfolders;
+    DOES capitalization matter;
+};
+
+
+// ==========================
+class ISearchProvider {
+    public:
+    virtual ~ISearchProvider() = default;
+    
+    virtual void Search(
+        const SearchQuery& query,
+        SearchResults& out
+    ) = 0;
+};
+
+Think of it as a job description.
+
+"If you're going to call yourself a search provider, you MUST know how to do:"
+Search(...)  you must know how to search
+// ==========================
+
+ISearchProvider
+The I conventionally means:
+Interface
+
+// ==========================
+
+virtual void Search(...) = 0;
+means i am not providing the implementation here
+"Anyone who inherits from me MUST implement this."
+
+So this:
+class ISearchProvider {
+    virtual void Search(...) = 0;
+};
+is basically a rule.
+
+// ==========================
+
+// cannot use DirChildren, DirChildren contains unneccesary stuff
+std::vector<char> nameArena;
+std::vector<u32>  nameOffsets;
+std::vector<u16>  nameLengths;
+
+// PIDL Arena (SoA) - NO PIDL
+
+// Parallel Attributes
+std::vector<u64>      parent;   // or equivalent
+std::vector<u64>      hashes;   // or equivalent
+std::vector<u16>   attributes;
+std::vector<u32> lastWriteTimes;    // minutes since ion know, 1900 or 2000
+std::vector<u32> createdTimes;
+std::vector<u64>      sizes;
+std::vector<u16>      typenameIndex; 
+// what else am i missing, 
+32 + 16 + 64 + 64 + 16 + 32 + 32 + 64 + 16 = 84 bytes + char, (~48 bytes per string) == I'm cooked 
+
+struct SearchResults {
+    // Strings packed back-to-back
+    std::vector<char> nameArena;
+    std::vector<u32>  nameOffsets;
+    std::vector<u16>  nameLengths;
+    
+    // Or maybe a Full path arena (needed so the UI can construct PIDLs later if the user double-clicks), if i have no way to get the parents 
+    std::vector<char> pathArena;
+    std::vector<u32>  pathOffsets;
+
+    // Parallel Arrays
+    std::vector<u64> sizes;
+    std::vector<FILETIME> lastWriteTimes;
+    std::vector<u32> attributes; // SFGAOF / File Attributes
+    
+    void Reserve(size_t capacity) {
+        nameOffsets.reserve(capacity);
+        nameLengths.reserve(capacity);
+        pathOffsets.reserve(capacity);
+        sizes.reserve(capacity);
+        lastWriteTimes.reserve(capacity);
+        attributes.reserve(capacity);
+    }
+};
+
+RecursiveFindSearch
+
+Now we actually build a searcher.
+
+class RecursiveFindSearch : public ISearchProvider {
+    
+This means:
+
+"RecursiveFindSearch is a type of ISearchProvider."
+    
+    
+// ==========================
+
+                    SearchQuery
+                        │
+                        ▼
+                 SearchCoordinator
+                        │
+              "Who can answer this?"
+                        │
+        ┌───────────────┼────────────────┐
+        ▼               ▼                ▼
+       MFT          Everything       Windows Search
+        │              SDK           ISearchQueryHelper
+        │               │                │
+        └───────────────┴────────────────┘
+                        │
+                        ▼
+                 FindFirstFileEx
+                     fallback
+class ISearchProvider {
+public:
+    virtual ~ISearchProvider() = default;
+
+    virtual bool IsAvailable(const SearchQuery& query) = 0;
+    virtual void Search(const SearchQuery& query, SearchResults& out) = 0;
+};
+
+MFT provider
+    ↓
+Can I do this search?
+    ↓
+yes → use me
+
+no
+    ↓
+Everything provider
+    ↓
+Can I do this?
+    ↓
+yes → use me
+
+no
+    ↓
+Windows Search provider
+    ↓
+Can I do this?
+    ↓
+yes → use me
+
+no
+    ↓
+FindFirstFile provider
+    ↓
+always available
+
+Everything SDK should prolly be first tho, ehhhh ion know 
+
+
+
+class SearchManager {
+    std::vector<std::unique_ptr<ISearchProvider>> providers;
+
+public:
+    void Search(const SearchQuery& query, SearchResults& results);
+};
+
+
+void SearchManager::Search(
+    const SearchQuery& query,
+    SearchResults& results)
+{
+    for (auto& provider : providers) {
+        if (provider->IsAvailable(query)) {
+            provider->Search(query, results);
+            return;
+        }
+    }
+}
+
+class MftSearchProvider : public ISearchProvider {};
+class EverythingSearchProvider : public ISearchProvider {};
+class WindowsSearchProvider : public ISearchProvider {};
+class RecursiveFindProvider : public ISearchProvider {};
+
+MftSearchProvider
+    = fastest/direct filesystem metadata access
+
+EverythingSearchProvider
+    = Everything's existing index
+
+WindowsSearchProvider
+    = Windows Search index
+
+RecursiveFindProvider
+    = guaranteed fallback
+
+class WindowsSearchProvider : public ISearchProvider
+
+Avoid:
+
+MftSearchProvider::Search()
+{
+    if (!mftAvailable)
+        everything.Search();
+
+
+    if (!everything)
+        windowsSearch.Search();
+
+
+    ...
+}
+
+SearchManager
+    │
+    ├── MFT
+    ├── Everything
+    ├── Windows Search
+    └── FindFirstFile
+
+
+
+SearchManager decides who gets called.
+
+Each provider only knows:
+
+"Can I do this?"
+
+and:
+
+"Here's how I perform it."
+
+                         SearchManager
+                              │
+                    SearchQuery comes in
+                              │
+                    ┌─────────┴─────────┐
+                    │ priority order    │
+                    ▼                   │
+                  MFT                   │
+                    │ no                │
+                    ▼                   │
+               Everything              │
+                    │ no                │
+                    ▼                   │
+              Windows Search           │
+                    │ no                │
+                    ▼                   │
+              FindFirstFile            │
+                    │                   │
+                    └─────────┬─────────┘
+                              ▼
+                       SearchResults
+                         (DirChildren)
+
+
+
+// =====================================
+queryHelper->put_QuerySelectColumns(
+    L"System.ItemNameDisplay, System.ItemPathDisplay, System.Size, System.DateModified, System.DateCreated, System.FileAttributes"
+);
+// =====================================
+if (FAILED(CoCreateInstance(...)))
+The Windows Search service (WSearch) is disabled, stopped, crashed, or restricted by group policy.
+// =====================================
+if (FAILED(searchManager->GetCatalog(L"SystemIndex", &catalogManager)))
+The index database might be corrupted, currently rebuilding, or locked by another process.
+// =====================================
+if (FAILED(catalogManager->GetQueryHelper(&queryHelper)))
+Internal COM memory allocation failure or mismatched interface definitions.
+// =====================================
+if (FAILED(queryHelper->GenerateSQLFromUserQuery(...)))
+Invalid query syntax (e.g., unmatched quotes, bad Boolean operators) or unexpected null strings.
+// =====================================
+
+
+
+Index("C:")
+ParentId = 0, basically could be where the string is in the name arena, the offset
+or a sentinel value
+Depth = 0
+
+Vector(Autodesk, Everything else, Hasleo, inetpub, msys64, page, PerfLogs, Program Files, Program Files (x86), Qt, Users, vcpkg, Windows, appverifUl.dll, DumpStack.log, vfcompat.dll)
+for each new name we see, we add to name arena, or key with an unordered map and assign an ID to it 
+Actually, C: would have a NO_PARENT parent value
+and Autodesk, Everything Else, Hasleo, etc, all have ParentID 0, Depth 1, Name, the ID assigned by the unordered_map
+Each Metadata, is a struct, containing the data, and the ParentID, plus depth, or just ParentID
+parallel std::vector<Metadata>, so that if the ordering of the Vector changes, we check who owns what
+
+class Folder{
+    C: - ParentID & Depth
+    Children: Autodesk, Everything else, Hasleo, etc // pure strings? with metadata somewhere else? or how do we do it
+    Modified time
+// Possibly number of recursive items, and total size...?
+}
+
+Index("C:Autodesk")  ParentID: 0, 
+Depth = 1, depth represents how deep it is, so C:/Files, depth 1 , can be differentiated from C:Files/Files, Depth 2, can store one char* for different folders but depth has to be different
+Maybe im mixing ParentID and nameID
+
+Imagine i somehow build the whole thing
+It looks like this 
+
+C:
+    Autodesk, Everything else, Hasleo, inetpub, msys64, page, PerfLogs, Program Files, Program Files (x86), Qt, Users, vcpkg, Windows, appverifUl.dll, DumpStack.log, vfcompat.dll
+Modified time
+
+Autodesk, or C:\Autodesk?
+    Access IM, WI
+Everything else
+    ASUS, .micropico, ArmouryCrateInstaller.exe, Graphic_DCH_ROG_NVIDIA_J_V32.0.15.6607Sub1_41308_1.exe, Graphic_ROG_Intel_X_V32.0.101.6790Sub1_43843_1.exe
+
+etc
+
+ASUS, or C:\Everything else\ASUS? or just PARENT_ID and depth?
+    list asus
+
+
+New file comes in to C:, Aka "Random file", nothing happens
+
+my UI, has to enumerate and show the C drive
+Checks IsCacheStale("C"), modified time is different
+does not panic, ignores it, and gets its enumeration from IShellFolder as usual
+tells Indexer, re-enumerate C, C does FindFirstFile
+Destroys its list, maybe just collapse the arena
+
+C: re-enumerates, but the UI needs to show the size and number of items, basically the stuff that needs recursion, show the stale stuff, so the data must not move, or be copied, the UI reads it as it updates
+
+Maybe a seperate 
+class Recursor
+Gets size, as it goes through the child elements, it just compares deep filetimes, 
+but it needs a trigger, or else the whole program would be spent recursing
+
+how do i know C:\Autodesk's size and num elements is still valid?
+cant use ReadDirectoryChangesW, risk of buffer overflow, and i want to see if this is possible without using the USN journal
+class GiveUp{
+
+}
+
+cant this shit just be lazy, be reactive instead of paranoid
+
+or just take the L and read the USN journal
+
+
++--------------------------------------------------------------------------+
+|                              UI VIEWPORT                            |
+|                          (Currently viewing C:\)                         |
++--------------------------------------------------------------------------+
+  │
+  ├── [Watcher 1]: Non-Recursive Watcher on C:\ (bWatchSubtree = FALSE)
+  │     └── Catches: Direct additions/deletions in C:\ 50ms – 100ms ms debounce, 
+  │
+  └── [Watcher 2]: Recursive Watcher on VISIBLE SUBFOLDERS (bWatchSubtree = TRUE)
+        └── Attached ONLY to subfolders currently visible on screen (e.g. Autodesk)  300ms – 500ms, max stale time 2000-5000ms, special cases 
+FindFirstChangeNotification
+
+when the watcher 2 debounce is satsified, loop recursively, comparing file times and update only what differs
+
+// ==========================
+std::vector<u16>      ParentID;
+std::vector<u32 or u16>      NameID; 
+std::vector<u16>   attributes;
+std::vector<u32> lastWriteTimes; 
+std::vector<u32> createdTimes;
+std::vector<u64>      recursiveCount;
+std::vector<u64>      recursiveSizes;
+std::vector<u16>      typenameIndex; 
