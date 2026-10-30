@@ -1,3 +1,8 @@
+
+
+https://github.com/user-attachments/assets/7b845827-bc82-4469-95f0-06ed492537ce
+
+
 # Windows File Browser
 
 A tabbed Windows file browser built with **C++20, Win32, Windows Shell COM, Direct3D 11, and Dear ImGui**.
